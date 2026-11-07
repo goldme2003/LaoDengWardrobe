@@ -1,0 +1,213 @@
+@use '@/styles/variables.scss' as *;
+
+.section {
+  margin-bottom: $spacing-lg;
+}
+
+.labelRow {
+  margin-bottom: $spacing-sm;
+}
+
+// 用户意见 2：属性文字加大一号
+.label {
+  font-size: $font-size-lg;
+  color: $color-text-primary;
+  font-weight: $font-weight-medium;
+}
+
+.required {
+  color: $color-error;
+}
+
+// 转盘选择行（用户意见 3：单选属性采用转盘/下拉 UI）
+.pickerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 88rpx;
+  background: $color-bg-card;
+  border: 1rpx solid $color-border;
+  border-radius: $radius-md;
+  padding: 0 $spacing-lg;
+  box-sizing: border-box;
+
+  &:active {
+    background: $color-bg-hover;
+  }
+}
+
+.pickerValue {
+  font-size: $font-size-lg;
+  color: $color-text-primary;
+  font-weight: $font-weight-medium;
+}
+
+.pickerPlaceholder {
+  font-size: $font-size-lg;
+  color: $color-text-disabled;
+}
+
+.pickerArrow {
+  font-size: $font-size-lg;
+  color: $color-text-tertiary;
+}
+
+// 未使用的自定义选项删除区
+.customRow {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: $spacing-sm;
+}
+
+.customChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6rpx 16rpx;
+  margin-right: $spacing-sm;
+  margin-bottom: $spacing-xs;
+  background: $color-bg-hover;
+  border-radius: $radius-round;
+}
+
+.customChipText {
+  font-size: $font-size-md;
+  color: $color-text-secondary;
+}
+
+.customChipDelete {
+  font-size: $font-size-sm;
+  color: $color-error;
+  margin-left: 10rpx;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: $spacing-xs;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: 72rpx;
+  padding: 0 $spacing-lg;
+  margin-right: $spacing-sm;
+  margin-bottom: $spacing-sm;
+  border-radius: $radius-round;
+  background: $color-bg-card;
+  border: 1rpx solid $color-border;
+  transition: all $transition-fast;
+  box-sizing: border-box;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.chipActive {
+  background: $color-primary;
+  border-color: $color-primary;
+}
+
+.chipLabel {
+  display: inline-flex;
+  align-items: center;
+}
+
+// 用户意见 2：属性文字加大一号
+.chipText {
+  display: inline-flex;
+  align-items: center;
+  font-size: $font-size-lg;
+  color: $color-text-secondary;
+  white-space: nowrap;
+}
+
+.chipTextActive {
+  color: $color-text-white;
+}
+
+.chipDelete {
+  font-size: $font-size-lg;
+  color: $color-text-tertiary;
+  margin-left: 8rpx;
+  padding: 0 4rpx;
+}
+
+.dot {
+  width: 20rpx;
+  height: 20rpx;
+  border-radius: $radius-round;
+  border: 1rpx solid $color-border;
+  margin-right: 10rpx;
+}
+
+.addRow {
+  display: inline-flex;
+  align-items: center;
+  height: 64rpx;
+  padding: 0 $spacing-md;
+  border-radius: $radius-round;
+  border: 1rpx dashed $color-text-tertiary;
+  box-sizing: border-box;
+}
+
+.addRowText {
+  font-size: $font-size-md;
+  color: $color-text-tertiary;
+}
+
+.addForm {
+  display: flex;
+  align-items: center;
+  margin-top: $spacing-xs;
+}
+
+.addInput {
+  flex: 1;
+  height: 72rpx;
+  background: $color-bg-card;
+  border: 1rpx solid $color-border;
+  border-radius: $radius-md;
+  padding: 0 $spacing-md;
+  font-size: $font-size-md;
+  color: $color-text-primary;
+  box-sizing: border-box;
+}
+
+.addConfirm {
+  height: 72rpx;
+  padding: 0 $spacing-md;
+  margin-left: $spacing-sm;
+  border-radius: $radius-md;
+  background: $color-primary;
+  display: flex;
+  align-items: center;
+}
+
+.addConfirmText {
+  font-size: $font-size-md;
+  color: $color-text-white;
+}
+
+.addCancel {
+  height: 72rpx;
+  padding: 0 $spacing-md;
+  margin-left: $spacing-sm;
+  border-radius: $radius-md;
+  background: $color-bg-hover;
+  display: flex;
+  align-items: center;
+}
+
+.addCancelText {
+  font-size: $font-size-md;
+  color: $color-text-secondary;
+}
+
+.error {
+  display: block;
+  font-size: $font-size-sm;
+  color: $color-error;
+  margin-top: $spacing-xs;
+}

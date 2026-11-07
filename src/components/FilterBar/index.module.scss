@@ -1,0 +1,108 @@
+@use '@/styles/variables.scss' as *;
+
+.wrap {
+  background: $color-bg-card;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-card;
+  margin-bottom: $spacing-md;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  padding: $spacing-md $spacing-lg;
+}
+
+.headerTitle {
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+  color: $color-text-primary;
+  margin-right: $spacing-sm;
+}
+
+.badge {
+  min-width: 32rpx;
+  height: 32rpx;
+  border-radius: $radius-round;
+  background: $color-primary;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8rpx;
+}
+
+.badgeText {
+  font-size: $font-size-xs;
+  color: $color-text-white;
+}
+
+.arrow {
+  margin-left: auto;
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+}
+
+.body {
+  padding: 0 $spacing-lg $spacing-md;
+}
+
+.row {
+  margin-bottom: $spacing-md;
+}
+
+.rowLabel {
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+  margin-bottom: $spacing-xs;
+  display: block;
+}
+
+.rowChips {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: 56rpx;
+  padding: 0 $spacing-md;
+  margin-right: $spacing-sm;
+  margin-bottom: $spacing-sm;
+  border-radius: $radius-round;
+  background: $color-bg-page;
+  border: 1rpx solid transparent;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  box-sizing: border-box;
+  transition: all $transition-fast;
+  white-space: nowrap;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.chipActive {
+  // 主题色联动：跟随当前衣橱颜色（用户意见 4）
+  background: rgba(176, 125, 80, 0.12); // 旧内核回退
+  background: color-mix(in srgb, var(--w-color, #b07d50) 12%, transparent);
+  border-color: var(--w-color, #b07d50);
+  color: var(--w-color, #b07d50);
+  font-weight: $font-weight-medium;
+}
+
+.chipText {
+  font-size: $font-size-sm;
+  color: inherit;
+  white-space: nowrap;
+}
+
+.dot {
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: $radius-round;
+  border: 1rpx solid $color-border;
+  margin-right: 6rpx;
+}

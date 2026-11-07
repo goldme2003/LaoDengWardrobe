@@ -1,0 +1,42 @@
+@use '@/styles/variables.scss' as *;
+
+.page {
+  padding: $spacing-lg $page-padding 160rpx;
+}
+
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.gridItem {
+  width: 327rpx;
+}
+
+.fab {
+  position: fixed;
+  right: $spacing-lg;
+  bottom: calc($spacing-xl + env(safe-area-inset-bottom));
+  width: 112rpx;
+  height: 112rpx;
+  border-radius: $radius-round;
+  // 主题色联动：跟随当前衣橱颜色（用户意见 4）
+  background: var(--w-color, #b07d50);
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all $transition-fast;
+  z-index: 10;
+
+  &:active {
+    transform: scale(0.94);
+  }
+}
+
+.fabIcon {
+  font-size: 56rpx;
+  color: $color-text-white;
+  line-height: 1;
+}

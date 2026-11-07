@@ -1,0 +1,87 @@
+@use '@/styles/variables.scss' as *;
+
+.wrap {
+  margin-bottom: $spacing-md;
+}
+
+.scroll {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.inner {
+  display: inline-flex;
+  align-items: center;
+  padding: $spacing-xs 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: 64rpx;
+  padding: 0 $spacing-lg;
+  margin-right: $spacing-sm;
+  border-radius: $radius-round;
+  background: $color-bg-card;
+  border: 2rpx solid $color-border;
+  transition: all $transition-fast;
+  box-sizing: border-box;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.chipActive {
+  // 主题色由内联样式传入（衣橱自定义颜色，用户意见 4）
+  color: $color-text-white;
+}
+
+.colorDot {
+  width: 20rpx;
+  height: 20rpx;
+  border-radius: $radius-round;
+  margin-right: 10rpx;
+}
+
+.chipName {
+  font-size: $font-size-md;
+  color: $color-text-secondary;
+  @include text-ellipsis;
+  max-width: 160rpx;
+}
+
+.chipNameActive {
+  color: $color-text-white;
+  font-weight: $font-weight-medium;
+}
+
+.chipCount {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  margin-left: $spacing-xs;
+}
+
+.chipCountActive {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.manageChip {
+  display: inline-flex;
+  align-items: center;
+  height: 64rpx;
+  padding: 0 $spacing-lg;
+  border-radius: $radius-round;
+  background: transparent;
+  border: 1rpx dashed $color-text-tertiary;
+  box-sizing: border-box;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.manageText {
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+}

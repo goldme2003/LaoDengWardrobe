@@ -1,0 +1,109 @@
+@use '@/styles/variables.scss' as *;
+
+.page {
+  padding: $spacing-lg $page-padding;
+}
+
+.card {
+  background: $color-bg-card;
+  border-radius: $radius-lg;
+  padding: $spacing-lg;
+  margin-bottom: $spacing-md;
+  box-shadow: $shadow-card;
+}
+
+.sectionTitle {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+  margin-bottom: $spacing-md;
+}
+
+.stats {
+  display: flex;
+}
+
+.statItem {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.statNum {
+  font-size: $font-size-xxl;
+  font-weight: $font-weight-bold;
+  color: $color-primary;
+  margin-bottom: $spacing-xs;
+}
+
+.statLabel {
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+}
+
+.wardrobeEntry {
+  display: flex;
+  align-items: center;
+  padding: $spacing-md;
+  background: $color-bg-page;
+  border-radius: $radius-md;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.entryDot {
+  width: 32rpx;
+  height: 32rpx;
+  border-radius: $radius-round;
+  margin-right: $spacing-md;
+  flex-shrink: 0;
+}
+
+.entryInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.entryTitle {
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+  color: $color-text-primary;
+  margin-bottom: 4rpx;
+}
+
+.entryDesc {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+.entryArrow {
+  font-size: $font-size-xl;
+  color: $color-text-tertiary;
+  margin-left: $spacing-sm;
+}
+
+.tip {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  line-height: $line-height-loose;
+}
+
+.aboutRow {
+  display: flex;
+  justify-content: space-between;
+  padding: $spacing-sm 0;
+}
+
+.aboutLabel {
+  font-size: $font-size-md;
+  color: $color-text-secondary;
+}
+
+.aboutValue {
+  font-size: $font-size-md;
+  color: $color-text-primary;
+}

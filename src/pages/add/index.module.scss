@@ -1,0 +1,227 @@
+@use '@/styles/variables.scss' as *;
+
+.page {
+  padding: $spacing-lg $page-padding 200rpx;
+}
+
+.photoSection {
+  background: $color-bg-card;
+  border-radius: $radius-lg;
+  padding: $spacing-lg;
+  margin-bottom: $spacing-md;
+  box-shadow: $shadow-card;
+}
+
+.sectionTitle {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+  margin-bottom: $spacing-md;
+}
+
+.photoGrid {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.photoItem {
+  position: relative;
+  width: 192rpx;
+  height: 192rpx;
+  margin-right: $spacing-sm;
+  margin-bottom: $spacing-sm;
+  border-radius: $radius-md;
+  overflow: hidden;
+  background: $color-bg-hover;
+}
+
+.photo {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.mainBadge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  background: rgba(176, 125, 80, 0.9);
+  padding: 4rpx 12rpx;
+  border-radius: 0 0 $radius-md 0;
+}
+
+.mainBadgeText {
+  font-size: $font-size-xs;
+  color: $color-text-white;
+}
+
+.photoDelete {
+  position: absolute;
+  right: 8rpx;
+  top: 8rpx;
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: $radius-round;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photoDeleteText {
+  font-size: $font-size-sm;
+  color: $color-text-white;
+  line-height: 1;
+}
+
+.photoActions {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.actionBtn {
+  height: 72rpx;
+  padding: 0 $spacing-lg;
+  margin-right: $spacing-sm;
+  margin-bottom: $spacing-sm;
+  border-radius: $radius-button;
+  background: $color-bg-hover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.actionBtnText {
+  font-size: $font-size-md;
+  color: $color-text-secondary;
+}
+
+.formCard {
+  background: $color-bg-card;
+  border-radius: $radius-lg;
+  padding: $spacing-lg;
+  margin-bottom: $spacing-md;
+  box-shadow: $shadow-card;
+}
+
+.namePreview {
+  display: flex;
+  align-items: center;
+  padding: $spacing-md;
+  background: rgba(176, 125, 80, 0.08);
+  border-radius: $radius-md;
+  margin-bottom: $spacing-lg;
+}
+
+.namePreviewLabel {
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+  margin-right: $spacing-sm;
+}
+
+.namePreviewValue {
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+  color: $color-primary;
+  @include text-ellipsis;
+}
+
+.brandLabel {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-medium;
+  color: $color-text-secondary;
+  margin-bottom: $spacing-sm;
+}
+
+.brandInput {
+  width: 100%;
+  height: 88rpx;
+  background: $color-bg-page;
+  border-radius: $radius-md;
+  padding: 0 $spacing-md;
+  font-size: $font-size-md;
+  color: $color-text-primary;
+  box-sizing: border-box;
+}
+
+.brandSuggest {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: $spacing-sm;
+}
+
+.brandChip {
+  height: 60rpx;
+  padding: 0 $spacing-md;
+  margin-right: $spacing-sm;
+  margin-bottom: $spacing-sm;
+  border-radius: $radius-button;
+  background: $color-bg-hover;
+  display: flex;
+  align-items: center;
+
+  &:active {
+    opacity: 0.8;
+  }
+}
+
+.brandChipText {
+  font-size: $font-size-md;
+  color: $color-text-secondary;
+}
+
+.remarkInput {
+  width: 100%;
+  height: 200rpx;
+  background: $color-bg-page;
+  border-radius: $radius-md;
+  padding: $spacing-md;
+  font-size: $font-size-md;
+  color: $color-text-primary;
+  box-sizing: border-box;
+}
+
+.remarkCount {
+  text-align: right;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  margin-top: $spacing-xs;
+}
+
+.bottomBar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: $spacing-md $page-padding calc($spacing-md + env(safe-area-inset-bottom));
+  background: $color-bg-card;
+  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.06);
+  display: flex;
+  z-index: 10;
+}
+
+.saveBtn {
+  flex: 1;
+  height: $button-height-lg;
+  border-radius: $radius-button;
+  background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all $transition-fast;
+
+  &:active {
+    opacity: 0.9;
+    transform: scale(0.98);
+  }
+}
+
+.saveBtnText {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-medium;
+  color: $color-text-white;
+}
