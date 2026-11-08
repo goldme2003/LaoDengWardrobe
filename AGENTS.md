@@ -26,7 +26,7 @@
 | 分支 | 用途 | 说明 |
 | --- | --- | --- |
 | `untested` | 日常开发与预览版本 | v0.1.0-alpha 起，含 `src/`、`config/` 全部源码；推送到此 |
-| `main` | 文档基线 | 仅有 `docs/`、`.gitignore`、`AGENTS.md`；不参与日常开发 |
+| `main` | 文档基线 + 版本快照 | `docs/`、`.gitignore`、`AGENTS.md`；另承载经用户确认的版本快照（当前 v0.3a，由 `untested` 合入）；日常开发仍在 `untested` |
 
 ## 网络与环境
 
