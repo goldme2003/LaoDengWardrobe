@@ -28,9 +28,13 @@ interface Props {
   onRemoveCustom?: (value: string) => void;
 }
 
+/** 兜底选项：选中后直接展开内联输入框，输入内容实时替代「其他」（v0.5 用户意见 4 修复） */
+const FALLBACK_OPTION = '其他';
+
 /** 选项选择器（PRD FR-03 / v0.5 调整）：
  * 单选属性用转盘（Picker），多选属性用勾选标签，颜色保留色卡标签；
- * 选中项高亮强化（勾角/描边/放大）；已选项可改为自定义内容（如「其他」） */
+ * 选中项高亮强化（勾角/描边/放大）；选中「其他」后直接内联输入自定义内容；
+ * 已选非兜底项可经「✎ 改为自定义内容」改写；「+ 新增选项」可入库自定义值 */
 const OptionSelector: React.FC<Props> = ({
   label,
   required,
@@ -51,10 +55,20 @@ const OptionSelector: React.FC<Props> = ({
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState('');
+  const [fallbackActive, setFallbackActive] = useState(false);
+  const [fallbackDraft, setFallbackDraft] = useState('');
 
   const allOptions = [...options, ...(customValues || [])];
   const singleValue = typeof value === 'string' ? value : '';
   const pickerIndex = Math.max(0, allOptions.indexOf(singleValue));
+
+  // 单选赋值统一入口：选中「其他」时自动展开内联输入（修复无法自定义问题）
+  const applySingle = (opt: string) => {
+    const isFallback = allowCustom && mode !== 'multi' && opt === FALLBACK_OPTION;
+    setFallbackActive(isFallback);
+    setFallbackDraft('');
+    onChange(opt);
+  };
 
   const tapOption = (opt: string) => {
     if (mode === 'multi') {
@@ -62,14 +76,14 @@ const OptionSelector: React.FC<Props> = ({
       onChange(list.includes(opt) ? list.filter((v) => v !== opt) : [...list, opt]);
     } else {
       // 单选：再次点击取消选择（保存时校验必填）
-      onChange(singleValue === opt ? '' : opt);
+      applySingle(singleValue === opt ? '' : opt);
     }
   };
 
   const onPickerChange = (e) => {
     const idx = Number(e.detail.value);
     const opt = allOptions[idx];
-    if (opt) onChange(opt);
+    if (opt) applySingle(opt);
   };
 
   const confirmAdd = () => {
@@ -82,6 +96,7 @@ const OptionSelector: React.FC<Props> = ({
     }
     // v0.5：新增自定义选项后自动选中（含将「其他」改为自定义内容的场景）
     if (mode !== 'multi') {
+      setFallbackActive(false);
       onChange(trimmed);
     } else if (Array.isArray(value) && !value.includes(trimmed)) {
       onChange([...value, trimmed]);
@@ -118,8 +133,9 @@ const OptionSelector: React.FC<Props> = ({
     );
   };
 
-  // v0.5：单选模式下允许将当前值（如「其他」）改为自定义内容
-  const showEditCustom = allowCustom && mode !== 'multi' && singleValue !== '' && !adding;
+  // v0.5：非兜底选项的「改为自定义内容」入口（兜底「其他」已直接展开输入框）
+  const showEditCustom =
+    allowCustom && mode !== 'multi' && singleValue !== '' && singleValue !== FALLBACK_OPTION && !adding;
 
   return (
     <View className={styles.section}>
@@ -168,14 +184,33 @@ const OptionSelector: React.FC<Props> = ({
         </View>
       )}
 
-      {/* v0.5：将已选项（如「其他」）改为自定义内容 */}
+      {/* v0.5 修复：选中「其他」后直接展开内联输入，输入内容实时替代「其他」 */}
+      {fallbackActive && !adding && (
+        <View className={styles.fallbackForm}>
+          <Input
+            className={styles.fallbackInput}
+            value={fallbackDraft}
+            maxlength={customMaxLength || 10}
+            placeholder={`输入${label}的具体内容（≤${customMaxLength || 10}字，替代「其他」）`}
+            onInput={(e) => {
+              const v = e.detail.value.trim();
+              setFallbackDraft(v);
+              // 有内容实时替代「其他」；清空则恢复为「其他」
+              onChange(v || FALLBACK_OPTION);
+            }}
+          />
+          <Text className={styles.fallbackHint}>输入内容后自动替代「{FALLBACK_OPTION}」，无需点击确定</Text>
+        </View>
+      )}
+
+      {/* v0.5：将已选的非兜底选项改为自定义内容 */}
       {showEditCustom && (
         <View className={styles.editCustomRow} onClick={() => setAdding(true)}>
           <Text className={styles.editCustomText}>✎ 将「{singleValue}」改为自定义内容</Text>
         </View>
       )}
 
-      {allowCustom && !adding && !showEditCustom && (
+      {allowCustom && !adding && !showEditCustom && !fallbackActive && (
         <View className={styles.addRow} onClick={() => setAdding(true)}>
           <Text className={styles.addRowText}>+ 新增选项</Text>
         </View>
