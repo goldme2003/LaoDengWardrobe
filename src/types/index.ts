@@ -1,80 +1,49 @@
-/** 衣橱（一位用户的独立衣物集合） */
+// v0.5 数据模型 —— 衣物管理小程序
+export const APP_VERSION = 'v0.5.0';
+export const APP_BUILD = 500;
+
+export type Gender = 'male' | 'female' | 'other' | '';
+export type ThemeId = 'warm' | 'ocean' | 'mint' | 'lavender' | 'sunrise' | 'sakura' | 'mono' | 'denim';
+
+export interface ThemeSet {
+  id: ThemeId; label: string; color: string; bgCard: string; accent: string; shadow: string; warm?: boolean;
+}
+
+export interface BodyInfo {
+  height?: number; weight?: number; bust?: number; waist?: number; hip?: number;
+  shoulderWidth?: number; armSpan?: number; inseam?: number; neck?: number; wrist?: number;
+}
+
 export interface Wardrobe {
-  id: string;
-  /** 用户名称，即命名规则中的「用户」，创建后不可修改 */
-  name: string;
-  /** 衣橱主题色（切换衣橱时联动界面主题） */
-  color: string;
-  createdAt: number;
+  id: string; name: string; color: string; themeId: ThemeId;
+  gender: Gender; age: number | null; bodyInfo: BodyInfo; createdAt: number;
 }
 
-/** 衣物条目 */
+export interface PurchaseInfo {
+  date?: string; location?: string; photo?: string; channel?: string; price?: number;
+}
+
 export interface ClothingItem {
-  id: string;
-  wardrobeId: string;
-  /** 照片组 1-9 张，第 1 张为主图 */
-  photos: string[];
-  /** 系统自动命名：用户-服装类型-编号；允许手动修改 */
-  name: string;
-  /** 用户是否手动修改过名称 */
-  renamed: boolean;
-  /** 服装类型（必填） */
-  type: string;
-  /** 内外穿（必填）：内穿 / 外穿 */
-  layer: string;
-  /** 颜色（必填） */
-  color: string;
-  /** 材质（必填） */
-  material: string;
-  /** 季节（必填，1-4 项）：春/夏/秋/冬 */
-  seasons: string[];
-  /** 尺码（选填）：XS/S/M/L/XL/XXL 或自定义 */
-  size: string;
-  /** 品牌（选填，≤20 字） */
-  brand: string;
-  /** 适用场合（选填，多选）：日常/通勤/运动/正式/居家/旅行 */
-  occasions: string[];
-  /** 喜爱标记 */
-  favorite: boolean;
-  /** 备注 ≤200 字，可空 */
-  remark: string;
-  createdAt: number;
+  id: string; wardrobeId: string; photos: string[];
+  name: string; renamed: boolean;
+  type: string; layer: string; color: string; material: string;
+  seasons: string[]; size: string; brand: string; occasions: string[];
+  purchase: PurchaseInfo; favorite: boolean; remark: string; createdAt: number;
 }
 
-/** 自定义选项维度 */
-export type CustomDimension = 'type' | 'color' | 'material';
-
-/** 自定义选项 */
-export interface CustomOption {
-  dimension: CustomDimension;
-  value: string;
+export interface TryoutItem {
+  id: string; wardrobeId: string; photo: string; extraPhotos: string[];
+  description: string; source?: string; createdAt: number;
 }
 
-/** 天气单日信息 */
-export interface WeatherDay {
-  date: string;
-  cond: string;
-  low: number;
-  high: number;
-}
+export type CustomDimension = 'type' | 'color' | 'material' | 'size' | 'occasion';
 
-/** 天气信息（MVP 为模拟数据，数据源见 PRD Q-1） */
-export interface WeatherInfo {
-  city: string;
-  today: WeatherDay;
-  days: WeatherDay[];
-}
+export interface CustomOption { dimension: CustomDimension; value: string; }
 
-/** 新建衣物入参（必填属性在保存时校验；尺码/品牌/场合为选填扩展属性） */
+export interface WeatherDay { date: string; cond: string; low: number; high: number; }
+export interface WeatherInfo { city: string; today: WeatherDay; days: WeatherDay[]; }
+
 export interface NewItemInput {
-  photos: string[];
-  type: string;
-  layer: string;
-  color: string;
-  material: string;
-  seasons: string[];
-  size: string;
-  brand: string;
-  occasions: string[];
-  remark: string;
+  photos: string[]; type: string; layer: string; color: string; material: string;
+  seasons: string[]; size: string; brand: string; occasions: string[]; remark: string; purchase?: PurchaseInfo;
 }

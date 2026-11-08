@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, Image, Input, Textarea } from '@tarojs/components';
+import { View, Text, Image, Input, Textarea, Picker } from '@tarojs/components';
 import Taro, { useRouter } from '@tarojs/taro';
 import OptionSelector from '@/components/OptionSelector';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
@@ -17,9 +17,10 @@ import {
   ITEM_NAME_MAX_LEN,
   COLOR_HEX_MAP,
   SAMPLE_PHOTO_IDS,
-  samplePhoto
+  samplePhoto,
+  buildBrandOptions
 } from '@/data/presets';
-import { CustomDimension, NewItemInput } from '@/types';
+import { CustomDimension, NewItemInput, PurchaseInfo } from '@/types';
 import styles from './index.module.scss';
 
 /** 添加/编辑衣物（PRD FR-02/FR-03/FR-05）：照片组 + 属性控件 + 备注 */
@@ -28,14 +29,21 @@ const AddItemPage: React.FC = () => {
   const editId = router.params.id;
 
   const items = useWardrobeStore((s) => s.items);
+  const currentWardrobeId = useWardrobeStore((s) => s.currentWardrobeId);
+  const wardrobes = useWardrobeStore((s) => s.wardrobes);
   const customOptions = useWardrobeStore((s) => s.customOptions);
+  const favoriteBrands = useWardrobeStore((s) => s.favoriteBrands);
   const addItem = useWardrobeStore((s) => s.addItem);
   const updateItem = useWardrobeStore((s) => s.updateItem);
   const addCustomOption = useWardrobeStore((s) => s.addCustomOption);
   const removeCustomOption = useWardrobeStore((s) => s.removeCustomOption);
   const isCustomOptionUsed = useWardrobeStore((s) => s.isCustomOptionUsed);
+  const toggleFavoriteBrand = useWardrobeStore((s) => s.toggleFavoriteBrand);
+  const isFavoriteBrand = useWardrobeStore((s) => s.isFavoriteBrand);
 
   const editing = useMemo(() => items.find((it) => it.id === editId), [items, editId]);
+  const curWardrobe = wardrobes.find((w) => w.id === currentWardrobeId);
+  const bodyInfo = curWardrobe?.bodyInfo || {};
 
   const [photos, setPhotos] = useState<string[]>([]);
   const [type, setType] = useState('');
@@ -48,13 +56,26 @@ const AddItemPage: React.FC = () => {
   const [occasions, setOccasions] = useState<string[]>([]);
   const [remark, setRemark] = useState('');
   const [name, setName] = useState('');
+  const [purchasePhoto, setPurchasePhoto] = useState('');
+  const [purchaseDate, setPurchaseDate] = useState('');
+  const [purchaseLocation, setPurchaseLocation] = useState('');
 
-  // 品牌联想提示：输入时显示匹配的常用品牌；未输入时展示全部常用品牌
+  // 品牌联想提示：收藏优先 + 常用品牌 + 输入匹配
   const brandSuggestions = useMemo(() => {
     const kw = brand.trim();
-    if (!kw) return BRAND_PRESETS;
-    return BRAND_PRESETS.filter((b) => b.toLowerCase().includes(kw.toLowerCase()) && b !== kw);
-  }, [brand]);
+    // 取本衣橱已使用过的品牌
+    const existingBrands = items
+      .filter((it) => it.wardrobeId === currentWardrobeId && (it.brand || '').trim())
+      .map((it) => it.brand.trim());
+    const all = buildBrandOptions(existingBrands, favoriteBrands);
+    if (!kw) return all.slice(0, 24);
+    return all.filter((b) => b.toLowerCase().includes(kw.toLowerCase()) && b !== kw).slice(0, 24);
+  }, [brand, items, currentWardrobeId, favoriteBrands]);
+
+  const favoriteBrandsOnTop = useMemo(
+    () => favoriteBrands.filter((b) => b !== brand.trim()).slice(0, 8),
+    [favoriteBrands, brand]
+  );
 
   // 编辑模式：载入现有数据
   useEffect(() => {
@@ -70,6 +91,10 @@ const AddItemPage: React.FC = () => {
       setOccasions(editing.occasions || []);
       setRemark(editing.remark);
       setName(editing.name);
+      const p = editing.purchase || {};
+      setPurchasePhoto(p.photo || '');
+      setPurchaseDate(p.date || '');
+      setPurchaseLocation(p.location || '');
       Taro.setNavigationBarTitle({ title: '编辑衣物' });
     }
   }, [editing]);
@@ -137,7 +162,7 @@ const AddItemPage: React.FC = () => {
     if (!layer) return '请选择内外穿';
     if (!color) return '请选择颜色';
     if (!material) return '请选择材质';
-    if (seasons.length === 0) return '请选择季节（至少 1 项）';
+    if (seasons.length === 0) return '请选择穿着季节（至少 1 项）';
     return null;
   };
 
@@ -157,7 +182,8 @@ const AddItemPage: React.FC = () => {
       size,
       brand,
       occasions,
-      remark: remark.trim()
+      remark: remark.trim(),
+      purchase: { date: purchaseDate, location: purchaseLocation, photo: purchasePhoto } as PurchaseInfo
     };
     if (editing) {
       // 仅在实际改名时传 name，避免用空值/旧值覆盖已有名称
@@ -275,7 +301,7 @@ const AddItemPage: React.FC = () => {
         <OptionSelector
           label='材质'
           required
-          mode='picker'
+          mode='chips'
           options={MATERIAL_PRESETS}
           customValues={customOf('material')}
           usedValues={usedOf('material')}
@@ -288,7 +314,7 @@ const AddItemPage: React.FC = () => {
         />
 
         <OptionSelector
-          label='季节'
+          label='穿着季节'
           required
           mode='multi'
           options={['春', '夏', '秋', '冬']}
@@ -301,19 +327,38 @@ const AddItemPage: React.FC = () => {
           mode='picker'
           options={SIZE_OPTIONS}
           value={size}
-          placeholder='请选择尺码（选填）'
+          placeholder='选填 · 留空则按衣橱默认'
           onChange={(v) => setSize(v as string)}
         />
 
         <View className={styles.section}>
           <Text className={styles.brandLabel}>品牌（选填）</Text>
-          <Input
-            className={styles.brandInput}
-            value={brand}
-            maxlength={BRAND_MAX_LEN}
-            placeholder='输入品牌或点选下方常用品牌，≤20 字'
-            onInput={(e) => setBrand(e.detail.value)}
-          />
+          <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx' }}>
+            <Input
+              className={styles.brandInput}
+              value={brand}
+              maxlength={BRAND_MAX_LEN}
+              placeholder='输入品牌或点选下方常用品牌'
+              style={{ flex: 1 }}
+              onInput={(e) => setBrand(e.detail.value)}
+            />
+            {brand.trim() && (
+              <Text
+                style={{ fontSize: '44rpx', color: isFavoriteBrand(brand) ? '#F5A623' : '#D4CBC0', padding: '0 8rpx' }}
+                onClick={() => toggleFavoriteBrand(brand)}
+              >{isFavoriteBrand(brand) ? '★' : '☆'}</Text>
+            )}
+          </View>
+          {favoriteBrandsOnTop.length > 0 && (
+            <View className={styles.brandSuggest}>
+              <Text style={{ fontSize: '22rpx', color: '#a39385', marginRight: '10rpx' }}>收藏：</Text>
+              {favoriteBrandsOnTop.map((b) => (
+                <View key={b} className={styles.brandChip} onClick={() => setBrand(b)}>
+                  <Text className={styles.brandChipText}>★ {b}</Text>
+                </View>
+              ))}
+            </View>
+          )}
           {brandSuggestions.length > 0 && (
             <View className={styles.brandSuggest}>
               {brandSuggestions.map((b) => (
@@ -332,6 +377,48 @@ const AddItemPage: React.FC = () => {
           value={occasions}
           onChange={(v) => setOccasions(v as string[])}
         />
+
+        <View className={styles.section} style={{ marginTop: '8rpx' }}>
+          <Text className={styles.brandLabel}>购入信息（选填）</Text>
+
+          <View style={{ display: 'flex', alignItems: 'center', marginBottom: '14rpx' }}>
+            <Text style={{ width: '140rpx', fontSize: '26rpx', color: '#6b5e52' }}>购入日期</Text>
+            <Picker mode='date' value={purchaseDate} onChange={(e) => setPurchaseDate(e.detail.value)}>
+              <View style={{ flex: 1, height: '72rpx', background: '#faf6f1', border: '1rpx solid #ece3d7', borderRadius: '12rpx', padding: '0 20rpx', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ fontSize: '28rpx', color: purchaseDate ? '#3a2e25' : '#d4cbc0' }}>{purchaseDate || '选择日期'}</Text>
+                <Text style={{ color: '#a39385' }}>▾</Text>
+              </View>
+            </Picker>
+          </View>
+
+          <View style={{ display: 'flex', alignItems: 'center', marginBottom: '14rpx' }}>
+            <Text style={{ width: '140rpx', fontSize: '26rpx', color: '#6b5e52' }}>购入地点</Text>
+            <Input
+              style={{ flex: 1, height: '72rpx', background: '#faf6f1', border: '1rpx solid #ece3d7', borderRadius: '12rpx', padding: '0 20rpx', fontSize: '28rpx' }}
+              value={purchaseLocation}
+              placeholder='门店 / 电商平台 / 代购'
+              maxlength={30}
+              onInput={(e) => setPurchaseLocation(e.detail.value)}
+            />
+          </View>
+
+          <View style={{ display: 'flex', alignItems: 'center' }}>
+            <Text style={{ width: '140rpx', fontSize: '26rpx', color: '#6b5e52' }}>购入凭证</Text>
+            {purchasePhoto ? (
+              <View style={{ position: 'relative', marginRight: '12rpx' }}>
+                <Image src={purchasePhoto} style={{ width: '140rpx', height: '140rpx', borderRadius: '12rpx' }} mode='aspectFill' />
+                <Text onClick={() => setPurchasePhoto('')} style={{ position: 'absolute', top: '-8rpx', right: '-8rpx', background: '#f24b4b', color: '#fff', width: '36rpx', height: '36rpx', borderRadius: '18rpx', fontSize: '28rpx', lineHeight: '36rpx', textAlign: 'center' }}>×</Text>
+              </View>
+            ) : (
+              <View onClick={async () => {
+                try {
+                  const res = await Taro.chooseImage({ count: 1, sizeType: ['compressed'], sourceType: ['camera', 'album'] });
+                  if (res.tempFilePaths?.[0]) setPurchasePhoto(res.tempFilePaths[0]);
+                } catch {}
+              }} style={{ width: '140rpx', height: '140rpx', background: '#faf6f1', border: '2rpx dashed #d4cbc0', borderRadius: '12rpx', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '48rpx', color: '#a39385' }}>+</View>
+            )}
+          </View>
+        </View>
 
         <View className={styles.sectionTitle}>
           <Text className={styles.sectionTitle}>备注（选填）</Text>

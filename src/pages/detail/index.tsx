@@ -12,6 +12,7 @@ const DetailItemPage: React.FC = () => {
   const id = router.params.id;
 
   const items = useWardrobeStore((s) => s.items);
+  const wardrobes = useWardrobeStore((s) => s.wardrobes);
   const toggleFavorite = useWardrobeStore((s) => s.toggleFavorite);
   const deleteItem = useWardrobeStore((s) => s.deleteItem);
 
@@ -22,6 +23,12 @@ const DetailItemPage: React.FC = () => {
   });
 
   const item = useMemo(() => items.find((it) => it.id === id), [items, id]);
+  const themeColor = useMemo(() => {
+    if (!item) return '#E8684A';
+    const w = wardrobes.find((x) => x.id === item.wardrobeId);
+    return w?.color || '#E8684A';
+  }, [item, wardrobes]);
+  const themeStyle = { '--w-color': themeColor } as React.CSSProperties;
 
   if (!item) {
     return (
@@ -62,7 +69,7 @@ const DetailItemPage: React.FC = () => {
       )
     },
     { label: '材质', value: item.material },
-    { label: '季节', value: item.seasons.join('、') },
+    { label: '穿着季节', value: item.seasons.join('、') },
     ...(item.size ? [{ label: '尺码', value: item.size }] : []),
     ...(item.brand ? [{ label: '品牌', value: item.brand }] : []),
     ...(item.occasions && item.occasions.length > 0
@@ -72,7 +79,7 @@ const DetailItemPage: React.FC = () => {
   ];
 
   return (
-    <View className={styles.page}>
+    <View className={styles.page} style={themeStyle}>
       <View className={styles.swiperWrap}>
         <Swiper className={styles.swiper} indicatorDots circular>
           {item.photos.map((p, i) => (

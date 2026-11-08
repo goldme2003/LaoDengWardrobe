@@ -1,76 +1,83 @@
 import React from 'react';
-import { View, Text } from '@tarojs/components';
+import { View, Text, ScrollView } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
-import styles from './index.module.scss';
+import { APP_VERSION, APP_BUILD } from '@/types';
+import { GENDER_OPTIONS, BODY_FIELDS, getTheme } from '@/data/presets';
 
-/** 我的页（PRD 6.3）：统计概览、衣橱管理入口、关于 */
+/** 我的页（v0.5：衣橱档案入口、个人版型、版本号） */
 const MinePage: React.FC = () => {
   const wardrobes = useWardrobeStore((s) => s.wardrobes);
   const currentWardrobeId = useWardrobeStore((s) => s.currentWardrobeId);
   const items = useWardrobeStore((s) => s.items);
+  const tryouts = useWardrobeStore((s) => s.tryouts);
+  const cur = wardrobes.find((w) => w.id === currentWardrobeId);
+  const theme = cur ? getTheme(cur.themeId) : getTheme('warm');
+  const themeStyle = { '--w-color': cur?.color || theme.color } as React.CSSProperties;
+  const totalCount = items.filter((it) => it.wardrobeId === currentWardrobeId).length;
+  const favCount = items.filter((it) => it.wardrobeId === currentWardrobeId && it.favorite).length;
+  const tryoutCount = tryouts.filter((t) => t.wardrobeId === currentWardrobeId).length;
 
-  const currentWardrobe = wardrobes.find((w) => w.id === currentWardrobeId);
-  const totalCount = items.length;
-  const favoriteCount = items.filter((it) => it.favorite).length;
-  const wardrobeCount = wardrobes.length;
-
-  const goWardrobes = () => {
-    Taro.switchTab({ url: '/pages/wardrobes/index' });
-  };
+  const goManage = () => Taro.navigateTo({ url: '/pages/wardrobes/index' });
+  const goWardrobe = () => Taro.switchTab({ url: '/pages/wardrobe/index' });
+  const goTryout = () => Taro.switchTab({ url: '/pages/tryout/index' });
 
   return (
-    <View className={styles.page}>
-      <View className={styles.card}>
-        <View className={styles.stats}>
-          <View className={styles.statItem}>
-            <Text className={styles.statNum}>{totalCount}</Text>
-            <Text className={styles.statLabel}>衣物总数</Text>
-          </View>
-          <View className={styles.statItem}>
-            <Text className={styles.statNum}>{favoriteCount}</Text>
-            <Text className={styles.statLabel}>喜爱衣物</Text>
-          </View>
-          <View className={styles.statItem}>
-            <Text className={styles.statNum}>{wardrobeCount}</Text>
-            <Text className={styles.statLabel}>衣橱数量</Text>
-          </View>
+    <ScrollView scrollY style={{ background: '#faf6f1', minHeight: '100vh' }}>
+      <View style={themeStyle}>
+        <View style={{ background: theme.bgCard, padding: '48rpx 32rpx 40rpx' }}>
+          <Text style={{ fontSize: '40rpx', fontWeight: '700', color: '#3a2e25', display: 'block' }}>
+            {cur?.name || '我的'} 的衣橱
+          </Text>
+          <Text style={{ fontSize: '24rpx', color: '#a39385', marginTop: '6rpx', display: 'block' }}>
+            「{theme.label}」主题 · {GENDER_OPTIONS.find((g) => g.value === cur?.gender)?.label || '未填性别'}
+            {cur?.age ? ` · ${cur.age}岁` : ''}
+          </Text>
         </View>
-      </View>
 
-      <View className={styles.card}>
-        <Text className={styles.sectionTitle}>衣橱管理</Text>
-        <View className={styles.wardrobeEntry} onClick={goWardrobes}>
-          <View className={styles.entryDot} style={{ background: currentWardrobe?.color || '#B07D50' }} />
-          <View className={styles.entryInfo}>
-            <Text className={styles.entryTitle}>衣橱管理</Text>
-            <Text className={styles.entryDesc}>
-              新建/切换/删除衣橱，为每位用户自定义专属颜色
-            </Text>
-          </View>
-          <Text className={styles.entryArrow}>›</Text>
+        <View style={{ display: 'flex', padding: '24rpx' }}>
+          {[
+            { label: '衣物', v: totalCount }, { label: '喜爱', v: favCount }, { label: '备选', v: tryoutCount }
+          ].map((s, i) => (
+            <View key={i} style={{ flex: 1, background: '#fff', borderRadius: '16rpx', padding: '24rpx 0', textAlign: 'center', marginRight: i < 2 ? '12rpx' : 0, boxShadow: '0 2rpx 12rpx rgba(0,0,0,0.04)' }}>
+              <Text style={{ fontSize: '44rpx', fontWeight: '700', color: 'var(--w-color)' }}>{s.v}</Text>
+              <Text style={{ fontSize: '24rpx', color: '#a39385', display: 'block', marginTop: '4rpx' }}>{s.label}</Text>
+            </View>
+          ))}
         </View>
-        <Text className={styles.tip}>
-          衣橱管理已移至底部标签页「衣橱」，可在此查看与切换不同用户的衣橱。
-        </Text>
-      </View>
 
-      <View className={styles.card}>
-        <Text className={styles.sectionTitle}>关于</Text>
-        <View className={styles.aboutRow}>
-          <Text className={styles.aboutLabel}>版本</Text>
-          <Text className={styles.aboutValue}>v0.1.0-alpha（预览初版）</Text>
+        <View style={{ background: '#fff', margin: '0 24rpx 20rpx', borderRadius: '16rpx', overflow: 'hidden', boxShadow: '0 2rpx 12rpx rgba(0,0,0,0.04)' }}>
+          <EntryItem icon='🧺' title='衣橱档案' desc='主题 · 性别年龄 · 个人版型' dot={cur?.color} onClick={goManage} />
+          <EntryItem icon='👕' title='衣柜首页' desc='查看与管理当前衣橱的全部衣物' onClick={goWardrobe} />
+          <EntryItem icon='🛍️' title='备选/待购' desc='试穿图、商品图与选购前记录' onClick={goTryout} />
         </View>
-        <View className={styles.aboutRow}>
-          <Text className={styles.aboutLabel}>数据存储</Text>
-          <Text className={styles.aboutValue}>本机存储</Text>
+
+        <View style={{ background: '#fff', margin: '0 24rpx 48rpx', borderRadius: '16rpx', padding: '24rpx', boxShadow: '0 2rpx 12rpx rgba(0,0,0,0.04)' }}>
+          <Text style={{ fontSize: '28rpx', fontWeight: '600', color: '#3a2e25', display: 'block', marginBottom: '16rpx' }}>关于</Text>
+          <Row label='版本' value={`${APP_VERSION} (build ${APP_BUILD})`} />
+          <Row label='数据' value='本机存储（卸载/清缓存会丢失）' />
+          <Row label='衣橱' value={`${wardrobes.length} 个用户档案`} />
+          <Text style={{ fontSize: '22rpx', color: '#a39385', marginTop: '16rpx', display: 'block' }}>老登衣柜 · 让每一天都从衣柜开始 🧥</Text>
         </View>
-        <Text className={styles.tip}>
-          当前版本所有数据（照片与衣物档案）保存在本机。卸载小程序或清除小程序数据会导致数据丢失，请知悉。
-        </Text>
       </View>
-    </View>
+    </ScrollView>
   );
 };
-
+const Row: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <View style={{ display: 'flex', alignItems: 'center', marginBottom: '8rpx' }}>
+    <Text style={{ width: '120rpx', fontSize: '26rpx', color: '#6b5e52' }}>{label}</Text>
+    <Text style={{ flex: 1, fontSize: '26rpx', color: '#3a2e25' }}>{value}</Text>
+  </View>
+);
+const EntryItem: React.FC<{ icon: string; title: string; desc: string; dot?: string; onClick?: () => void }> = ({ icon, title, desc, dot, onClick }) => (
+  <View onClick={onClick} style={{ display: 'flex', alignItems: 'center', padding: '22rpx 24rpx', borderBottom: '1rpx solid #f2ede4' }}>
+    <Text style={{ fontSize: '40rpx', marginRight: '16rpx' }}>{icon}</Text>
+    <View style={{ flex: 1 }}>
+      <Text style={{ fontSize: '30rpx', color: '#3a2e25', fontWeight: '500', display: 'block' }}>{title}</Text>
+      <Text style={{ fontSize: '22rpx', color: '#a39385', display: 'block', marginTop: '2rpx' }}>{desc}</Text>
+    </View>
+    {dot && <View style={{ width: '20rpx', height: '20rpx', borderRadius: '10rpx', background: dot, marginRight: '12rpx' }} />}
+    <Text style={{ fontSize: '30rpx', color: '#a39385' }}>›</Text>
+  </View>
+);
 export default MinePage;

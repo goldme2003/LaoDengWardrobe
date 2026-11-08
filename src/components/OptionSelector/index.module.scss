@@ -105,8 +105,19 @@
 }
 
 .chipActive {
-  background: $color-primary;
-  border-color: $color-primary;
+  background: var(--w-color, $color-primary);
+  border-color: var(--w-color, $color-primary);
+  border-width: 2rpx;
+  transform: scale(1.03);
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.18);
+}
+
+.chipActive .chipText {
+  color: $color-text-white;
+}
+
+.chipTextActive {
+  color: $color-text-white;
 }
 
 .chipLabel {
