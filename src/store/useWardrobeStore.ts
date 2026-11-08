@@ -206,15 +206,21 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
         console.warn('[Store] 衣物不存在, id =', id);
         return;
       }
-      const updated: ClothingItem = { ...item, ...patch };
+      const { name: patchName, ...rest } = patch;
+      // 不把 undefined 合并进条目，避免空值覆盖已有字段（如名称）
+      const updated: ClothingItem = {
+        ...item,
+        ...rest,
+        ...(patchName !== undefined ? { name: patchName } : {})
+      };
 
       // 用户手动改名（PRD 6.2 第 5 条）
-      if (patch.name !== undefined && patch.name !== item.name) {
+      if (patchName !== undefined && patchName !== item.name) {
         updated.renamed = true;
       }
 
       // 修改服装类型且未手动改名时，名称联动更新
-      if (patch.type && patch.type !== item.type && !item.renamed) {
+      if (patch.type && patch.type !== item.type && !updated.renamed) {
         const wardrobe = s.wardrobes.find((w) => w.id === item.wardrobeId);
         if (wardrobe) {
           const key = counterKey(wardrobe.id, patch.type);

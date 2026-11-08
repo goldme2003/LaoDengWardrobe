@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, Image, Textarea } from '@tarojs/components';
+import { View, Text, Image, Input, Textarea } from '@tarojs/components';
 import Taro, { useRouter } from '@tarojs/taro';
 import OptionSelector from '@/components/OptionSelector';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
@@ -14,6 +14,7 @@ import {
   MAX_PHOTOS,
   REMARK_MAX_LEN,
   BRAND_MAX_LEN,
+  ITEM_NAME_MAX_LEN,
   COLOR_HEX_MAP,
   SAMPLE_PHOTO_IDS,
   samplePhoto
@@ -159,8 +160,11 @@ const AddItemPage: React.FC = () => {
       remark: remark.trim()
     };
     if (editing) {
-      updateItem(editing.id, { ...payload, name: name !== editing.name ? name : undefined });
-      console.info('[Add] 更新衣物, id =', editing.id);
+      // 仅在实际改名时传 name，避免用空值/旧值覆盖已有名称
+      const trimmedName = name.trim();
+      const nameChanged = trimmedName !== '' && trimmedName !== editing.name;
+      updateItem(editing.id, nameChanged ? { ...payload, name: trimmedName } : payload);
+      console.info('[Add] 更新衣物, id =', editing.id, 'nameChanged =', nameChanged);
     } else {
       const created = addItem(payload);
       console.info('[Add] 保存衣物, name =', created.name);
@@ -213,9 +217,19 @@ const AddItemPage: React.FC = () => {
       <View className={styles.formCard}>
         <View className={styles.namePreview}>
           <Text className={styles.namePreviewLabel}>名称</Text>
-          <Text className={styles.namePreviewValue}>
-            {name || '保存后按「用户-服装类型-编号」自动生成'}
-          </Text>
+          {editing ? (
+            <Input
+              className={styles.nameInput}
+              value={name}
+              maxlength={ITEM_NAME_MAX_LEN}
+              placeholder={`名称（≤${ITEM_NAME_MAX_LEN}字），留空则保持原名`}
+              onInput={(e) => setName(e.detail.value)}
+            />
+          ) : (
+            <Text className={styles.namePreviewValue}>
+              保存后按「用户-服装类型-编号」自动生成
+            </Text>
+          )}
         </View>
 
         <OptionSelector

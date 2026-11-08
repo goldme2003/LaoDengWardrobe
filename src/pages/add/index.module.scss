@@ -130,6 +130,14 @@
   @include text-ellipsis;
 }
 
+.nameInput {
+  flex: 1;
+  height: 64rpx;
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+  color: $color-primary;
+}
+
 .brandLabel {
   font-size: $font-size-lg;
   font-weight: $font-weight-medium;
