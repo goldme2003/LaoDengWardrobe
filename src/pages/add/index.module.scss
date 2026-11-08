@@ -1,12 +1,15 @@
-@use '@/styles/variables.scss' as *;
+﻿@use '@/styles/variables.scss' as *;
 
 .page {
   padding: $spacing-lg $page-padding 200rpx;
+  background: var(--w-bg, $color-bg-page);
+  min-height: 100vh;
+  box-sizing: border-box;
 }
 
 .photoSection {
-  background: $color-bg-card;
-  border-radius: $radius-lg;
+  background: var(--w-card, $color-bg-card);
+  border-radius: var(--w-radius, $radius-lg);
   padding: $spacing-lg;
   margin-bottom: $spacing-md;
   box-shadow: $shadow-card;
@@ -15,7 +18,7 @@
 .sectionTitle {
   font-size: $font-size-lg;
   font-weight: $font-weight-semibold;
-  color: $color-text-primary;
+  color: var(--w-text, $color-text-primary);
   margin-bottom: $spacing-md;
 }
 
@@ -45,7 +48,7 @@
   position: absolute;
   left: 0;
   top: 0;
-  background: rgba(176, 125, 80, 0.9);
+  background: var(--w-color, $color-primary);
   padding: 4rpx 12rpx;
   border-radius: 0 0 $radius-md 0;
 }
@@ -101,8 +104,8 @@
 }
 
 .formCard {
-  background: $color-bg-card;
-  border-radius: $radius-lg;
+  background: var(--w-card, $color-bg-card);
+  border-radius: var(--w-radius, $radius-lg);
   padding: $spacing-lg;
   margin-bottom: $spacing-md;
   box-shadow: $shadow-card;
@@ -112,7 +115,7 @@
   display: flex;
   align-items: center;
   padding: $spacing-md;
-  background: rgba(176, 125, 80, 0.08);
+  background: color-mix(in srgb, var(--w-color, $color-primary) 8%, transparent);
   border-radius: $radius-md;
   margin-bottom: $spacing-lg;
 }
@@ -126,7 +129,7 @@
 .namePreviewValue {
   font-size: $font-size-md;
   font-weight: $font-weight-medium;
-  color: $color-primary;
+  color: var(--w-color, $color-primary);
   @include text-ellipsis;
 }
 
@@ -135,7 +138,7 @@
   height: 64rpx;
   font-size: $font-size-md;
   font-weight: $font-weight-medium;
-  color: $color-primary;
+  color: var(--w-color, $color-primary);
 }
 
 .brandLabel {
@@ -145,41 +148,170 @@
   margin-bottom: $spacing-sm;
 }
 
-.brandInput {
-  width: 100%;
-  height: 88rpx;
+// v0.5 用户意见 6：购入信息卡片
+.purchaseCard {
   background: $color-bg-page;
-  border-radius: $radius-md;
-  padding: 0 $spacing-md;
+  border-radius: var(--w-radius, $radius-md);
+  padding: $spacing-md;
+  margin-bottom: $spacing-lg;
+}
+
+.purchaseTitle {
+  display: block;
   font-size: $font-size-md;
-  color: $color-text-primary;
+  font-weight: $font-weight-semibold;
+  color: var(--w-text, $color-text-primary);
+  margin-bottom: $spacing-md;
+}
+
+.purchaseRow {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: $spacing-md;
+}
+
+.purchaseLabel {
+  width: 140rpx;
+  flex-shrink: 0;
+  font-size: $font-size-md;
+  color: var(--w-text2, $color-text-secondary);
+  line-height: 88rpx;
+}
+
+.purchasePickerRow {
+  flex: 1;
+  height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--w-card, $color-bg-card);
+  border-radius: var(--w-radius, $radius-md);
+  padding: 0 $spacing-md;
   box-sizing: border-box;
 }
 
-.brandSuggest {
-  display: flex;
-  flex-wrap: wrap;
-  margin-top: $spacing-sm;
+.purchaseValue {
+  font-size: $font-size-md;
+  color: var(--w-text, $color-text-primary);
 }
 
-.brandChip {
-  height: 60rpx;
+.purchasePlaceholder {
+  font-size: $font-size-md;
+  color: $color-text-disabled;
+}
+
+.purchaseArrow {
+  font-size: $font-size-md;
+  color: $color-text-tertiary;
+}
+
+.purchaseInput {
+  flex: 1;
+  height: 88rpx;
+  background: var(--w-card, $color-bg-card);
+  border-radius: var(--w-radius, $radius-md);
+  padding: 0 $spacing-md;
+  font-size: $font-size-md;
+  color: var(--w-text, $color-text-primary);
+  box-sizing: border-box;
+}
+
+.placeChips {
+  display: flex;
+  flex-wrap: wrap;
+  margin-left: 140rpx;
+  margin-top: -$spacing-sm;
+  margin-bottom: $spacing-md;
+}
+
+.placeChip {
+  height: 56rpx;
   padding: 0 $spacing-md;
   margin-right: $spacing-sm;
   margin-bottom: $spacing-sm;
-  border-radius: $radius-button;
-  background: $color-bg-hover;
+  border-radius: $radius-round;
+  background: var(--w-card, $color-bg-card);
+  border: 1rpx solid $color-border;
   display: flex;
   align-items: center;
+  box-sizing: border-box;
 
   &:active {
     opacity: 0.8;
   }
 }
 
-.brandChipText {
+.placeChipActive {
+  background: var(--w-color, $color-primary);
+  border: 2rpx solid var(--w-color, $color-primary);
+  transform: scale(1.05);
+
+  .placeChipText {
+    color: $color-text-white;
+  }
+}
+
+.placeChipText {
+  font-size: $font-size-sm;
+  color: var(--w-text2, $color-text-secondary);
+}
+
+.purchaseActions {
+  flex: 1;
+  display: flex;
+}
+
+.purchaseActionBtn {
+  height: 88rpx;
+  padding: 0 $spacing-lg;
+  margin-right: $spacing-sm;
+  border-radius: var(--w-radius, $radius-md);
+  background: var(--w-card, $color-bg-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.purchaseActionText {
   font-size: $font-size-md;
-  color: $color-text-secondary;
+  color: var(--w-text2, $color-text-secondary);
+}
+
+.receiptBox {
+  position: relative;
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: var(--w-radius, $radius-md);
+  overflow: hidden;
+}
+
+.receiptImage {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.receiptDelete {
+  position: absolute;
+  right: 6rpx;
+  top: 6rpx;
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: $radius-round;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.receiptDeleteText {
+  font-size: $font-size-sm;
+  color: $color-text-white;
+  line-height: 1;
 }
 
 .remarkInput {
@@ -216,7 +348,7 @@
   flex: 1;
   height: $button-height-lg;
   border-radius: $radius-button;
-  background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+  background: linear-gradient(135deg, var(--w-primary, $color-primary) 0%, var(--w-primary-light, $color-primary-light) 100%);
   display: flex;
   align-items: center;
   justify-content: center;

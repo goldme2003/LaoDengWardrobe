@@ -1,0 +1,201 @@
+@use '@/styles/variables.scss' as *;
+
+.page {
+  padding: $spacing-lg $page-padding 160rpx;
+  background: var(--w-bg, $color-bg-page);
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.card {
+  background: var(--w-card, $color-bg-card);
+  border-radius: var(--w-radius, $radius-lg);
+  padding: $spacing-lg;
+  margin-bottom: $spacing-md;
+  box-shadow: $shadow-card;
+}
+
+.photoRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: $spacing-md;
+}
+
+.photo {
+  width: 176rpx;
+  height: 176rpx;
+  border-radius: var(--w-radius, $radius-md);
+  margin-right: $spacing-sm;
+  margin-bottom: $spacing-sm;
+  background: $color-bg-hover;
+}
+
+.photoPlaceholder {
+  width: 176rpx;
+  height: 176rpx;
+  border-radius: var(--w-radius, $radius-md);
+  background: $color-bg-hover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photoPlaceholderText {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+.moreCount {
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+}
+
+.infoRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: $spacing-xs;
+}
+
+.name {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: var(--w-text, $color-text-primary);
+}
+
+.price {
+  font-size: $font-size-md;
+  font-weight: $font-weight-semibold;
+  color: var(--w-primary, $color-primary);
+}
+
+.metaRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: $spacing-xs;
+}
+
+.colorMeta {
+  display: flex;
+  align-items: center;
+}
+
+.colorDot {
+  width: 20rpx;
+  height: 20rpx;
+  border-radius: $radius-round;
+  border: 1rpx solid $color-border;
+  margin-right: 8rpx;
+}
+
+.meta {
+  font-size: $font-size-sm;
+  color: var(--w-text2, $color-text-secondary);
+  margin-right: $spacing-md;
+}
+
+.note {
+  display: block;
+  font-size: $font-size-sm;
+  color: var(--w-text2, $color-text-secondary);
+  line-height: $line-height-normal;
+  margin-bottom: $spacing-xs;
+}
+
+.time {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  margin-bottom: $spacing-md;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+}
+
+.convertBtn {
+  height: 72rpx;
+  padding: 0 $spacing-lg;
+  border-radius: $radius-button;
+  background: linear-gradient(135deg, var(--w-primary, $color-primary) 0%, var(--w-primary-light, $color-primary-light) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: $spacing-sm;
+
+  &:active {
+    opacity: 0.9;
+  }
+}
+
+.convertText {
+  font-size: $font-size-md;
+  color: $color-text-white;
+}
+
+.editBtn {
+  height: 72rpx;
+  padding: 0 $spacing-lg;
+  border-radius: $radius-button;
+  background: $color-bg-hover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: $spacing-sm;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.editText {
+  font-size: $font-size-md;
+  color: var(--w-text2, $color-text-secondary);
+}
+
+.deleteBtn {
+  height: 72rpx;
+  padding: 0 $spacing-lg;
+  border-radius: $radius-button;
+  background: $color-bg-hover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.deleteText {
+  font-size: $font-size-md;
+  color: $color-error;
+}
+
+.fab {
+  position: fixed;
+  right: $page-padding;
+  bottom: calc(48rpx + env(safe-area-inset-bottom));
+  width: 112rpx;
+  height: 112rpx;
+  border-radius: $radius-round;
+  background: linear-gradient(135deg, var(--w-primary, $color-primary) 0%, var(--w-primary-light, $color-primary-light) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: $shadow-float;
+  z-index: 10;
+
+  &:active {
+    transform: scale(0.95);
+  }
+}
+
+.fabIcon {
+  font-size: 56rpx;
+  color: $color-text-white;
+  line-height: 1;
+}

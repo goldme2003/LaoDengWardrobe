@@ -2,6 +2,17 @@
 
 .page {
   padding-bottom: 200rpx;
+  background: var(--w-bg, $color-bg-page);
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+// v0.5：购入凭证照片
+.receiptImage {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: $radius-md;
+  display: block;
 }
 
 .swiperWrap {

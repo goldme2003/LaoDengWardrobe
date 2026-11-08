@@ -101,7 +101,7 @@ const FilterBar: React.FC<Props> = ({
           {renderRow('材质', materialOptions, 'material')}
 
           <View className={styles.row}>
-            <Text className={styles.rowLabel}>穿着季节</Text>
+            <Text className={styles.rowLabel}>季节</Text>
             <View className={styles.rowChips}>
               <Text
                 className={classnames(styles.chip, filters.seasons.length === 0 && styles.chipActive)}

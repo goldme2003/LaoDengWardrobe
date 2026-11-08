@@ -1,0 +1,99 @@
+@use '@/styles/variables.scss' as *;
+
+.section {
+  margin-bottom: $spacing-lg;
+}
+
+.label {
+  display: block;
+  font-size: $font-size-lg;
+  color: var(--w-text, $color-text-primary);
+  font-weight: $font-weight-medium;
+  margin-bottom: $spacing-sm;
+}
+
+.input {
+  width: 100%;
+  height: 88rpx;
+  background: $color-bg-page;
+  border-radius: var(--w-radius, $radius-md);
+  padding: 0 $spacing-md;
+  font-size: $font-size-md;
+  color: var(--w-text, $color-text-primary);
+  box-sizing: border-box;
+}
+
+.dropdown {
+  margin-top: $spacing-sm;
+  background: var(--w-card, $color-bg-card);
+  border: 1rpx solid $color-border;
+  border-radius: var(--w-radius, $radius-md);
+  box-shadow: $shadow-popup;
+  max-height: 480rpx;
+  overflow-y: auto;
+  padding: $spacing-sm;
+  box-sizing: border-box;
+}
+
+.groupLabel {
+  display: block;
+  font-size: $font-size-sm;
+  color: #f5a623;
+  margin: $spacing-xs $spacing-sm;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  padding: $spacing-sm $spacing-sm;
+  border-radius: $radius-sm;
+
+  &:active {
+    background: $color-bg-hover;
+  }
+}
+
+.star {
+  font-size: $font-size-lg;
+  color: $color-text-disabled;
+  margin-right: $spacing-sm;
+}
+
+.starOn {
+  color: #f5a623;
+}
+
+.brandName {
+  font-size: $font-size-md;
+  color: var(--w-text, $color-text-primary);
+}
+
+// 已有衣物的品牌前置并轻微高亮
+.brandUsed {
+  color: var(--w-primary, $color-primary);
+  font-weight: $font-weight-medium;
+}
+
+.plus {
+  font-size: $font-size-lg;
+  color: var(--w-primary, $color-primary);
+  margin-right: $spacing-sm;
+}
+
+.emptyText {
+  display: block;
+  padding: $spacing-sm;
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+}
+
+.closeRow {
+  display: flex;
+  justify-content: center;
+  padding: $spacing-xs 0;
+}
+
+.closeText {
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+}

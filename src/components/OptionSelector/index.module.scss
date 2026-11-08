@@ -1,4 +1,4 @@
-@use '@/styles/variables.scss' as *;
+﻿@use '@/styles/variables.scss' as *;
 
 .section {
   margin-bottom: $spacing-lg;
@@ -104,20 +104,64 @@
   }
 }
 
+// v0.5 用户意见 5：选中高亮强化（描边 + 光圈 + 放大）
 .chipActive {
   background: var(--w-color, $color-primary);
-  border-color: var(--w-color, $color-primary);
-  border-width: 2rpx;
-  transform: scale(1.03);
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.18);
+  border: 2rpx solid var(--w-color, $color-primary);
+  transform: scale(1.06);
+  box-shadow: 0 0 0 4rpx color-mix(in srgb, var(--w-color, $color-primary) 25%, transparent);
 }
 
-.chipActive .chipText {
-  color: $color-text-white;
+.dotWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-right: 10rpx;
 }
 
-.chipTextActive {
+.dot {
+  width: 20rpx;
+  height: 20rpx;
+  border-radius: $radius-round;
+  border: 1rpx solid $color-border;
+}
+
+// v0.5 用户意见 5：颜色选中后色点带勾角
+.dotCheck {
+  position: absolute;
+  right: -8rpx;
+  top: -10rpx;
+  width: 26rpx;
+  height: 26rpx;
+  border-radius: $radius-round;
+  background: var(--w-color, $color-primary);
+  border: 2rpx solid $color-text-white;
   color: $color-text-white;
+  font-size: 16rpx;
+  line-height: 22rpx;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+// v0.5 用户意见 4：将已选项（如「其他」）改为自定义内容
+.editCustomRow {
+  display: inline-flex;
+  align-items: center;
+  height: 60rpx;
+  padding: 0 $spacing-md;
+  margin-top: $spacing-xs;
+  border-radius: $radius-round;
+  background: color-mix(in srgb, var(--w-color, $color-primary) 10%, transparent);
+  box-sizing: border-box;
+
+  &:active {
+    opacity: 0.8;
+  }
+}
+
+.editCustomText {
+  font-size: $font-size-md;
+  color: var(--w-color, $color-primary);
 }
 
 .chipLabel {
@@ -143,14 +187,6 @@
   color: $color-text-tertiary;
   margin-left: 8rpx;
   padding: 0 4rpx;
-}
-
-.dot {
-  width: 20rpx;
-  height: 20rpx;
-  border-radius: $radius-round;
-  border: 1rpx solid $color-border;
-  margin-right: 10rpx;
 }
 
 .addRow {
@@ -191,7 +227,7 @@
   padding: 0 $spacing-md;
   margin-left: $spacing-sm;
   border-radius: $radius-md;
-  background: $color-primary;
+  background: var(--w-color, $color-primary);
   display: flex;
   align-items: center;
 }

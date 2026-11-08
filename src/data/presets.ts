@@ -1,76 +1,342 @@
-import { CustomDimension, Gender, ThemeSet } from '@/types';
+import { CustomDimension, Gender, ThemeId, BodyProfile } from '@/types';
 
-export const THEME_SETS: ThemeSet[] = [
-  { id: 'warm',     label: '温暖砖红', color: '#E8684A', bgCard: '#FFF6F1', accent: '#C24A2E', shadow: '0 2rpx 12rpx rgba(232,104,74,.12)', warm: true },
-  { id: 'ocean',    label: '海洋蓝',   color: '#3B6FB5', bgCard: '#F0F6FB', accent: '#274F87', shadow: '0 2rpx 12rpx rgba(59,111,181,.12)' },
-  { id: 'mint',     label: '薄荷绿',   color: '#4C9E5E', bgCard: '#F2FAF4', accent: '#2F6F3F', shadow: '0 2rpx 12rpx rgba(76,158,94,.12)' },
-  { id: 'lavender', label: '紫藤紫',   color: '#7E5BB5', bgCard: '#F4EFFA', accent: '#53368A', shadow: '0 2rpx 12rpx rgba(126,91,181,.12)' },
-  { id: 'sunrise',  label: '蜜橙',     color: '#F5A623', bgCard: '#FFF7EB', accent: '#C67E14', shadow: '0 2rpx 12rpx rgba(245,166,35,.14)', warm: true },
-  { id: 'sakura',   label: '樱花粉',   color: '#EF9BB1', bgCard: '#FFF2F5', accent: '#C66782', shadow: '0 2rpx 12rpx rgba(239,155,177,.14)', warm: true },
-  { id: 'mono',     label: '简约黑',   color: '#2B2B2B', bgCard: '#F5F5F5', accent: '#000000', shadow: '0 2rpx 12rpx rgba(0,0,0,.10)' },
-  { id: 'denim',    label: '牛仔蓝',   color: '#5B7C99', bgCard: '#F3F6F8', accent: '#3C5770', shadow: '0 2rpx 12rpx rgba(91,124,153,.12)' }
-];
-export const getTheme = (id: string): ThemeSet => THEME_SETS.find((t) => t.id === id) || THEME_SETS[0];
+/** 当前版本号（v0.5：在「我的」页展示） */
+export const APP_VERSION = 'v0.5.0';
 
-export const TYPE_PRESETS = ['上装', '裤装', '裙装', '连衣裙', '外套', '内衣', '家居服', '鞋履', '配饰', '其他'];
-const EXCLUDE_BY_GENDER: Record<Gender, string[]> = { male: ['裙装', '连衣裙'], female: [], other: [], '': [] };
-export const getTypePresetsByGender = (gender: Gender): string[] => {
-  const excluded = EXCLUDE_BY_GENDER[gender] || [];
-  return TYPE_PRESETS.filter((t) => !excluded.includes(t));
-};
-export const LAYER_OPTIONS = ['内穿', '外穿'];
-
-export const COLOR_PRESETS: { name: string; hex: string }[] = [
-  { name: '黑色', hex: '#2B2B2B' }, { name: '白色', hex: '#FFFFFF' }, { name: '灰色', hex: '#9E9E9E' },
-  { name: '红色', hex: '#D94141' }, { name: '橙色', hex: '#F08C00' }, { name: '黄色', hex: '#F5C542' },
-  { name: '绿色', hex: '#4C9E5E' }, { name: '蓝色', hex: '#3B6FB5' }, { name: '紫色', hex: '#7E5BB5' },
-  { name: '粉色', hex: '#EF9BB1' }, { name: '棕色', hex: '#8B5E3C' }, { name: '米色', hex: '#E8DCC8' },
-  { name: '牛仔蓝', hex: '#5B7C99' }
-];
-export const COLOR_HEX_MAP: Record<string, string> = COLOR_PRESETS.reduce(
-  (m, c) => ({ ...m, [c.name]: c.hex }), {} as Record<string, string>);
-
-export const MATERIAL_PRESETS = ['棉', '麻', '丝绸', '羊毛', '羊绒', '涤纶', '牛仔', '皮革', '羽绒', '醋酸'];
-export const SEASON_OPTIONS = ['春', '夏', '秋', '冬'];
-export const SIZE_OPTIONS = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
-export const OCCASION_OPTIONS = ['日常', '通勤', '运动', '正式', '居家', '旅行'];
-export const BRAND_MAX_LEN = 20;
-export const BRAND_PRESETS = [
-  '优衣库', 'ZARA', 'H&M', '无印良品', 'GAP', 'COS',
-  '耐克', '阿迪达斯', '李宁', '安踏', '波司登', '雅戈尔', '海澜之家', '七匹狼', '恒源祥', '太平鸟'
-];
-export const buildBrandOptions = (existingItemBrands: string[], favoriteBrands: string[]): string[] => {
-  const seen = new Set<string>(); const out: string[] = [];
-  for (const b of favoriteBrands) if (!seen.has(b)) { out.push(b); seen.add(b); }
-  for (const b of existingItemBrands) if (!seen.has(b)) { out.push(b); seen.add(b); }
-  for (const b of BRAND_PRESETS) if (!seen.has(b)) { out.push(b); seen.add(b); }
-  return out;
-};
-export const WARDROBE_COLORS = THEME_SETS.map((t) => t.color);
+/** 性别选项（v0.5） */
 export const GENDER_OPTIONS: { value: Gender; label: string }[] = [
-  { value: 'male', label: '男性' }, { value: 'female', label: '女性' },
-  { value: 'other', label: '其他' }, { value: '', label: '暂不明确' }
+  { value: 'male', label: '男' },
+  { value: 'female', label: '女' }
 ];
-export const BODY_FIELDS: { key: keyof import('@/types').BodyInfo; label: string; unit: string }[] = [
-  { key: 'height', label: '身高', unit: 'cm' }, { key: 'weight', label: '体重', unit: 'kg' },
-  { key: 'shoulderWidth', label: '肩宽', unit: 'cm' }, { key: 'bust', label: '胸围', unit: 'cm' },
-  { key: 'waist', label: '腰围', unit: 'cm' }, { key: 'hip', label: '臀围', unit: 'cm' },
-  { key: 'armSpan', label: '臂展', unit: 'cm' }, { key: 'inseam', label: '内缝长', unit: 'cm' },
-  { key: 'neck', label: '颈围', unit: 'cm' }, { key: 'wrist', label: '手腕围', unit: 'cm' }
-];
-export const WEATHER_ICONS: Record<string, string> = {
-  晴: '☀️', 多云: '⛅', 阴: '☁️', 小雨: '🌧️', 中雨: '🌧️', 大雨: '🌧️',
-  阵雨: '🌦️', 雷阵雨: '⛈️', 雪: '❄️', 小雪: '🌨️', 雾: '🌫️', 霾: '😷'
-};
-export const weatherIcon = (cond: string): string => WEATHER_ICONS[cond] || '🌤️';
-export const CUSTOM_MAX_LEN: Record<CustomDimension, number> = { type: 10, color: 6, material: 10, size: 6, occasion: 10 };
-export const MAX_PHOTOS = 9;
-export const REMARK_MAX_LEN = 200;
-export const WARDROBE_NAME_MAX_LEN = 10;
-export const ITEM_NAME_MAX_LEN = 20;
+
 export const AGE_MIN = 1;
 export const AGE_MAX = 120;
+
+/** 服装类型预设按性别过滤（v0.5：男性不展示裙装/连衣裙） */
+export const getTypePresetsByGender = (gender?: Gender): string[] =>
+  gender === 'male'
+    ? TYPE_PRESETS.filter((t) => t !== '裙装' && t !== '连衣裙')
+    : TYPE_PRESETS;
+
+/** 按性别与身高推荐尺码默认值（v0.5：尺码选填，自动预填可修改） */
+export const suggestSize = (gender?: Gender, height?: number): string => {
+  if (!height || height <= 0) return '';
+  if (gender === 'male') {
+    if (height < 165) return 'S';
+    if (height < 172) return 'M';
+    if (height < 180) return 'L';
+    return 'XL';
+  }
+  if (gender === 'female') {
+    if (height < 155) return 'S';
+    if (height < 163) return 'M';
+    if (height < 170) return 'L';
+    return 'XL';
+  }
+  return '';
+};
+
+/** 服装类型预设（PRD 6.1） */
+export const TYPE_PRESETS = [
+  '上装',
+  '裤装',
+  '裙装',
+  '连衣裙',
+  '外套',
+  '内衣',
+  '家居服',
+  '鞋履',
+  '配饰',
+  '其他'
+];
+
+/** 内外穿（固定枚举） */
+export const LAYER_OPTIONS = ['内穿', '外穿'];
+
+/** 颜色预设（含展示用色值） */
+export const COLOR_PRESETS: { name: string; hex: string }[] = [
+  { name: '黑色', hex: '#2B2B2B' },
+  { name: '白色', hex: '#FFFFFF' },
+  { name: '灰色', hex: '#9E9E9E' },
+  { name: '红色', hex: '#D94141' },
+  { name: '橙色', hex: '#F08C00' },
+  { name: '黄色', hex: '#F5C542' },
+  { name: '绿色', hex: '#4C9E5E' },
+  { name: '蓝色', hex: '#3B6FB5' },
+  { name: '紫色', hex: '#7E5BB5' },
+  { name: '粉色', hex: '#EF9BB1' },
+  { name: '棕色', hex: '#8B5E3C' },
+  { name: '米色', hex: '#E8DCC8' },
+  { name: '牛仔蓝', hex: '#5B7C99' }
+];
+
+export const COLOR_HEX_MAP: Record<string, string> = COLOR_PRESETS.reduce(
+  (map, c) => ({ ...map, [c.name]: c.hex }),
+  {} as Record<string, string>
+);
+
+/** 材质预设 */
+export const MATERIAL_PRESETS = [
+  '棉',
+  '麻',
+  '丝绸',
+  '羊毛',
+  '羊绒',
+  '涤纶',
+  '牛仔',
+  '皮革',
+  '羽绒',
+  '醋酸',
+  '其他'
+];
+
+/** 季节（固定枚举，多选） */
+export const SEASON_OPTIONS = ['春', '夏', '秋', '冬'];
+
+/** 尺码预设（选填扩展属性，PRD v0.3） */
+export const SIZE_OPTIONS = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+
+/** 适用场合预设（选填扩展属性，多选） */
+export const OCCASION_OPTIONS = ['日常', '通勤', '运动', '正式', '居家', '旅行'];
+
+/** 品牌字数上限（选填扩展属性） */
+export const BRAND_MAX_LEN = 20;
+
+/** 常用品牌预设（选填，支持手动输入 + 联想提示） */
+export const BRAND_PRESETS = [
+  '优衣库',
+  'ZARA',
+  'H&M',
+  '无印良品',
+  'GAP',
+  'COS',
+  '耐克',
+  '阿迪达斯',
+  '李宁',
+  '安踏',
+  '波司登',
+  '雅戈尔',
+  '海澜之家',
+  '七匹狼',
+  '恒源祥',
+  '太平鸟'
+];
+
+/** 衣橱主题色板（用户意见 4：不同人衣橱用自定义颜色区分） */
+export const WARDROBE_COLORS = [
+  '#B07D50',
+  '#3B6FB5',
+  '#4C9E5E',
+  '#7E5BB5',
+  '#D94141',
+  '#E8684A',
+  '#5B7C99',
+  '#2B2B2B'
+];
+
+/** 天气现象 → 图标映射（用户意见 6） */
+export const WEATHER_ICONS: Record<string, string> = {
+  晴: '☀️',
+  多云: '⛅',
+  阴: '☁️',
+  小雨: '🌧️',
+  中雨: '🌧️',
+  大雨: '🌧️',
+  阵雨: '🌦️',
+  雷阵雨: '⛈️',
+  雪: '❄️',
+  小雪: '🌨️',
+  雾: '🌫️',
+  霾: '😷'
+};
+
+/** 天气现象图标 */
+export const weatherIcon = (cond: string): string => WEATHER_ICONS[cond] || '🌤️';
+
+/** 自定义选项字数上限（PRD 6.1；v0.5 扩展尺码/场合维度） */
+export const CUSTOM_MAX_LEN: Record<CustomDimension, number> = {
+  type: 10,
+  color: 6,
+  material: 10,
+  size: 6,
+  occasion: 10
+};
+
+/** ============================================
+ * 风格主题集（v0.5：不同衣橱选择不同整体风格主题，
+ * 含页面底色/主色/卡片底色/文本色/卡片圆角风格，而非仅控件颜色）
+ * ============================================ */
+export interface ThemeStyle {
+  id: ThemeId;
+  name: string;
+  /** 页面底色 */
+  bg: string;
+  /** 主色（同时作为衣橱主题色 color） */
+  primary: string;
+  /** 主色浅（渐变/次级按钮） */
+  primaryLight: string;
+  /** 卡片底色 */
+  card: string;
+  /** 主文本色 */
+  text: string;
+  /** 次文本色 */
+  textSecondary: string;
+  /** 卡片圆角（不同主题圆角风格不同） */
+  radius: string;
+  /** 主题图标 */
+  emoji: string;
+}
+
+export const THEME_SETS: ThemeStyle[] = [
+  {
+    id: 'warm',
+    name: '焦糖暖棕',
+    bg: '#F7F4EF',
+    primary: '#B07D50',
+    primaryLight: '#CE9B6F',
+    card: '#FFFFFF',
+    text: '#2B2420',
+    textSecondary: '#6B5E52',
+    radius: '16rpx',
+    emoji: '🧺'
+  },
+  {
+    id: 'ocean',
+    name: '海雾蓝',
+    bg: '#EDF3FA',
+    primary: '#3B6FB5',
+    primaryLight: '#6C93CB',
+    card: '#FFFFFF',
+    text: '#1E2A3A',
+    textSecondary: '#5B6B7E',
+    radius: '16rpx',
+    emoji: '🌊'
+  },
+  {
+    id: 'mint',
+    name: '薄荷奶绿',
+    bg: '#EFF7F1',
+    primary: '#4C9E5E',
+    primaryLight: '#7DBC8C',
+    card: '#FFFFFF',
+    text: '#1F2E23',
+    textSecondary: '#5E7264',
+    radius: '32rpx',
+    emoji: '🌿'
+  },
+  {
+    id: 'honey',
+    name: '蜜橙拿铁',
+    bg: '#FBF3EA',
+    primary: '#E8684A',
+    primaryLight: '#F09A85',
+    card: '#FFFDF9',
+    text: '#33241D',
+    textSecondary: '#7A6459',
+    radius: '16rpx',
+    emoji: '🍊'
+  },
+  {
+    id: 'rose',
+    name: '豆沙玫瑰',
+    bg: '#FAF0F1',
+    primary: '#B56576',
+    primaryLight: '#D08E9C',
+    card: '#FFFCFC',
+    text: '#332228',
+    textSecondary: '#7D6069',
+    radius: '32rpx',
+    emoji: '🌸'
+  },
+  {
+    id: 'ink',
+    name: '黑胡桃墨调',
+    bg: '#EFEFED',
+    primary: '#3A3A38',
+    primaryLight: '#6E6E6A',
+    card: '#FFFFFF',
+    text: '#222222',
+    textSecondary: '#6B6B66',
+    radius: '8rpx',
+    emoji: '🖤'
+  }
+];
+
+export const DEFAULT_THEME_ID: ThemeId = 'warm';
+
+export const getThemeById = (id?: ThemeId): ThemeStyle =>
+  THEME_SETS.find((t) => t.id === id) || THEME_SETS[0];
+
+/** 由衣橱生成 CSS 变量（页面根节点 style 注入，实现整体风格主题） */
+export const themeVarsOf = (w?: { themeId?: ThemeId; color?: string } | null): Record<string, string> => {
+  const t = getThemeById(w?.themeId);
+  return {
+    '--w-color': w?.color || t.primary,
+    '--w-primary': t.primary,
+    '--w-primary-light': t.primaryLight,
+    '--w-bg': t.bg,
+    '--w-card': t.card,
+    '--w-text': t.text,
+    '--w-text2': t.textSecondary,
+    '--w-radius': t.radius
+  };
+};
+
+/** ============================================
+ * 个人身体数据字段定义（v0.5：缝纫基本信息，均在「我的」页维护）
+ * ============================================ */
+export interface BodyFieldDef {
+  key: keyof BodyProfile;
+  label: string;
+  unit: string;
+  /** 合理区间，用于输入校验 */
+  min: number;
+  max: number;
+}
+
+export const BODY_FIELD_DEFS: BodyFieldDef[] = [
+  { key: 'height', label: '身高', unit: 'cm', min: 50, max: 250 },
+  { key: 'weight', label: '体重', unit: 'kg', min: 10, max: 300 },
+  { key: 'bust', label: '胸围', unit: 'cm', min: 40, max: 200 },
+  { key: 'waist', label: '腰围', unit: 'cm', min: 40, max: 200 },
+  { key: 'hip', label: '臀围', unit: 'cm', min: 40, max: 200 },
+  { key: 'shoulderWidth', label: '肩宽', unit: 'cm', min: 20, max: 80 },
+  { key: 'shoulder', label: '肩围', unit: 'cm', min: 40, max: 200 },
+  { key: 'armSpan', label: '臂展', unit: 'cm', min: 60, max: 250 },
+  { key: 'neck', label: '领围', unit: 'cm', min: 20, max: 80 },
+  { key: 'inseam', label: '裤长', unit: 'cm', min: 40, max: 130 },
+  { key: 'thigh', label: '腿围', unit: 'cm', min: 20, max: 120 },
+  { key: 'footLength', label: '脚长', unit: 'mm', min: 120, max: 350 }
+];
+
+/** 购入地点/渠道预设（v0.5） */
+export const PURCHASE_PLACE_PRESETS = [
+  '淘宝',
+  '京东',
+  '拼多多',
+  '线下商场',
+  '品牌门店',
+  '免税店',
+  '海淘',
+  '二手平台',
+  '朋友赠送',
+  '其他'
+];
+
+/** 照片组上限（PRD FR-02） */
+export const MAX_PHOTOS = 9;
+
+/** 备注上限（PRD FR-05） */
+export const REMARK_MAX_LEN = 200;
+
+/** 衣橱名称上限（PRD FR-01） */
+export const WARDROBE_NAME_MAX_LEN = 10;
+
+/** 名称长度上限 */
+export const ITEM_NAME_MAX_LEN = 20;
+
+/** 示例照片（预览辅助，电商/服饰类） */
 export const SAMPLE_PHOTO_IDS = [103, 119, 220, 225, 230, 250];
+
 export const samplePhoto = (index: number): string =>
   `https://picsum.photos/id/${SAMPLE_PHOTO_IDS[index % SAMPLE_PHOTO_IDS.length]}/300/300`;
-export const getSizePresetsByGender = (_g: Gender): string[] => SIZE_OPTIONS;
