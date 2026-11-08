@@ -1,0 +1,103 @@
+@use '@/styles/variables.scss' as *;
+
+.card {
+  width: 100%;
+  background: $color-bg-card;
+  border-radius: $radius-lg;
+  overflow: hidden;
+  box-shadow: $shadow-card;
+  margin-bottom: $spacing-md;
+  transition: all $transition-fast;
+
+  &:active {
+    opacity: 0.92;
+    transform: scale(0.99);
+  }
+}
+
+.photoWrap {
+  position: relative;
+  width: 100%;
+  height: 320rpx;
+  background: $color-bg-hover;
+}
+
+.photo {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.photoBadge {
+  position: absolute;
+  right: $spacing-sm;
+  bottom: $spacing-sm;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: $radius-round;
+  padding: 4rpx 14rpx;
+}
+
+.photoBadgeText {
+  font-size: $font-size-xs;
+  color: $color-text-white;
+}
+
+.body {
+  padding: $spacing-md $spacing-lg $spacing-lg;
+}
+
+.nameRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: $spacing-sm;
+}
+
+.name {
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+  color: $color-text-primary;
+  @include text-ellipsis;
+  margin-right: $spacing-sm;
+}
+
+.heart {
+  font-size: $font-size-xl;
+  color: $color-text-disabled;
+  padding: 0 $spacing-xs;
+}
+
+.heartActive {
+  color: $color-favorite;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+  background: $color-bg-hover;
+  border-radius: $radius-xs;
+  padding: 4rpx 12rpx;
+  margin-right: $spacing-sm;
+  margin-bottom: $spacing-xs;
+  white-space: nowrap;
+}
+
+.tagText {
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+  margin-left: 6rpx;
+}
+
+.colorDot {
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: $radius-round;
+  border: 1rpx solid $color-border;
+}

@@ -1,0 +1,129 @@
+@use '@/styles/variables.scss' as *;
+
+.card {
+  background: linear-gradient(135deg, #fdf9f3 0%, #f6efe4 100%);
+  border-radius: $radius-lg;
+  padding: $spacing-lg;
+  margin-bottom: $spacing-md;
+  box-shadow: $shadow-card;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: $spacing-md;
+}
+
+.city {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+}
+
+.stateText {
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+}
+
+.retry {
+  font-size: $font-size-sm;
+  color: $color-error;
+}
+
+.today {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: $spacing-md;
+}
+
+.todayLeft {
+  display: flex;
+  flex-direction: column;
+}
+
+// 天气图标（用户意见 6）
+.todayIcon {
+  font-size: 64rpx;
+  line-height: 1.2;
+  margin-bottom: $spacing-xs;
+}
+
+.todayCond {
+  font-size: $font-size-xl;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+  margin-bottom: $spacing-xs;
+}
+
+.todayRange {
+  font-size: $font-size-md;
+  color: $color-text-secondary;
+}
+
+.cityPicker {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 360rpx;
+}
+
+.cityPickerLabel {
+  width: 100%;
+  text-align: right;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  margin-bottom: $spacing-xs;
+}
+
+.cityOption {
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: $radius-round;
+  padding: 4rpx 16rpx;
+  margin-left: $spacing-xs;
+  margin-bottom: $spacing-xs;
+}
+
+.cityOptionActive {
+  color: $color-text-white;
+  background: $color-primary;
+}
+
+.days {
+  display: flex;
+  border-top: 1rpx solid $color-divider;
+  padding-top: $spacing-md;
+}
+
+.dayItem {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.dayDate {
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  margin-bottom: $spacing-xs;
+}
+
+.dayIcon {
+  font-size: 44rpx;
+  line-height: 1.3;
+  margin-bottom: $spacing-xs;
+}
+
+.dayCond {
+  font-size: $font-size-md;
+  color: $color-text-primary;
+  margin-bottom: $spacing-xs;
+}
+
+.dayRange {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}

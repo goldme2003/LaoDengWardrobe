@@ -1,0 +1,194 @@
+@use '@/styles/variables.scss' as *;
+
+.page {
+  padding-bottom: 200rpx;
+}
+
+.swiperWrap {
+  position: relative;
+  width: 100%;
+  height: 600rpx;
+  background: $color-bg-hover;
+}
+
+.swiper {
+  width: 100%;
+  height: 100%;
+}
+
+.slide {
+  width: 100%;
+  height: 100%;
+}
+
+.slideImage {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.photoCount {
+  position: absolute;
+  right: $spacing-lg;
+  bottom: $spacing-md;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: $radius-round;
+  padding: 4rpx 20rpx;
+}
+
+.photoCountText {
+  font-size: $font-size-xs;
+  color: $color-text-white;
+}
+
+.infoCard {
+  margin: $spacing-md $page-padding 0;
+  background: $color-bg-card;
+  border-radius: $radius-lg;
+  padding: $spacing-lg;
+  box-shadow: $shadow-card;
+}
+
+.nameRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: $spacing-md;
+}
+
+.name {
+  font-size: $font-size-xl;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+  @include text-ellipsis;
+  margin-right: $spacing-md;
+}
+
+.heart {
+  font-size: 48rpx;
+  color: $color-text-disabled;
+  padding: 0 $spacing-xs;
+}
+
+.heartActive {
+  color: $color-favorite;
+}
+
+.attrRow {
+  display: flex;
+  padding: $spacing-sm 0;
+  border-bottom: 1rpx solid $color-divider;
+}
+
+.attrRowLast {
+  border-bottom: none;
+}
+
+.attrLabel {
+  width: 160rpx;
+  font-size: $font-size-md;
+  color: $color-text-tertiary;
+}
+
+.attrValue {
+  flex: 1;
+  font-size: $font-size-md;
+  color: $color-text-primary;
+}
+
+.colorValue {
+  display: flex;
+  align-items: center;
+}
+
+.colorDot {
+  width: 24rpx;
+  height: 24rpx;
+  border-radius: $radius-round;
+  border: 1rpx solid $color-border;
+  margin-right: $spacing-sm;
+}
+
+.remarkBlock {
+  margin-top: $spacing-md;
+  padding: $spacing-md;
+  background: $color-bg-page;
+  border-radius: $radius-md;
+}
+
+.sectionTitle {
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+  color: $color-text-primary;
+  display: block;
+  margin-bottom: $spacing-sm;
+}
+
+.remarkText {
+  font-size: $font-size-md;
+  color: $color-text-secondary;
+  line-height: $line-height-loose;
+}
+
+.emptyRemark {
+  font-size: $font-size-md;
+  color: $color-text-tertiary;
+}
+
+.bottomBar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: $spacing-md $page-padding calc($spacing-md + env(safe-area-inset-bottom));
+  background: $color-bg-card;
+  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.06);
+  display: flex;
+  z-index: 10;
+}
+
+.editBtn {
+  flex: 1;
+  height: $button-height-lg;
+  border-radius: $radius-button;
+  background: $color-primary;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: $spacing-md;
+  transition: all $transition-fast;
+
+  &:active {
+    opacity: 0.9;
+    transform: scale(0.98);
+  }
+}
+
+.editBtnText {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-medium;
+  color: $color-text-white;
+}
+
+.deleteBtn {
+  width: 220rpx;
+  height: $button-height-lg;
+  border-radius: $radius-button;
+  background: rgba(245, 63, 63, 0.08);
+  border: 1rpx solid $color-error;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all $transition-fast;
+  box-sizing: border-box;
+
+  &:active {
+    opacity: 0.9;
+    transform: scale(0.98);
+  }
+}
+
+.deleteBtnText {
+  font-size: $font-size-lg;
+  color: $color-error;
+}

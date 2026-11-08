@@ -5,18 +5,28 @@
 ## 仓库与远端
 
 - 唯一远端：`origin` → `https://github.com/goldme2003/LaoDengWardrobe.git`
-- 默认分支：`main`（`origin/HEAD` 指向 `origin/main`）
-- 其他远端分支：`untested`（预览初版 v0.1.0-alpha，含 Taro 小程序源码）
-- 不要新增其他远端；不要改写远端历史。
+- 日常开发分支：`untested`（当前最新版本，含完整 Taro 小程序源码）
+- 推送目标：`origin/untested`（`untested` 的 upstream）
+- `main`：**仅为文档基线**，只保存 PRD / 开发日志 / 本约定文件，不用于日常开发，改动不得影响其内容与历史
+- 不要新增其他远端；不要改写远端历史
 
 ## 提交与推送（强制）
 
-1. 任何代码 / 文档修改完成后，**必须** `git commit` 并 `git push origin <分支>`，不允许只在本地保留改动。
-2. 推送前先 `git pull --rebase` 或确认与远端同步，避免无谓的 merge 提交。
-3. **禁止** `git push --force` / `--force-with-lease` 到任何共享分支。
-4. **禁止** 改写已推送的提交（`rebase`、`commit --amend` 已推送的提交）、删除或覆盖远端已有内容。
-5. 提交信息遵循仓库现有风格：Conventional Commits 前缀 + 中文描述，例如
+1. 所有开发在 `untested` 分支上进行；切换到 `untested` 后再开始改动。
+2. 任何代码 / 文档修改完成后，**必须** `git commit` 并 `git push`，不允许只在本地保留改动。
+3. 本仓库已配置 `push.default = upstream`，`git push` 直接推送到 `origin/untested`，不会推到 `main`；如需显式指定，使用 `git push origin untested`。
+4. 推送前确认与远端同步（`git pull --rebase`），避免无谓的 merge 提交。
+5. **禁止** `git push --force` / `--force-with-lease` 到任何共享分支。
+6. **禁止** 改写已推送的提交（对已推送提交做 `rebase`、`commit --amend`）、删除或覆盖远端已有内容。
+7. 提交信息遵循 Conventional Commits 前缀 + 中文描述，例如
    `feat: 新增衣物筛选`、`docs: 更新 PRD v0.3`、`fix: 修复照片组上传失败`。
+
+## 分支说明
+
+| 分支 | 用途 | 说明 |
+| --- | --- | --- |
+| `untested` | 日常开发与预览版本 | v0.1.0-alpha 起，含 `src/`、`config/` 全部源码；推送到此 |
+| `main` | 文档基线 + 版本快照 | `docs/`、`.gitignore`、`AGENTS.md`；另承载经用户确认的版本快照（当前 v0.3a，由 `untested` 合入）；日常开发仍在 `untested` |
 
 ## 网络与环境
 
