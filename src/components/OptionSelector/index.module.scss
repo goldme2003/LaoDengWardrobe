@@ -143,6 +143,30 @@
   box-sizing: border-box;
 }
 
+// v0.5 用户意见 4 修复：选中「其他」后直接展开内联输入
+.fallbackForm {
+  margin-top: $spacing-sm;
+}
+
+.fallbackInput {
+  width: 100%;
+  height: 80rpx;
+  background: $color-bg-page;
+  border: 1rpx solid var(--w-color, $color-primary);
+  border-radius: var(--w-radius, $radius-md);
+  padding: 0 $spacing-md;
+  font-size: $font-size-md;
+  color: var(--w-text, $color-text-primary);
+  box-sizing: border-box;
+}
+
+.fallbackHint {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  margin-top: $spacing-xs;
+}
+
 // v0.5 用户意见 4：将已选项（如「其他」）改为自定义内容
 .editCustomRow {
   display: inline-flex;
