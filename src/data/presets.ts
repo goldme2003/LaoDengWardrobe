@@ -1,4 +1,40 @@
-import { CustomDimension } from '@/types';
+import { CustomDimension, Gender, ThemeId, BodyProfile } from '@/types';
+
+/** 当前版本号（v0.5：在「我的」页展示） */
+export const APP_VERSION = 'v0.5.0';
+
+/** 性别选项（v0.5） */
+export const GENDER_OPTIONS: { value: Gender; label: string }[] = [
+  { value: 'male', label: '男' },
+  { value: 'female', label: '女' }
+];
+
+export const AGE_MIN = 1;
+export const AGE_MAX = 120;
+
+/** 服装类型预设按性别过滤（v0.5：男性不展示裙装/连衣裙） */
+export const getTypePresetsByGender = (gender?: Gender): string[] =>
+  gender === 'male'
+    ? TYPE_PRESETS.filter((t) => t !== '裙装' && t !== '连衣裙')
+    : TYPE_PRESETS;
+
+/** 按性别与身高推荐尺码默认值（v0.5：尺码选填，自动预填可修改） */
+export const suggestSize = (gender?: Gender, height?: number): string => {
+  if (!height || height <= 0) return '';
+  if (gender === 'male') {
+    if (height < 165) return 'S';
+    if (height < 172) return 'M';
+    if (height < 180) return 'L';
+    return 'XL';
+  }
+  if (gender === 'female') {
+    if (height < 155) return 'S';
+    if (height < 163) return 'M';
+    if (height < 170) return 'L';
+    return 'XL';
+  }
+  return '';
+};
 
 /** 服装类型预设（PRD 6.1） */
 export const TYPE_PRESETS = [
@@ -117,12 +153,175 @@ export const WEATHER_ICONS: Record<string, string> = {
 /** 天气现象图标 */
 export const weatherIcon = (cond: string): string => WEATHER_ICONS[cond] || '🌤️';
 
-/** 自定义选项字数上限（PRD 6.1） */
+/** 自定义选项字数上限（PRD 6.1；v0.5 扩展尺码/场合维度） */
 export const CUSTOM_MAX_LEN: Record<CustomDimension, number> = {
   type: 10,
   color: 6,
-  material: 10
+  material: 10,
+  size: 6,
+  occasion: 10
 };
+
+/** ============================================
+ * 风格主题集（v0.5：不同衣橱选择不同整体风格主题，
+ * 含页面底色/主色/卡片底色/文本色/卡片圆角风格，而非仅控件颜色）
+ * ============================================ */
+export interface ThemeStyle {
+  id: ThemeId;
+  name: string;
+  /** 页面底色 */
+  bg: string;
+  /** 主色（同时作为衣橱主题色 color） */
+  primary: string;
+  /** 主色浅（渐变/次级按钮） */
+  primaryLight: string;
+  /** 卡片底色 */
+  card: string;
+  /** 主文本色 */
+  text: string;
+  /** 次文本色 */
+  textSecondary: string;
+  /** 卡片圆角（不同主题圆角风格不同） */
+  radius: string;
+  /** 主题图标 */
+  emoji: string;
+}
+
+export const THEME_SETS: ThemeStyle[] = [
+  {
+    id: 'warm',
+    name: '焦糖暖棕',
+    bg: '#F7F4EF',
+    primary: '#B07D50',
+    primaryLight: '#CE9B6F',
+    card: '#FFFFFF',
+    text: '#2B2420',
+    textSecondary: '#6B5E52',
+    radius: '16rpx',
+    emoji: '🧺'
+  },
+  {
+    id: 'ocean',
+    name: '海雾蓝',
+    bg: '#EDF3FA',
+    primary: '#3B6FB5',
+    primaryLight: '#6C93CB',
+    card: '#FFFFFF',
+    text: '#1E2A3A',
+    textSecondary: '#5B6B7E',
+    radius: '16rpx',
+    emoji: '🌊'
+  },
+  {
+    id: 'mint',
+    name: '薄荷奶绿',
+    bg: '#EFF7F1',
+    primary: '#4C9E5E',
+    primaryLight: '#7DBC8C',
+    card: '#FFFFFF',
+    text: '#1F2E23',
+    textSecondary: '#5E7264',
+    radius: '32rpx',
+    emoji: '🌿'
+  },
+  {
+    id: 'honey',
+    name: '蜜橙拿铁',
+    bg: '#FBF3EA',
+    primary: '#E8684A',
+    primaryLight: '#F09A85',
+    card: '#FFFDF9',
+    text: '#33241D',
+    textSecondary: '#7A6459',
+    radius: '16rpx',
+    emoji: '🍊'
+  },
+  {
+    id: 'rose',
+    name: '豆沙玫瑰',
+    bg: '#FAF0F1',
+    primary: '#B56576',
+    primaryLight: '#D08E9C',
+    card: '#FFFCFC',
+    text: '#332228',
+    textSecondary: '#7D6069',
+    radius: '32rpx',
+    emoji: '🌸'
+  },
+  {
+    id: 'ink',
+    name: '黑胡桃墨调',
+    bg: '#EFEFED',
+    primary: '#3A3A38',
+    primaryLight: '#6E6E6A',
+    card: '#FFFFFF',
+    text: '#222222',
+    textSecondary: '#6B6B66',
+    radius: '8rpx',
+    emoji: '🖤'
+  }
+];
+
+export const DEFAULT_THEME_ID: ThemeId = 'warm';
+
+export const getThemeById = (id?: ThemeId): ThemeStyle =>
+  THEME_SETS.find((t) => t.id === id) || THEME_SETS[0];
+
+/** 由衣橱生成 CSS 变量（页面根节点 style 注入，实现整体风格主题） */
+export const themeVarsOf = (w?: { themeId?: ThemeId; color?: string } | null): Record<string, string> => {
+  const t = getThemeById(w?.themeId);
+  return {
+    '--w-color': w?.color || t.primary,
+    '--w-primary': t.primary,
+    '--w-primary-light': t.primaryLight,
+    '--w-bg': t.bg,
+    '--w-card': t.card,
+    '--w-text': t.text,
+    '--w-text2': t.textSecondary,
+    '--w-radius': t.radius
+  };
+};
+
+/** ============================================
+ * 个人身体数据字段定义（v0.5：缝纫基本信息，均在「我的」页维护）
+ * ============================================ */
+export interface BodyFieldDef {
+  key: keyof BodyProfile;
+  label: string;
+  unit: string;
+  /** 合理区间，用于输入校验 */
+  min: number;
+  max: number;
+}
+
+export const BODY_FIELD_DEFS: BodyFieldDef[] = [
+  { key: 'height', label: '身高', unit: 'cm', min: 50, max: 250 },
+  { key: 'weight', label: '体重', unit: 'kg', min: 10, max: 300 },
+  { key: 'bust', label: '胸围', unit: 'cm', min: 40, max: 200 },
+  { key: 'waist', label: '腰围', unit: 'cm', min: 40, max: 200 },
+  { key: 'hip', label: '臀围', unit: 'cm', min: 40, max: 200 },
+  { key: 'shoulderWidth', label: '肩宽', unit: 'cm', min: 20, max: 80 },
+  { key: 'shoulder', label: '肩围', unit: 'cm', min: 40, max: 200 },
+  { key: 'armSpan', label: '臂展', unit: 'cm', min: 60, max: 250 },
+  { key: 'neck', label: '领围', unit: 'cm', min: 20, max: 80 },
+  { key: 'inseam', label: '裤长', unit: 'cm', min: 40, max: 130 },
+  { key: 'thigh', label: '腿围', unit: 'cm', min: 20, max: 120 },
+  { key: 'footLength', label: '脚长', unit: 'mm', min: 120, max: 350 }
+];
+
+/** 购入地点/渠道预设（v0.5） */
+export const PURCHASE_PLACE_PRESETS = [
+  '淘宝',
+  '京东',
+  '拼多多',
+  '线下商场',
+  '品牌门店',
+  '免税店',
+  '海淘',
+  '二手平台',
+  '朋友赠送',
+  '其他'
+];
 
 /** 照片组上限（PRD FR-02） */
 export const MAX_PHOTOS = 9;

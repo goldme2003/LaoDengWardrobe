@@ -28,8 +28,9 @@ interface Props {
   onRemoveCustom?: (value: string) => void;
 }
 
-/** 选项选择器（PRD FR-03 / v0.3 交互调整）：
- * 单选属性用转盘（Picker），多选属性用勾选标签，颜色保留色卡标签 */
+/** 选项选择器（PRD FR-03 / v0.5 调整）：
+ * 单选属性用转盘（Picker），多选属性用勾选标签，颜色保留色卡标签；
+ * 选中项高亮强化（勾角/描边/放大）；已选项可改为自定义内容（如「其他」） */
 const OptionSelector: React.FC<Props> = ({
   label,
   required,
@@ -73,10 +74,17 @@ const OptionSelector: React.FC<Props> = ({
 
   const confirmAdd = () => {
     if (!onAddCustom) return;
-    const err = onAddCustom(draft);
+    const trimmed = draft.trim();
+    const err = onAddCustom(trimmed);
     if (err) {
       setError(err);
       return;
+    }
+    // v0.5：新增自定义选项后自动选中（含将「其他」改为自定义内容的场景）
+    if (mode !== 'multi') {
+      onChange(trimmed);
+    } else if (Array.isArray(value) && !value.includes(trimmed)) {
+      onChange([...value, trimmed]);
     }
     setDraft('');
     setError('');
@@ -90,7 +98,12 @@ const OptionSelector: React.FC<Props> = ({
     return (
       <View key={opt} className={classnames(styles.chip, active && styles.chipActive)}>
         <View className={styles.chipLabel} onClick={() => tapOption(opt)}>
-          {dot ? <View className={styles.dot} style={{ background: dot }} /> : null}
+          {dot ? (
+            <View className={styles.dotWrap}>
+              <View className={styles.dot} style={{ background: dot }} />
+              {active && <View className={styles.dotCheck}>✓</View>}
+            </View>
+          ) : null}
           <Text className={classnames(styles.chipText, active && styles.chipTextActive)}>{opt}</Text>
         </View>
         {canDelete && (
@@ -104,6 +117,9 @@ const OptionSelector: React.FC<Props> = ({
       </View>
     );
   };
+
+  // v0.5：单选模式下允许将当前值（如「其他」）改为自定义内容
+  const showEditCustom = allowCustom && mode !== 'multi' && singleValue !== '' && !adding;
 
   return (
     <View className={styles.section}>
@@ -152,7 +168,14 @@ const OptionSelector: React.FC<Props> = ({
         </View>
       )}
 
-      {allowCustom && !adding && (
+      {/* v0.5：将已选项（如「其他」）改为自定义内容 */}
+      {showEditCustom && (
+        <View className={styles.editCustomRow} onClick={() => setAdding(true)}>
+          <Text className={styles.editCustomText}>✎ 将「{singleValue}」改为自定义内容</Text>
+        </View>
+      )}
+
+      {allowCustom && !adding && !showEditCustom && (
         <View className={styles.addRow} onClick={() => setAdding(true)}>
           <Text className={styles.addRowText}>+ 新增选项</Text>
         </View>
@@ -164,7 +187,7 @@ const OptionSelector: React.FC<Props> = ({
             className={styles.addInput}
             value={draft}
             maxlength={customMaxLength || 10}
-            placeholder={`输入新选项（≤${customMaxLength || 10}字）`}
+            placeholder={`输入自定义内容（≤${customMaxLength || 10}字）`}
             onInput={(e) => {
               setDraft(e.detail.value);
               setError('');

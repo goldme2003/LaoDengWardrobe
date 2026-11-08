@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, Image, Input, Textarea } from '@tarojs/components';
+import { View, Text, Image, Input, Textarea, Picker } from '@tarojs/components';
 import Taro, { useRouter } from '@tarojs/taro';
 import OptionSelector from '@/components/OptionSelector';
+import BrandPicker from '@/components/BrandPicker';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
 import {
   TYPE_PRESETS,
@@ -11,31 +12,50 @@ import {
   SIZE_OPTIONS,
   OCCASION_OPTIONS,
   BRAND_PRESETS,
+  PURCHASE_PLACE_PRESETS,
   MAX_PHOTOS,
   REMARK_MAX_LEN,
-  BRAND_MAX_LEN,
   ITEM_NAME_MAX_LEN,
   COLOR_HEX_MAP,
   SAMPLE_PHOTO_IDS,
-  samplePhoto
+  samplePhoto,
+  getTypePresetsByGender,
+  suggestSize,
+  themeVarsOf
 } from '@/data/presets';
-import { CustomDimension, NewItemInput } from '@/types';
+import { CustomDimension, NewItemInput, PurchaseInfo } from '@/types';
 import styles from './index.module.scss';
 
-/** 添加/编辑衣物（PRD FR-02/FR-03/FR-05）：照片组 + 属性控件 + 备注 */
+/** 添加/编辑衣物（PRD FR-02/FR-03/FR-05 / v0.5）：照片组 + 属性控件 + 购入信息 + 备注 */
 const AddItemPage: React.FC = () => {
   const router = useRouter();
   const editId = router.params.id;
+  // v0.5：从备选页转入正式录入
+  const fromTryoutId = router.params.fromTryout || '';
 
   const items = useWardrobeStore((s) => s.items);
+  const tryoutItems = useWardrobeStore((s) => s.tryoutItems);
   const customOptions = useWardrobeStore((s) => s.customOptions);
+  const wardrobes = useWardrobeStore((s) => s.wardrobes);
+  const currentWardrobeId = useWardrobeStore((s) => s.currentWardrobeId);
+  const bodyProfile = useWardrobeStore((s) => s.bodyProfile);
+  const favoriteBrands = useWardrobeStore((s) => s.favoriteBrands);
   const addItem = useWardrobeStore((s) => s.addItem);
   const updateItem = useWardrobeStore((s) => s.updateItem);
+  const deleteTryout = useWardrobeStore((s) => s.deleteTryout);
   const addCustomOption = useWardrobeStore((s) => s.addCustomOption);
   const removeCustomOption = useWardrobeStore((s) => s.removeCustomOption);
   const isCustomOptionUsed = useWardrobeStore((s) => s.isCustomOptionUsed);
+  const toggleFavoriteBrand = useWardrobeStore((s) => s.toggleFavoriteBrand);
 
   const editing = useMemo(() => items.find((it) => it.id === editId), [items, editId]);
+  const fromTryout = useMemo(
+    () => tryoutItems.find((t) => t.id === fromTryoutId),
+    [tryoutItems, fromTryoutId]
+  );
+  const currentWardrobe = wardrobes.find((w) => w.id === currentWardrobeId);
+  // v0.5：页面整体风格主题（底色/卡片/文本/圆角随衣橱主题变化）
+  const themeStyle = themeVarsOf(currentWardrobe) as unknown as React.CSSProperties;
 
   const [photos, setPhotos] = useState<string[]>([]);
   const [type, setType] = useState('');
@@ -46,17 +66,24 @@ const AddItemPage: React.FC = () => {
   const [size, setSize] = useState('');
   const [brand, setBrand] = useState('');
   const [occasions, setOccasions] = useState<string[]>([]);
+  const [purchaseDate, setPurchaseDate] = useState('');
+  const [purchasePlace, setPurchasePlace] = useState('');
+  const [purchasePrice, setPurchasePrice] = useState('');
+  const [purchasePhoto, setPurchasePhoto] = useState('');
   const [remark, setRemark] = useState('');
   const [name, setName] = useState('');
 
-  // 品牌联想提示：输入时显示匹配的常用品牌；未输入时展示全部常用品牌
-  const brandSuggestions = useMemo(() => {
-    const kw = brand.trim();
-    if (!kw) return BRAND_PRESETS;
-    return BRAND_PRESETS.filter((b) => b.toLowerCase().includes(kw.toLowerCase()) && b !== kw);
-  }, [brand]);
+  // 已有衣物使用过的品牌（下拉前置）
+  const usedBrands = useMemo(
+    () => Array.from(new Set(items.map((it) => it.brand).filter((b) => b && b.trim()))),
+    [items]
+  );
+  const allBrands = useMemo(
+    () => Array.from(new Set([...BRAND_PRESETS, ...usedBrands])),
+    [usedBrands]
+  );
 
-  // 编辑模式：载入现有数据
+  // 初次进入：备选转正式预填 / 编辑载入 / 尺码按个人信息默认值
   useEffect(() => {
     if (editing) {
       setPhotos(editing.photos);
@@ -68,11 +95,29 @@ const AddItemPage: React.FC = () => {
       setSize(editing.size || '');
       setBrand(editing.brand || '');
       setOccasions(editing.occasions || []);
+      setPurchaseDate(editing.purchase?.date || '');
+      setPurchasePlace(editing.purchase?.place || '');
+      setPurchasePrice(editing.purchase?.price || '');
+      setPurchasePhoto(editing.purchase?.photo || '');
       setRemark(editing.remark);
       setName(editing.name);
       Taro.setNavigationBarTitle({ title: '编辑衣物' });
+    } else if (fromTryout) {
+      setPhotos(fromTryout.photos || []);
+      setType(fromTryout.type || '');
+      setColor(fromTryout.color || '');
+      setBrand(fromTryout.brand || '');
+      setSize(fromTryout.size || '');
+      setPurchasePrice(fromTryout.price || '');
+      setRemark(fromTryout.note || '');
+      console.info('[Add] 备选转正式预填, tryoutId =', fromTryout.id);
+    } else {
+      // v0.5 用户意见 10：尺码选填，根据性别与身高预填默认值（可修改）
+      const suggested = suggestSize(currentWardrobe?.gender, bodyProfile.height);
+      if (suggested) setSize(suggested);
     }
-  }, [editing]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const sampleIndex = useState({ n: 0 })[0];
 
@@ -125,11 +170,38 @@ const AddItemPage: React.FC = () => {
     Taro.showToast({ title: '已设为主图', icon: 'none' });
   };
 
+  // v0.5 用户意见 6：购入凭证照片（购买时可拍照）
+  const addPurchasePhoto = async (source: 'camera' | 'album') => {
+    try {
+      const res = await Taro.chooseImage({
+        count: 1,
+        sizeType: ['compressed'],
+        sourceType: [source === 'camera' ? 'camera' : 'album']
+      });
+      const path = (res.tempFilePaths || [])[0];
+      if (path) {
+        setPurchasePhoto(path);
+        console.info('[Add] 选择购入凭证照片成功');
+      }
+    } catch (e) {
+      console.warn('[Add] 选择购入凭证照片取消或失败', e);
+    }
+  };
+
   const customOf = (dimension: CustomDimension) =>
     customOptions.filter((o) => o.dimension === dimension).map((o) => o.value);
 
   const usedOf = (dimension: CustomDimension) =>
     customOf(dimension).filter((v) => isCustomOptionUsed(dimension, v));
+
+  // v0.5：服装类型按性别过滤（男性不含裙装/连衣裙），已选值兜底保留
+  const typeOptions = useMemo(() => {
+    const list = getTypePresetsByGender(currentWardrobe?.gender);
+    if (type && !list.includes(type)) {
+      return [...list, type];
+    }
+    return list;
+  }, [currentWardrobe?.gender, type, customOptions]);
 
   const validate = (): string | null => {
     if (photos.length === 0) return '请至少添加 1 张照片';
@@ -137,7 +209,7 @@ const AddItemPage: React.FC = () => {
     if (!layer) return '请选择内外穿';
     if (!color) return '请选择颜色';
     if (!material) return '请选择材质';
-    if (seasons.length === 0) return '请选择季节（至少 1 项）';
+    if (seasons.length === 0) return '请选择穿着季节（至少 1 项）';
     return null;
   };
 
@@ -147,6 +219,15 @@ const AddItemPage: React.FC = () => {
       Taro.showToast({ title: err, icon: 'none' });
       return;
     }
+    const purchase: PurchaseInfo | undefined =
+      purchaseDate || purchasePlace.trim() || purchasePrice.trim() || purchasePhoto
+        ? {
+            ...(purchaseDate ? { date: purchaseDate } : {}),
+            ...(purchasePlace.trim() ? { place: purchasePlace.trim() } : {}),
+            ...(purchasePrice.trim() ? { price: purchasePrice.trim() } : {}),
+            ...(purchasePhoto ? { photo: purchasePhoto } : {})
+          }
+        : undefined;
     const payload: NewItemInput = {
       photos,
       type,
@@ -157,6 +238,7 @@ const AddItemPage: React.FC = () => {
       size,
       brand,
       occasions,
+      ...(purchase ? { purchase } : {}),
       remark: remark.trim()
     };
     if (editing) {
@@ -168,13 +250,18 @@ const AddItemPage: React.FC = () => {
     } else {
       const created = addItem(payload);
       console.info('[Add] 保存衣物, name =', created.name);
+      // 备选转正式：保存成功后移除备选条目
+      if (fromTryoutId) {
+        deleteTryout(fromTryoutId);
+        console.info('[Add] 备选已转正式, tryoutId =', fromTryoutId);
+      }
     }
     Taro.showToast({ title: '已保存', icon: 'success' });
     setTimeout(() => Taro.navigateBack(), 600);
   };
 
   return (
-    <View className={styles.page}>
+    <View className={styles.page} style={themeStyle}>
       <View className={styles.photoSection}>
         <Text className={styles.sectionTitle}>
           照片组（{photos.length}/{MAX_PHOTOS}）
@@ -236,7 +323,7 @@ const AddItemPage: React.FC = () => {
           label='服装类型'
           required
           mode='picker'
-          options={TYPE_PRESETS}
+          options={typeOptions}
           customValues={customOf('type')}
           usedValues={usedOf('type')}
           allowCustom
@@ -288,7 +375,7 @@ const AddItemPage: React.FC = () => {
         />
 
         <OptionSelector
-          label='季节'
+          label='穿着季节'
           required
           mode='multi'
           options={['春', '夏', '秋', '冬']}
@@ -297,41 +384,128 @@ const AddItemPage: React.FC = () => {
         />
 
         <OptionSelector
-          label='尺码'
+          label='尺码（选填）'
           mode='picker'
           options={SIZE_OPTIONS}
+          customValues={customOf('size')}
+          usedValues={usedOf('size')}
+          allowCustom
+          customMaxLength={6}
           value={size}
-          placeholder='请选择尺码（选填）'
+          placeholder='请选择尺码（选填，已按个人信息预填）'
           onChange={(v) => setSize(v as string)}
+          onAddCustom={(v) => addCustomOption('size', v)}
+          onRemoveCustom={(v) => removeCustomOption('size', v)}
         />
 
-        <View className={styles.section}>
-          <Text className={styles.brandLabel}>品牌（选填）</Text>
-          <Input
-            className={styles.brandInput}
-            value={brand}
-            maxlength={BRAND_MAX_LEN}
-            placeholder='输入品牌或点选下方常用品牌，≤20 字'
-            onInput={(e) => setBrand(e.detail.value)}
-          />
-          {brandSuggestions.length > 0 && (
-            <View className={styles.brandSuggest}>
-              {brandSuggestions.map((b) => (
-                <View key={b} className={styles.brandChip} onClick={() => setBrand(b)}>
-                  <Text className={styles.brandChipText}>{b}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
+        <BrandPicker
+          value={brand}
+          onChange={setBrand}
+          allBrands={allBrands}
+          usedBrands={usedBrands}
+          favoriteBrands={favoriteBrands}
+          onToggleFavorite={toggleFavoriteBrand}
+        />
 
         <OptionSelector
           label='适用场合'
           mode='multi'
           options={OCCASION_OPTIONS}
+          customValues={customOf('occasion')}
+          usedValues={usedOf('occasion')}
+          allowCustom
+          customMaxLength={10}
           value={occasions}
           onChange={(v) => setOccasions(v as string[])}
+          onAddCustom={(v) => addCustomOption('occasion', v)}
+          onRemoveCustom={(v) => removeCustomOption('occasion', v)}
         />
+
+        {/* v0.5 用户意见 6：购入信息（时间/地点/价格/凭证照片） */}
+        <View className={styles.purchaseCard}>
+          <Text className={styles.purchaseTitle}>购入信息（选填）</Text>
+
+          <View className={styles.purchaseRow}>
+            <Text className={styles.purchaseLabel}>购入时间</Text>
+            <Picker
+              mode='date'
+              value={purchaseDate || undefined}
+              onChange={(e) => setPurchaseDate(e.detail.value)}
+            >
+              <View className={styles.purchasePickerRow}>
+                {purchaseDate ? (
+                  <Text className={styles.purchaseValue}>{purchaseDate}</Text>
+                ) : (
+                  <Text className={styles.purchasePlaceholder}>选择日期</Text>
+                )}
+                <Text className={styles.purchaseArrow}>▾</Text>
+              </View>
+            </Picker>
+          </View>
+
+          <View className={styles.purchaseRow}>
+            <Text className={styles.purchaseLabel}>购入地点</Text>
+            <Input
+              className={styles.purchaseInput}
+              value={purchasePlace}
+              maxlength={30}
+              placeholder='如：淘宝 / 线下商场'
+              onInput={(e) => setPurchasePlace(e.detail.value)}
+            />
+          </View>
+          <View className={styles.placeChips}>
+            {PURCHASE_PLACE_PRESETS.map((p) => (
+              <View
+                key={p}
+                className={`${styles.placeChip} ${purchasePlace === p ? styles.placeChipActive : ''}`}
+                onClick={() => setPurchasePlace(purchasePlace === p ? '' : p)}
+              >
+                <Text className={styles.placeChipText}>{p}</Text>
+              </View>
+            ))}
+          </View>
+
+          <View className={styles.purchaseRow}>
+            <Text className={styles.purchaseLabel}>价格</Text>
+            <Input
+              className={styles.purchaseInput}
+              type='digit'
+              value={purchasePrice}
+              maxlength={12}
+              placeholder='金额（元）'
+              onInput={(e) => setPurchasePrice(e.detail.value)}
+            />
+          </View>
+
+          <View className={styles.purchaseRow}>
+            <Text className={styles.purchaseLabel}>凭证照片</Text>
+            {purchasePhoto ? (
+              <View className={styles.receiptBox}>
+                <Image
+                  className={styles.receiptImage}
+                  src={purchasePhoto}
+                  mode='aspectFill'
+                  onClick={() =>
+                    Taro.previewImage({ urls: [purchasePhoto] }).catch(() => undefined)
+                  }
+                />
+                <View className={styles.receiptDelete} onClick={() => setPurchasePhoto('')}>
+                  <Text className={styles.receiptDeleteText}>×</Text>
+                </View>
+              </View>
+            ) : (
+              <View className={styles.purchaseActions}>
+                <View className={styles.purchaseActionBtn} onClick={() => addPurchasePhoto('camera')}>
+                  <Text className={styles.purchaseActionText}>拍照</Text>
+                </View>
+                <View className={styles.purchaseActionBtn} onClick={() => addPurchasePhoto('album')}>
+                  <Text className={styles.purchaseActionText}>相册</Text>
+                </View>
+              </View>
+            )}
+          </View>
+          <Text className={styles.remarkCount}>购买时可现场拍照留存小票/凭证</Text>
+        </View>
 
         <View className={styles.sectionTitle}>
           <Text className={styles.sectionTitle}>备注（选填）</Text>

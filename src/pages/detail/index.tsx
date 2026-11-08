@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, Swiper, SwiperItem, Image } from '@tarojs/components';
 import Taro, { useRouter, useDidShow } from '@tarojs/taro';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
-import { COLOR_HEX_MAP } from '@/data/presets';
+import { COLOR_HEX_MAP, themeVarsOf } from '@/data/presets';
 import { formatDateTime } from '@/utils/format';
 import styles from './index.module.scss';
 
@@ -23,9 +23,15 @@ const DetailItemPage: React.FC = () => {
 
   const item = useMemo(() => items.find((it) => it.id === id), [items, id]);
 
+  // v0.5：页面整体风格主题
+  const wardrobes = useWardrobeStore((s) => s.wardrobes);
+  const currentWardrobeId = useWardrobeStore((s) => s.currentWardrobeId);
+  const currentWardrobe = wardrobes.find((w) => w.id === currentWardrobeId);
+  const themeStyle = themeVarsOf(currentWardrobe) as unknown as React.CSSProperties;
+
   if (!item) {
     return (
-      <View className={styles.page}>
+      <View className={styles.page} style={themeStyle}>
         <View className={styles.infoCard}>
           <Text className={styles.emptyRemark}>该衣物不存在或已删除</Text>
         </View>
@@ -62,17 +68,39 @@ const DetailItemPage: React.FC = () => {
       )
     },
     { label: '材质', value: item.material },
-    { label: '季节', value: item.seasons.join('、') },
+    { label: '穿着季节', value: item.seasons.join('、') },
     ...(item.size ? [{ label: '尺码', value: item.size }] : []),
     ...(item.brand ? [{ label: '品牌', value: item.brand }] : []),
     ...(item.occasions && item.occasions.length > 0
       ? [{ label: '适用场合', value: item.occasions.join('、') }]
       : []),
+    // v0.5 用户意见 6：购入信息展示
+    ...(item.purchase?.date ? [{ label: '购入时间', value: item.purchase.date }] : []),
+    ...(item.purchase?.place ? [{ label: '购入地点', value: item.purchase.place }] : []),
+    ...(item.purchase?.price ? [{ label: '价格', value: `¥${item.purchase.price}` }] : []),
+    ...(item.purchase?.photo
+      ? [
+          {
+            label: '凭证照片',
+            value: (
+              <Image
+                key='receipt'
+                className={styles.receiptImage}
+                src={item.purchase.photo}
+                mode='aspectFill'
+                onClick={() =>
+                  Taro.previewImage({ urls: [item.purchase!.photo!] }).catch(() => undefined)
+                }
+              />
+            )
+          }
+        ]
+      : []),
     { label: '录入时间', value: formatDateTime(item.createdAt) }
   ];
 
   return (
-    <View className={styles.page}>
+    <View className={styles.page} style={themeStyle}>
       <View className={styles.swiperWrap}>
         <Swiper className={styles.swiper} indicatorDots circular>
           {item.photos.map((p, i) => (

@@ -9,7 +9,7 @@ import EmptyState from '@/components/EmptyState';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
 import { getWeather } from '@/services/weather';
 import { CITY_OPTIONS, DEFAULT_CITY } from '@/data/mockWeather';
-import { COLOR_PRESETS, TYPE_PRESETS, MATERIAL_PRESETS } from '@/data/presets';
+import { COLOR_PRESETS, TYPE_PRESETS, MATERIAL_PRESETS, themeVarsOf } from '@/data/presets';
 import { ClothingItem, WeatherInfo } from '@/types';
 import styles from './index.module.scss';
 
@@ -94,16 +94,17 @@ const WardrobePage: React.FC = () => {
     [wardrobes, items]
   );
 
-  // 当前衣橱主题色（用户意见 4：切换衣橱联动界面主题色）
+  // 当前衣橱风格主题（v0.5 用户意见 2：整体风格联动，含底色/卡片/文本/圆角）
   const currentWardrobe = useMemo(
     () => wardrobes.find((w) => w.id === currentWardrobeId),
     [wardrobes, currentWardrobeId]
   );
-  const themeStyle = { '--w-color': currentWardrobe?.color || '#B07D50' } as React.CSSProperties;
+  const themeStyle = themeVarsOf(currentWardrobe) as unknown as React.CSSProperties;
 
   const goAdd = () => Taro.navigateTo({ url: '/pages/add/index' });
   const goDetail = (id: string) => Taro.navigateTo({ url: `/pages/detail/index?id=${id}` });
-  const goManage = () => Taro.switchTab({ url: '/pages/wardrobes/index' });
+  // v0.5：衣橱管理页已从底部标签改为普通页面，经切换器「管理」进入
+  const goManage = () => Taro.navigateTo({ url: '/pages/wardrobes/index' });
 
   const isFiltering = filters.type || filters.color || filters.material || filters.seasons.length > 0 || filters.onlyFavorite;
 

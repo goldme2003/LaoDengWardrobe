@@ -2,6 +2,8 @@ export default defineAppConfig({
   pages: [
     'pages/wardrobe/index',
     'pages/wardrobes/index',
+    'pages/tryout/index',
+    'pages/tryout-edit/index',
     'pages/diary/index',
     'pages/mine/index',
     'pages/add/index',
@@ -27,8 +29,8 @@ export default defineAppConfig({
         selectedIconPath: 'assets/tabbar/wardrobe-selected.svg'
       },
       {
-        pagePath: 'pages/wardrobes/index',
-        text: '衣橱',
+        pagePath: 'pages/tryout/index',
+        text: '备选',
         iconPath: 'assets/tabbar/closet.svg',
         selectedIconPath: 'assets/tabbar/closet-selected.svg'
       },
