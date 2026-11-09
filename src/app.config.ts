@@ -2,6 +2,7 @@ export default defineAppConfig({
   pages: [
     'pages/wardrobe/index',
     'pages/wardrobes/index',
+    'pages/wardrobe-new/index',
     'pages/tryout/index',
     'pages/tryout-edit/index',
     'pages/diary/index',
@@ -25,26 +26,26 @@ export default defineAppConfig({
       {
         pagePath: 'pages/wardrobe/index',
         text: '衣柜',
-        iconPath: 'assets/tabbar/wardrobe.svg',
-        selectedIconPath: 'assets/tabbar/wardrobe-selected.svg'
+        iconPath: 'assets/tabbar/wardrobe.png',
+        selectedIconPath: 'assets/tabbar/wardrobe-selected.png'
       },
       {
         pagePath: 'pages/tryout/index',
         text: '备选',
-        iconPath: 'assets/tabbar/closet.svg',
-        selectedIconPath: 'assets/tabbar/closet-selected.svg'
+        iconPath: 'assets/tabbar/closet.png',
+        selectedIconPath: 'assets/tabbar/closet-selected.png'
       },
       {
         pagePath: 'pages/diary/index',
         text: '日记',
-        iconPath: 'assets/tabbar/diary.svg',
-        selectedIconPath: 'assets/tabbar/diary-selected.svg'
+        iconPath: 'assets/tabbar/diary.png',
+        selectedIconPath: 'assets/tabbar/diary-selected.png'
       },
       {
         pagePath: 'pages/mine/index',
         text: '我的',
-        iconPath: 'assets/tabbar/mine.svg',
-        selectedIconPath: 'assets/tabbar/mine-selected.svg'
+        iconPath: 'assets/tabbar/mine.png',
+        selectedIconPath: 'assets/tabbar/mine-selected.png'
       }
     ]
   }

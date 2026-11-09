@@ -7,6 +7,7 @@ import {
   ClothingItem,
   BodyProfile,
   TryoutItem,
+  DiaryEntry,
   CustomDimension,
   CustomOption,
   NewItemInput
@@ -35,12 +36,18 @@ interface LdwData {
   counters: Record<string, number>;
   /** 天气城市（空 = 未选择） */
   city: string;
-  /** 个人身体数据（v0.5，缝纫基本信息） */
-  bodyProfile: BodyProfile;
+  /** 个人身体数据（v0.6：按衣橱归属，key = 衣橱id；切换衣橱联动） */
+  bodyProfiles: Record<string, BodyProfile>;
   /** 喜爱品牌（v0.5，品牌下拉中前置展示） */
   favoriteBrands: string[];
   /** 备选条目（v0.5，准备购入） */
   tryoutItems: TryoutItem[];
+  /** 着装日记（v0.6） */
+  diaryEntries: DiaryEntry[];
+  /** 明日穿搭勾选（v0.6：key = 衣橱id，value = 衣物id 数组） */
+  tomorrowOutfits: Record<string, string[]>;
+  /** 首页待应用筛选预设（v0.6：「我的」页点击喜爱衣物跳转后由首页消费） */
+  wardrobeFilterPreset: 'favorite' | null;
 }
 
 const initialData = (): LdwData => {
@@ -60,9 +67,12 @@ const initialData = (): LdwData => {
     customOptions: [],
     counters: {},
     city: '',
-    bodyProfile: {},
+    bodyProfiles: {},
     favoriteBrands: [],
-    tryoutItems: []
+    tryoutItems: [],
+    diaryEntries: [],
+    tomorrowOutfits: {},
+    wardrobeFilterPreset: null
   };
 };
 
@@ -83,9 +93,19 @@ const loadData = (): LdwData => {
     const stored = Taro.getStorageSync(STORAGE_KEY) as LdwData | '';
     if (stored && stored.wardrobes && stored.wardrobes.length > 0) {
       stored.wardrobes = stored.wardrobes.map(migrateWardrobe);
-      stored.bodyProfile = stored.bodyProfile || {};
+      const raw = stored as LdwData & { bodyProfile?: BodyProfile };
+      // v0.6 迁移：旧版全局 bodyProfile 归属到当前衣橱
+      let bodyProfiles = raw.bodyProfiles || {};
+      if (raw.bodyProfile && Object.keys(raw.bodyProfile).length > 0 && !bodyProfiles[stored.currentWardrobeId]) {
+        bodyProfiles = { ...bodyProfiles, [stored.currentWardrobeId]: raw.bodyProfile };
+        console.info('[Store] 旧版身体数据已迁移到当前衣橱');
+      }
+      stored.bodyProfiles = bodyProfiles;
       stored.favoriteBrands = stored.favoriteBrands || [];
       stored.tryoutItems = stored.tryoutItems || [];
+      stored.diaryEntries = stored.diaryEntries || [];
+      stored.tomorrowOutfits = stored.tomorrowOutfits || {};
+      stored.wardrobeFilterPreset = null;
       console.info('[Store] 读取本地数据成功, 衣橱数 =', stored.wardrobes.length, '衣物数 =', stored.items.length);
       return stored;
     }
@@ -143,7 +163,9 @@ export interface WardrobeStore extends LdwData {
   removeCustomOption: (dimension: CustomDimension, value: string) => void;
   /** 自定义选项是否已被衣物使用 */
   isCustomOptionUsed: (dimension: CustomDimension, value: string) => boolean;
-  /** 更新个人身体数据（v0.5） */
+  /** 当前衣橱主人的个人身体数据（v0.6：随衣橱切换联动） */
+  currentBodyProfile: () => BodyProfile;
+  /** 更新当前衣橱主人的个人身体数据（v0.6） */
   updateBodyProfile: (patch: Partial<BodyProfile>) => void;
   /** 切换喜爱品牌（v0.5） */
   toggleFavoriteBrand: (brand: string) => void;
@@ -153,6 +175,16 @@ export interface WardrobeStore extends LdwData {
   updateTryout: (id: string, patch: Partial<NewTryoutInput>) => void;
   /** 删除备选条目（转正式或手动删除） */
   deleteTryout: (id: string) => void;
+  /** 新增着装日记（v0.6：date 为 YYYY-MM-DD） */
+  addDiaryEntry: (date: string, photos: string[]) => DiaryEntry;
+  /** 删除着装日记条目 */
+  deleteDiaryEntry: (id: string) => void;
+  /** 切换明日穿搭勾选（v0.6：作用于当前衣橱） */
+  toggleTomorrowItem: (itemId: string) => void;
+  /** 设置首页待应用筛选预设（v0.6 跳转用） */
+  setWardrobeFilterPreset: (preset: 'favorite') => void;
+  /** 消费首页筛选预设（首页应用后清空） */
+  consumeWardrobeFilterPreset: () => void;
   /** 设置天气城市 */
   setCity: (city: string) => void;
 }
@@ -168,9 +200,12 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       customOptions: s.customOptions,
       counters: s.counters,
       city: s.city,
-      bodyProfile: s.bodyProfile,
+      bodyProfiles: s.bodyProfiles,
       favoriteBrands: s.favoriteBrands,
-      tryoutItems: s.tryoutItems
+      tryoutItems: s.tryoutItems,
+      diaryEntries: s.diaryEntries,
+      tomorrowOutfits: s.tomorrowOutfits,
+      wardrobeFilterPreset: null
     });
   };
 
@@ -246,15 +281,20 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       const wardrobes = s.wardrobes.filter((w) => w.id !== id);
       const items = s.items.filter((it) => it.wardrobeId !== id);
       const tryoutItems = s.tryoutItems.filter((t) => t.wardrobeId !== id);
+      const diaryEntries = s.diaryEntries.filter((d) => d.wardrobeId !== id);
       const counters = { ...s.counters };
       Object.keys(counters).forEach((key) => {
         if (key.startsWith(`${id}__`)) {
           delete counters[key];
         }
       });
+      const bodyProfiles = { ...s.bodyProfiles };
+      delete bodyProfiles[id];
+      const tomorrowOutfits = { ...s.tomorrowOutfits };
+      delete tomorrowOutfits[id];
       const currentWardrobeId = s.currentWardrobeId === id ? wardrobes[0].id : s.currentWardrobeId;
       console.info('[Store] 删除衣橱, id =', id, '剩余衣橱 =', wardrobes.length);
-      commit({ wardrobes, items, tryoutItems, counters, currentWardrobeId });
+      commit({ wardrobes, items, tryoutItems, diaryEntries, counters, bodyProfiles, tomorrowOutfits, currentWardrobeId });
     },
 
     addItem: (input) => {
@@ -384,9 +424,12 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       return get().items.some((it) => (it.occasions || []).includes(value));
     },
 
+    currentBodyProfile: () => get().bodyProfiles[get().currentWardrobeId] || {},
+
     updateBodyProfile: (patch) => {
       const s = get();
-      const next: BodyProfile = { ...s.bodyProfile };
+      const wid = s.currentWardrobeId;
+      const next: BodyProfile = { ...(s.bodyProfiles[wid] || {}) };
       Object.keys(patch).forEach((k) => {
         const key = k as keyof BodyProfile;
         const v = patch[key];
@@ -397,7 +440,7 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
           next[key] = v;
         }
       });
-      commit({ bodyProfile: next });
+      commit({ bodyProfiles: { ...s.bodyProfiles, [wid]: next } });
     },
 
     toggleFavoriteBrand: (brand) => {
@@ -448,6 +491,43 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
     deleteTryout: (id) => {
       console.info('[Store] 删除备选, id =', id);
       commit({ tryoutItems: get().tryoutItems.filter((t) => t.id !== id) });
+    },
+
+    addDiaryEntry: (date, photos) => {
+      const s = get();
+      const entry: DiaryEntry = {
+        id: genId(),
+        wardrobeId: s.currentWardrobeId,
+        date,
+        photos,
+        createdAt: Date.now()
+      };
+      console.info('[Store] 新增着装日记, date =', date, '照片数 =', photos.length);
+      commit({ diaryEntries: [entry, ...s.diaryEntries] });
+      return entry;
+    },
+
+    deleteDiaryEntry: (id) => {
+      console.info('[Store] 删除着装日记, id =', id);
+      commit({ diaryEntries: get().diaryEntries.filter((d) => d.id !== id) });
+    },
+
+    toggleTomorrowItem: (itemId) => {
+      const s = get();
+      const wid = s.currentWardrobeId;
+      const list = s.tomorrowOutfits[wid] || [];
+      const next = list.includes(itemId) ? list.filter((v) => v !== itemId) : [...list, itemId];
+      commit({ tomorrowOutfits: { ...s.tomorrowOutfits, [wid]: next } });
+    },
+
+    setWardrobeFilterPreset: (preset) => {
+      commit({ wardrobeFilterPreset: preset });
+    },
+
+    consumeWardrobeFilterPreset: () => {
+      if (get().wardrobeFilterPreset !== null) {
+        commit({ wardrobeFilterPreset: null });
+      }
     },
 
     setCity: (city) => {
