@@ -40,3 +40,167 @@
   color: $color-text-white;
   line-height: 1;
 }
+
+// v0.6：明日穿搭入口条
+.planEntry {
+  display: flex;
+  align-items: center;
+  background: $color-bg-card;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-card;
+  padding: $spacing-md $spacing-lg;
+  margin-bottom: $spacing-md;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.planEntryIcon {
+  font-size: 44rpx;
+  margin-right: $spacing-md;
+}
+
+.planEntryInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.planEntryTitle {
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+  color: var(--w-text, $color-text-primary);
+  margin-bottom: 4rpx;
+}
+
+.planEntryDesc {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+.planEntryArrow {
+  font-size: $font-size-xl;
+  color: $color-text-tertiary;
+  margin-left: $spacing-sm;
+}
+
+// v0.6：明日穿搭勾选模式
+.planHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: $color-bg-card;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-card;
+  padding: $spacing-md $spacing-lg;
+  margin-bottom: $spacing-md;
+}
+
+.planTitle {
+  font-size: $font-size-md;
+  font-weight: $font-weight-semibold;
+  color: var(--w-text, $color-text-primary);
+}
+
+.planCount {
+  font-size: $font-size-sm;
+  color: var(--w-color, $color-primary);
+}
+
+.planGroup {
+  background: $color-bg-card;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-card;
+  padding: $spacing-lg;
+  margin-bottom: $spacing-md;
+}
+
+.planGroupTitle {
+  display: block;
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+  color: var(--w-text, $color-text-primary);
+  margin-bottom: $spacing-md;
+}
+
+.planGrid {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.planItem {
+  position: relative;
+  width: 200rpx;
+  margin-right: $spacing-sm;
+  margin-bottom: $spacing-sm;
+  border-radius: var(--w-radius, $radius-md);
+  overflow: hidden;
+  background: $color-bg-page;
+  border: 2rpx solid transparent;
+  box-sizing: border-box;
+
+  &:nth-child(3n) {
+    margin-right: 0;
+  }
+}
+
+.planItemSelected {
+  border-color: var(--w-color, $color-primary);
+}
+
+.planPhoto {
+  width: 100%;
+  height: 200rpx;
+  display: block;
+}
+
+.planName {
+  display: block;
+  font-size: $font-size-xs;
+  color: var(--w-text2, $color-text-secondary);
+  padding: 6rpx $spacing-sm;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.planCheck {
+  position: absolute;
+  top: 8rpx;
+  right: 8rpx;
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: $radius-round;
+  background: var(--w-color, $color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.planCheckText {
+  font-size: $font-size-sm;
+  color: $color-text-white;
+  line-height: 1;
+}
+
+.planDone {
+  height: $button-height-md;
+  border-radius: $radius-button;
+  background: var(--w-color, $color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: $spacing-md 0 $spacing-lg;
+
+  &:active {
+    opacity: 0.9;
+    transform: scale(0.98);
+  }
+}
+
+.planDoneText {
+  font-size: $font-size-md;
+  color: $color-text-white;
+  font-weight: $font-weight-medium;
+}

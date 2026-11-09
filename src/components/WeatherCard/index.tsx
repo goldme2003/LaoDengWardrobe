@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, Text } from '@tarojs/components';
-import classnames from 'classnames';
+import { View, Text, Picker } from '@tarojs/components';
 import { weatherIcon } from '@/data/presets';
 import { WeatherInfo } from '@/types';
 import styles from './index.module.scss';
@@ -47,18 +46,18 @@ const WeatherCard: React.FC<Props> = ({
                 {weather.today.low}° ~ {weather.today.high}°
               </Text>
             </View>
-            <View className={styles.cityPicker}>
-              <Text className={styles.cityPickerLabel}>切换城市</Text>
-              {cityOptions.map((c) => (
-                <Text
-                  key={c}
-                  className={classnames(styles.cityOption, c === activeCity && styles.cityOptionActive)}
-                  onClick={() => onSelectCity(c)}
-                >
-                  {c}
-                </Text>
-              ))}
-            </View>
+            {/* v0.6：城市仅在拨盘选择器中切换一次，不再平铺常见城市 */}
+            <Picker
+              mode='selector'
+              range={cityOptions}
+              value={Math.max(0, cityOptions.indexOf(activeCity))}
+              onChange={(e) => onSelectCity(cityOptions[Number(e.detail.value)])}
+            >
+              <View className={styles.citySwitch}>
+                <Text className={styles.citySwitchText}>切换城市</Text>
+                <Text className={styles.citySwitchArrow}>▾</Text>
+              </View>
+            </Picker>
           </View>
           <View className={styles.days}>
             {weather.days.map((d) => (

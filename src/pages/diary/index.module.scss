@@ -1,27 +1,191 @@
 @use '@/styles/variables.scss' as *;
 
 .page {
-  padding: $spacing-xl * 2 $page-padding;
+  padding: $spacing-lg $page-padding;
+  background: var(--w-bg, $color-bg-page);
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.card {
+  background: var(--w-card, $color-bg-card);
+  border-radius: var(--w-radius, $radius-lg);
+  padding: $spacing-lg;
+  margin-bottom: $spacing-md;
+  box-shadow: $shadow-card;
+}
+
+// 月历
+.calHeader {
   display: flex;
-  flex-direction: column;
   align-items: center;
-}
-
-.icon {
-  font-size: 96rpx;
-  margin-bottom: $spacing-lg;
-}
-
-.title {
-  font-size: $font-size-xl;
-  font-weight: $font-weight-semibold;
-  color: $color-text-primary;
+  justify-content: space-between;
   margin-bottom: $spacing-md;
 }
 
-.desc {
+.calNav {
+  font-size: 44rpx;
+  color: var(--w-color, $color-primary);
+  padding: 0 $spacing-md;
+  line-height: 1;
+}
+
+.calTitle {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: var(--w-text, $color-text-primary);
+}
+
+.calWeekRow {
+  display: flex;
+  margin-bottom: $spacing-xs;
+}
+
+.calWeek {
+  flex: 1;
+  text-align: center;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+.calGrid {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.calCell {
+  width: calc(100% / 7);
+  height: 80rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: $radius-round;
+  box-sizing: border-box;
+}
+
+.calCellToday {
+  border: 1rpx solid var(--w-color, $color-primary);
+}
+
+.calCellActive {
+  background: var(--w-color, $color-primary);
+
+  .calDay {
+    color: $color-text-white;
+    font-weight: $font-weight-semibold;
+  }
+}
+
+.calDay {
+  font-size: $font-size-md;
+  color: var(--w-text, $color-text-primary);
+  line-height: 1.3;
+}
+
+.calDot {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: $radius-round;
+  background: var(--w-color, $color-primary);
+  margin-top: 4rpx;
+}
+
+.calCellActive .calDot {
+  background: $color-text-white;
+}
+
+// 当日着装记录
+.dayHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: $spacing-md;
+}
+
+.dayTitle {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: var(--w-text, $color-text-primary);
+}
+
+.dayCount {
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+}
+
+.empty {
+  display: block;
   font-size: $font-size-md;
   color: $color-text-tertiary;
   text-align: center;
-  line-height: $line-height-loose;
+  padding: $spacing-xl 0;
+}
+
+.entry {
+  margin-bottom: $spacing-md;
+  padding-bottom: $spacing-md;
+  border-bottom: 1rpx solid $color-divider;
+}
+
+.photoGrid {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.photo {
+  width: 210rpx;
+  height: 210rpx;
+  border-radius: var(--w-radius, $radius-md);
+  margin-right: $spacing-sm;
+  margin-bottom: $spacing-sm;
+  background: $color-bg-page;
+}
+
+.entryFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: $spacing-xs;
+}
+
+.entryTime {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+.entryDelete {
+  font-size: $font-size-sm;
+  color: $color-error;
+  padding: 4rpx 12rpx;
+}
+
+.actions {
+  display: flex;
+  margin-top: $spacing-md;
+}
+
+.actionBtn {
+  flex: 1;
+  height: 72rpx;
+  border-radius: $radius-button;
+  background: $color-bg-page;
+  border: 1rpx solid $color-border;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: $spacing-sm;
+
+  &:last-child {
+    margin-right: 0;
+  }
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.actionBtnText {
+  font-size: $font-size-sm;
+  color: var(--w-text, $color-text-primary);
 }

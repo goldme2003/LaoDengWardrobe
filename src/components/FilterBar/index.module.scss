@@ -43,6 +43,11 @@
   color: $color-text-tertiary;
 }
 
+// v0.6：筛选面板定长，超出部分纵向滑动
+.bodyScroll {
+  max-height: 560rpx;
+}
+
 .body {
   padding: 0 $spacing-lg $spacing-md;
 }

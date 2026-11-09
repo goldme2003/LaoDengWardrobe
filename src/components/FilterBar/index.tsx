@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text } from '@tarojs/components';
+import { View, Text, ScrollView } from '@tarojs/components';
 import classnames from 'classnames';
 import { SEASON_OPTIONS } from '@/data/presets';
 import styles from './index.module.scss';
@@ -95,10 +95,12 @@ const FilterBar: React.FC<Props> = ({
       </View>
 
       {open && (
-        <View className={styles.body}>
-          {renderRow('类型', typeOptions, 'type')}
-          {renderRow('颜色', colorOptions, 'color', true)}
-          {renderRow('材质', materialOptions, 'material')}
+        // v0.6：筛选面板定长，超出部分纵向滑动
+        <ScrollView scrollY className={styles.bodyScroll}>
+          <View className={styles.body}>
+            {renderRow('类型', typeOptions, 'type')}
+            {renderRow('颜色', colorOptions, 'color', true)}
+            {renderRow('材质', materialOptions, 'material')}
 
           <View className={styles.row}>
             <Text className={styles.rowLabel}>季节</Text>
@@ -142,7 +144,8 @@ const FilterBar: React.FC<Props> = ({
               </Text>
             </View>
           </View>
-        </View>
+          </View>
+        </ScrollView>
       )}
     </View>
   );

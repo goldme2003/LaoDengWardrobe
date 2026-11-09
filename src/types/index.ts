@@ -124,6 +124,17 @@ export interface CustomOption {
   value: string;
 }
 
+/** 着装日记条目（v0.6：按日期记录当天着装照片） */
+export interface DiaryEntry {
+  id: string;
+  wardrobeId: string;
+  /** 日期 YYYY-MM-DD */
+  date: string;
+  /** 当天着装照片 1-9 张 */
+  photos: string[];
+  createdAt: number;
+}
+
 /** 天气单日信息 */
 export interface WeatherDay {
   date: string;

@@ -62,34 +62,24 @@
   color: $color-text-secondary;
 }
 
-.cityPicker {
+// v0.6：切换城市按钮（拨盘选择器触发）
+.citySwitch {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  max-width: 360rpx;
-}
-
-.cityPickerLabel {
-  width: 100%;
-  text-align: right;
-  font-size: $font-size-xs;
-  color: $color-text-tertiary;
-  margin-bottom: $spacing-xs;
-}
-
-.cityOption {
-  font-size: $font-size-xs;
-  color: $color-text-secondary;
+  align-items: center;
   background: rgba(255, 255, 255, 0.7);
   border-radius: $radius-round;
-  padding: 4rpx 16rpx;
-  margin-left: $spacing-xs;
-  margin-bottom: $spacing-xs;
+  padding: 8rpx 20rpx;
 }
 
-.cityOptionActive {
-  color: $color-text-white;
-  background: $color-primary;
+.citySwitchText {
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+}
+
+.citySwitchArrow {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  margin-left: 6rpx;
 }
 
 .days {

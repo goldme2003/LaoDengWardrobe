@@ -38,7 +38,8 @@ const AddItemPage: React.FC = () => {
   const customOptions = useWardrobeStore((s) => s.customOptions);
   const wardrobes = useWardrobeStore((s) => s.wardrobes);
   const currentWardrobeId = useWardrobeStore((s) => s.currentWardrobeId);
-  const bodyProfile = useWardrobeStore((s) => s.bodyProfile);
+  // v0.6：个人身体数据按衣橱归属（当前衣橱主人）
+  const bodyProfile = useWardrobeStore((s) => s.bodyProfiles[s.currentWardrobeId]);
   const favoriteBrands = useWardrobeStore((s) => s.favoriteBrands);
   const addItem = useWardrobeStore((s) => s.addItem);
   const updateItem = useWardrobeStore((s) => s.updateItem);
@@ -113,7 +114,7 @@ const AddItemPage: React.FC = () => {
       console.info('[Add] 备选转正式预填, tryoutId =', fromTryout.id);
     } else {
       // v0.5 用户意见 10：尺码选填，根据性别与身高预填默认值（可修改）
-      const suggested = suggestSize(currentWardrobe?.gender, bodyProfile.height);
+      const suggested = suggestSize(currentWardrobe?.gender, bodyProfile?.height);
       if (suggested) setSize(suggested);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

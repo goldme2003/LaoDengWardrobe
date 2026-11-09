@@ -2,6 +2,7 @@ export default defineAppConfig({
   pages: [
     'pages/wardrobe/index',
     'pages/wardrobes/index',
+    'pages/wardrobe-new/index',
     'pages/tryout/index',
     'pages/tryout-edit/index',
     'pages/diary/index',
