@@ -1,7 +1,8 @@
 @use '@/styles/variables.scss' as *;
 
+// v0.7.0：卡片底色/强调色随衣橱主题联动（--w-weather-bg / --w-weather-accent，由 themeVarsOf 注入，带原值兜底）
 .card {
-  background: linear-gradient(135deg, #fdf9f3 0%, #f6efe4 100%);
+  background: var(--w-weather-bg, linear-gradient(135deg, #fdf9f3 0%, #f6efe4 100%));
   border-radius: $radius-lg;
   padding: $spacing-lg;
   margin-bottom: $spacing-md;
@@ -53,7 +54,8 @@
 .todayCond {
   font-size: $font-size-xl;
   font-weight: $font-weight-semibold;
-  color: $color-text-primary;
+  // v0.7.0：强调色随主题（兜底为原主文本色，保证可读）
+  color: var(--w-weather-accent, $color-text-primary);
   margin-bottom: $spacing-xs;
 }
 
@@ -73,7 +75,8 @@
 
 .citySwitchText {
   font-size: $font-size-xs;
-  color: $color-text-secondary;
+  // v0.7.0：强调色随主题
+  color: var(--w-weather-accent, $color-text-secondary);
 }
 
 .citySwitchArrow {

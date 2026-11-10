@@ -1,0 +1,60 @@
+@use '@/styles/variables.scss' as *;
+
+.wrap {
+  margin-bottom: $spacing-md;
+}
+
+.group {
+  background: var(--w-card, $color-bg-card);
+  border-radius: var(--w-radius, $radius-lg);
+  box-shadow: $shadow-card;
+  padding: $spacing-md $spacing-lg $spacing-lg;
+  margin-bottom: $spacing-md;
+  overflow: hidden;
+}
+
+// 组头：类型名 + 件数 + 展开箭头
+.header {
+  display: flex;
+  align-items: center;
+  padding: $spacing-xs 0 $spacing-md;
+
+  &:active {
+    opacity: 0.8;
+  }
+}
+
+.name {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: var(--w-text, $color-text-primary);
+}
+
+.count {
+  font-size: $font-size-sm;
+  color: var(--w-text2, $color-text-secondary);
+  margin-left: $spacing-sm;
+}
+
+.arrow {
+  margin-left: auto;
+  font-size: $font-size-xl;
+  color: var(--w-text2, $color-text-secondary);
+  transition: transform $transition-fast;
+  // 收起状态：箭头朝右
+}
+
+.arrowOpen {
+  transform: rotate(90deg); // 展开状态：箭头朝下
+}
+
+// 组内 2 列网格（复用 ItemCard，与平铺网格样式一致）
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.gridItem {
+  width: 327rpx;
+}
