@@ -145,8 +145,8 @@ export interface WardrobeStore extends LdwData {
   addWardrobe: (name: string, themeId: ThemeId, gender: Gender, age: number | null) => boolean;
   /** 切换衣橱 */
   setCurrentWardrobe: (id: string) => void;
-  /** 更新衣橱设置（v0.5：性别/年龄/风格主题，可在「我的」页修改） */
-  updateWardrobe: (id: string, patch: Partial<Pick<Wardrobe, 'gender' | 'age' | 'themeId'>>) => void;
+  /** 更新衣橱设置（v0.5：性别/年龄/风格主题；v0.7.0：衣橱主人称呼 name 可修改，不影响衣物名称） */
+  updateWardrobe: (id: string, patch: Partial<Pick<Wardrobe, 'name' | 'gender' | 'age' | 'themeId'>>) => void;
   /** 删除衣橱（连带删除衣物），最后一个衣橱不可删除 */
   deleteWardrobe: (id: string) => void;
   /** 新增衣物，自动命名（PRD 6.2） */
@@ -261,6 +261,16 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
         return;
       }
       const next: Wardrobe = { ...target, ...patch };
+      // v0.7.0：称呼修改校验（非空、≤10 字），非法则忽略本次名称修改
+      if (patch.name !== undefined) {
+        const trimmed = patch.name.trim();
+        if (!trimmed || trimmed.length > WARDROBE_NAME_MAX_LEN) {
+          console.warn('[Store] 衣橱称呼非法, 已忽略本次名称修改');
+          next.name = target.name;
+        } else {
+          next.name = trimmed;
+        }
+      }
       // 主题变更时联动更新主题色
       if (patch.themeId && patch.themeId !== target.themeId) {
         next.color = getThemeById(patch.themeId).primary;
@@ -310,7 +320,8 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
         id: genId(),
         wardrobeId: wardrobe.id,
         photos: input.photos,
-        name: `${wardrobe.name}-${input.type}-${pad3(no)}`,
+        // v0.7.0 命名规则：「类型-编号」，不再包含衣橱主人称呼前缀（历史旧名称保持不变）
+        name: `${input.type}-${pad3(no)}`,
         renamed: false,
         type: input.type,
         layer: input.layer,
@@ -353,13 +364,13 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
         updated.renamed = true;
       }
 
-      // 修改服装类型且未手动改名时，名称联动更新
+      // 修改服装类型且未手动改名时，名称联动更新（v0.7.0 规则：「类型-编号」，无称呼前缀）
       if (patch.type && patch.type !== item.type && !updated.renamed) {
         const wardrobe = s.wardrobes.find((w) => w.id === item.wardrobeId);
         if (wardrobe) {
           const key = counterKey(wardrobe.id, patch.type);
           const no = (s.counters[key] || 0) + 1;
-          updated.name = `${wardrobe.name}-${patch.type}-${pad3(no)}`;
+          updated.name = `${patch.type}-${pad3(no)}`;
           commit({
             items: s.items.map((it) => (it.id === id ? updated : it)),
             counters: { ...s.counters, [key]: no }

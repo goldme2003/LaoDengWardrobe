@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, Picker, ScrollView } from '@tarojs/components';
+import { View, Text, Picker, ScrollView, Input } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
 import {
@@ -7,11 +7,11 @@ import {
   GENDER_OPTIONS,
   AGE_MIN,
   AGE_MAX,
-  THEME_SETS,
+  WARDROBE_NAME_MAX_LEN,
   BODY_FIELD_DEFS,
   themeVarsOf
 } from '@/data/presets';
-import { BodyProfile, Gender, ThemeId } from '@/types';
+import { BodyProfile, Gender } from '@/types';
 import styles from './index.module.scss';
 
 const UNFILLED = '未填写';
@@ -23,7 +23,11 @@ const buildNumberRange = (min: number, max: number): string[] => {
   return list;
 };
 
-/** 我的页（v0.6）：统计跳转、个人信息卡（弹层拨盘修改）、衣橱设置（风格主题）、关于 */
+/** v0.7.0：信息卡摘要字段（身高/胸围/腰围/臀围/肩宽，按此顺序取已填项拼接） */
+const SUMMARY_FIELD_KEYS: (keyof BodyProfile)[] = ['height', 'bust', 'waist', 'hip', 'shoulderWidth'];
+
+/** 我的页（v0.6）：统计跳转、个人信息卡（弹层拨盘修改）、关于
+ * v0.7.0：信息卡展示身体数据摘要；弹层新增「衣橱主人称呼」修改；风格主题设置移至衣橱管理页 */
 const MinePage: React.FC = () => {
   const wardrobes = useWardrobeStore((s) => s.wardrobes);
   const currentWardrobeId = useWardrobeStore((s) => s.currentWardrobeId);
@@ -41,6 +45,7 @@ const MinePage: React.FC = () => {
 
   // v0.6：个人信息修改弹层（草稿态，保存时统一提交）
   const [editorOpen, setEditorOpen] = useState(false);
+  const [draftName, setDraftName] = useState('');
   const [draftGender, setDraftGender] = useState<Gender>('female');
   const [draftAge, setDraftAge] = useState<number | null>(null);
   const [draftBody, setDraftBody] = useState<BodyProfile>({});
@@ -57,6 +62,7 @@ const MinePage: React.FC = () => {
 
   const openEditor = () => {
     if (!currentWardrobe) return;
+    setDraftName(currentWardrobe.name);
     setDraftGender(currentWardrobe.gender);
     setDraftAge(currentWardrobe.age);
     setDraftBody({ ...bodyProfile });
@@ -67,9 +73,16 @@ const MinePage: React.FC = () => {
 
   const saveEditor = () => {
     if (!currentWardrobe) return;
-    updateWardrobe(currentWardrobe.id, { gender: draftGender, age: draftAge });
+    // v0.7.0：称呼修改（≤10 字，空值保持原名，store 内兜底校验）
+    const trimmedName = draftName.trim();
+    const nameChanged = trimmedName !== '' && trimmedName !== currentWardrobe.name;
+    updateWardrobe(currentWardrobe.id, {
+      ...(nameChanged ? { name: trimmedName } : {}),
+      gender: draftGender,
+      age: draftAge
+    });
     updateBodyProfile(draftBody);
-    console.info('[Mine] 个人信息已保存, wardrobeId =', currentWardrobe.id);
+    console.info('[Mine] 个人信息已保存, wardrobeId =', currentWardrobe.id, 'nameChanged =', nameChanged);
     setEditorOpen(false);
     Taro.showToast({ title: '已保存', icon: 'success' });
   };
@@ -85,7 +98,14 @@ const MinePage: React.FC = () => {
 
   const genderIndex = GENDER_OPTIONS.findIndex((g) => g.value === draftGender);
   const genderLabel = GENDER_OPTIONS.find((g) => g.value === currentWardrobe?.gender)?.label || '-';
-  const filledFields = BODY_FIELD_DEFS.filter((f) => bodyProfile[f.key] !== undefined);
+  // v0.7.0：身体数据摘要（已填项拼接，如「身高 170 · 胸围 92 · 肩宽 45」；全部未填显示「未填写」）
+  const bodySummary = useMemo(() => {
+    const defs = BODY_FIELD_DEFS.filter(
+      (f) => SUMMARY_FIELD_KEYS.includes(f.key) && bodyProfile[f.key] !== undefined
+    );
+    if (defs.length === 0) return UNFILLED;
+    return defs.map((f) => `${f.label} ${bodyProfile[f.key]}`).join(' · ');
+  }, [bodyProfile]);
   const themeStyle = themeVarsOf(currentWardrobe) as unknown as React.CSSProperties;
 
   return (
@@ -112,7 +132,7 @@ const MinePage: React.FC = () => {
         </View>
       </View>
 
-      {/* v0.6 用户意见 1/2：个人信息卡（随衣橱联动），点击弹出修改页 */}
+      {/* v0.6 用户意见 1/2：个人信息卡（随衣橱联动），点击弹出修改页；v0.7.0 增加身体数据摘要 */}
       <View className={styles.card} onClick={openEditor}>
         <View className={styles.infoHeader}>
           <Text className={styles.sectionTitle}>个人信息</Text>
@@ -134,51 +154,23 @@ const MinePage: React.FC = () => {
               : UNFILLED}
           </Text>
         </View>
-        {filledFields.length > 0 ? (
-          <View className={styles.infoGrid}>
-            {filledFields.map((f) => (
-              <View key={f.key} className={styles.infoField}>
-                <Text className={styles.infoFieldLabel}>{f.label}</Text>
-                <Text className={styles.infoFieldValue}>
-                  {bodyProfile[f.key]} {f.unit}
-                </Text>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <Text className={styles.cardTip}>身体数据暂未填写，点击卡片可补充（缝纫/尺码参考，均为选填）。</Text>
-        )}
+        <View className={styles.infoRow}>
+          <Text className={styles.infoLabel}>身体数据</Text>
+          <Text className={styles.infoSummary}>{bodySummary}</Text>
+        </View>
+        <Text className={styles.cardTip}>
+          身体数据为缝纫/尺码参考（均为选填），点击卡片可补充完整 12 项数据。
+        </Text>
       </View>
 
-      {/* 衣橱设置（风格主题 + 衣橱管理入口）；性别/年龄已并入个人信息卡 */}
+      {/* 衣橱设置（v0.7.0：风格主题移至衣橱管理页，此处保留管理入口） */}
       <View className={styles.card}>
         <Text className={styles.sectionTitle}>衣橱设置</Text>
-        <Text className={styles.settingLabel}>风格主题（不同衣橱不同整体风格）</Text>
-        <View className={styles.themeGrid}>
-          {THEME_SETS.map((t) => (
-            <View
-              key={t.id}
-              className={`${styles.themeCard} ${currentWardrobe?.themeId === t.id ? styles.themeCardActive : ''}`}
-              style={{ background: t.bg }}
-              onClick={() => currentWardrobe && updateWardrobe(currentWardrobe.id, { themeId: t.id as ThemeId })}
-            >
-              <View className={styles.themeDotRow}>
-                <View className={styles.themeDot} style={{ background: t.primary }} />
-                <View className={styles.themeDot} style={{ background: t.primaryLight }} />
-              </View>
-              <Text className={styles.themeName}>
-                {t.emoji} {t.name}
-              </Text>
-              {currentWardrobe?.themeId === t.id && <Text className={styles.themeCheck}>✓ 当前</Text>}
-            </View>
-          ))}
-        </View>
-
         <View className={styles.wardrobeEntry} onClick={goWardrobes}>
           <View className={styles.entryDot} style={{ background: currentWardrobe?.color || '#B07D50' }} />
           <View className={styles.entryInfo}>
             <Text className={styles.entryTitle}>衣橱管理</Text>
-            <Text className={styles.entryDesc}>新建/切换/删除不同用户的衣橱</Text>
+            <Text className={styles.entryDesc}>新建/切换/删除衣橱，更换风格主题</Text>
           </View>
           <Text className={styles.entryArrow}>›</Text>
         </View>
@@ -199,12 +191,22 @@ const MinePage: React.FC = () => {
         </Text>
       </View>
 
-      {/* v0.6：个人信息修改弹层（拨盘控件，数字内容无需手动输入） */}
+      {/* v0.6：个人信息修改弹层（拨盘控件）；v0.7.0 新增衣橱主人称呼输入 */}
       {editorOpen && (
         <View className={styles.mask} onClick={cancelEditor}>
           <View className={styles.modal} onClick={(e) => e.stopPropagation()}>
             <Text className={styles.modalTitle}>修改个人信息</Text>
             <ScrollView scrollY className={styles.modalScroll}>
+              <View className={styles.modalRow}>
+                <Text className={styles.modalLabel}>衣橱主人称呼</Text>
+                <Input
+                  className={styles.nameInput}
+                  value={draftName}
+                  maxlength={WARDROBE_NAME_MAX_LEN}
+                  placeholder={`称呼（≤${WARDROBE_NAME_MAX_LEN} 字）`}
+                  onInput={(e) => setDraftName(e.detail.value)}
+                />
+              </View>
               <View className={styles.modalRow}>
                 <Text className={styles.modalLabel}>性别</Text>
                 <Picker

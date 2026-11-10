@@ -5,11 +5,11 @@ import OptionSelector from '@/components/OptionSelector';
 import BrandPicker from '@/components/BrandPicker';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
 import {
-  TYPE_PRESETS,
   LAYER_OPTIONS,
   COLOR_PRESETS,
   MATERIAL_PRESETS,
   SIZE_OPTIONS,
+  WAIST_SIZE_OPTIONS,
   OCCASION_OPTIONS,
   BRAND_PRESETS,
   PURCHASE_PLACE_PRESETS,
@@ -17,7 +17,6 @@ import {
   REMARK_MAX_LEN,
   ITEM_NAME_MAX_LEN,
   COLOR_HEX_MAP,
-  SAMPLE_PHOTO_IDS,
   samplePhoto,
   getTypePresetsByGender,
   suggestSize,
@@ -204,6 +203,10 @@ const AddItemPage: React.FC = () => {
     return list;
   }, [currentWardrobe?.gender, type, customOptions]);
 
+  // v0.7.0：尺码选项随服装类型联动（裤装 = 腰围 24–40 英寸；其他 = XS–XXL）
+  const isPants = type === '裤装';
+  const sizeOptions = isPants ? WAIST_SIZE_OPTIONS : SIZE_OPTIONS;
+
   const validate = (): string | null => {
     if (photos.length === 0) return '请至少添加 1 张照片';
     if (!type) return '请选择服装类型';
@@ -315,7 +318,7 @@ const AddItemPage: React.FC = () => {
             />
           ) : (
             <Text className={styles.namePreviewValue}>
-              保存后按「用户-服装类型-编号」自动生成
+              保存后按「类型-编号」自动生成（如：上装-007）
             </Text>
           )}
         </View>
@@ -330,7 +333,16 @@ const AddItemPage: React.FC = () => {
           allowCustom
           customMaxLength={10}
           value={type}
-          onChange={(v) => setType(v as string)}
+          onChange={(v) => {
+            const nextType = v as string;
+            setType(nextType);
+            // v0.7.0：切换类型后若当前尺码不在新选项集中则清空
+            setSize((prev) => {
+              if (!prev) return prev;
+              const opts = nextType === '裤装' ? WAIST_SIZE_OPTIONS : SIZE_OPTIONS;
+              return opts.includes(prev) ? prev : '';
+            });
+          }}
           onAddCustom={(v) => addCustomOption('type', v)}
           onRemoveCustom={(v) => removeCustomOption('type', v)}
         />
@@ -385,15 +397,19 @@ const AddItemPage: React.FC = () => {
         />
 
         <OptionSelector
-          label='尺码（选填）'
+          label={isPants ? '腰围尺码（选填）' : '尺码（选填）'}
           mode='picker'
-          options={SIZE_OPTIONS}
+          options={sizeOptions}
           customValues={customOf('size')}
           usedValues={usedOf('size')}
           allowCustom
           customMaxLength={6}
           value={size}
-          placeholder='请选择尺码（选填，已按个人信息预填）'
+          placeholder={
+            isPants
+              ? '请选择腰围尺寸（英寸，选填）'
+              : '请选择尺码（选填，已按个人信息预填）'
+          }
           onChange={(v) => setSize(v as string)}
           onAddCustom={(v) => addCustomOption('size', v)}
           onRemoveCustom={(v) => removeCustomOption('size', v)}
