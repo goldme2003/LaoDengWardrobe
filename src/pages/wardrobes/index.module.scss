@@ -1,4 +1,4 @@
-﻿@use '@/styles/variables.scss' as *;
+﻿﻿@use '@/styles/variables.scss' as *;
 
 .page {
   padding: $spacing-lg $page-padding;
@@ -166,11 +166,18 @@
   font-weight: $font-weight-medium;
 }
 
+.wardrobeBlock {
+  border-bottom: 1rpx solid $color-divider;
+  padding: $spacing-md 0;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
 .wardrobeItem {
   display: flex;
   align-items: center;
-  padding: $spacing-md 0;
-  border-bottom: 1rpx solid $color-divider;
 }
 
 .itemColor {
@@ -214,6 +221,47 @@
   margin-top: 4rpx;
 }
 
+// v0.7.0：衣橱列表项内的风格主题色点选择
+.themeRow {
+  display: flex;
+  align-items: center;
+  padding: $spacing-sm 0 0;
+}
+
+.themeRowLabel {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  margin-right: $spacing-md;
+  flex-shrink: 0;
+}
+
+.themeDotBtn {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: $radius-round;
+  border: 2rpx solid transparent;
+  margin-right: $spacing-md;
+  @include flex-center;
+  box-sizing: border-box;
+  transition: all $transition-fast;
+
+  &:active {
+    opacity: 0.85;
+    transform: scale(0.94);
+  }
+}
+
+.themeDotBtnActive {
+  border-color: var(--w-text, $color-text-primary);
+  transform: scale(1.1);
+}
+
+.themeDotInner {
+  width: 28rpx;
+  height: 28rpx;
+  border-radius: $radius-round;
+}
+
 .spacer {
   flex: 1;
 }
@@ -222,6 +270,14 @@
   font-size: $font-size-sm;
   color: var(--w-color, $color-primary);
   padding: 8rpx 16rpx;
+}
+
+// v0.7.0 用户意见 5：修改个人信息入口（跳转个人信息修改页）
+.editBtn {
+  font-size: $font-size-sm;
+  color: var(--w-text2, $color-text-secondary);
+  padding: 8rpx 16rpx;
+  margin-right: $spacing-xs;
 }
 
 .deleteBtn {

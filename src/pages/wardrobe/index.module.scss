@@ -14,6 +14,99 @@
   width: 327rpx;
 }
 
+// v0.7：再点「衣柜」标签弹出的衣橱切换底部弹层（样式与「我的」页弹层一致）
+.sheetMask {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+}
+
+.sheet {
+  width: 100%;
+  background: var(--w-card, $color-bg-card);
+  border-radius: $radius-lg $radius-lg 0 0;
+  padding: $spacing-lg $spacing-lg calc($spacing-lg + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+.sheetTitle {
+  display: block;
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: var(--w-text, $color-text-primary);
+  margin-bottom: $spacing-md;
+}
+
+.sheetList {
+  margin-bottom: $spacing-md;
+}
+
+.sheetItem {
+  display: flex;
+  align-items: center;
+  padding: $spacing-md 0;
+  border-bottom: 1rpx solid $color-divider;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:active {
+    opacity: 0.8;
+  }
+}
+
+.sheetDot {
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: $radius-round;
+  margin-right: $spacing-md;
+  border: 1rpx solid rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
+}
+
+.sheetName {
+  flex: 1;
+  font-size: $font-size-md;
+  color: var(--w-text, $color-text-primary);
+}
+
+.sheetCount {
+  font-size: $font-size-sm;
+  color: var(--w-text2, $color-text-secondary);
+  margin-right: $spacing-md;
+}
+
+.sheetCurrent {
+  font-size: $font-size-xs;
+  color: $color-text-white;
+  border-radius: $radius-xs;
+  padding: 4rpx 12rpx;
+  background: var(--w-color, $color-primary);
+}
+
+.sheetCancel {
+  height: $button-height-md;
+  border-radius: $radius-button;
+  background: $color-bg-page;
+  @include flex-center;
+
+  &:active {
+    opacity: 0.9;
+  }
+}
+
+.sheetCancelText {
+  font-size: $font-size-md;
+  color: var(--w-text, $color-text-primary);
+}
+
 .fab {
   position: fixed;
   right: $spacing-lg;

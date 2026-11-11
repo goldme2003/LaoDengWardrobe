@@ -5,7 +5,6 @@ import { SEASON_OPTIONS } from '@/data/presets';
 import styles from './index.module.scss';
 
 export interface Filters {
-  type: string;
   color: string;
   material: string;
   seasons: string[];
@@ -13,7 +12,6 @@ export interface Filters {
 }
 
 export const EMPTY_FILTERS: Filters = {
-  type: '',
   color: '',
   material: '',
   seasons: [],
@@ -22,7 +20,6 @@ export const EMPTY_FILTERS: Filters = {
 
 interface Props {
   filters: Filters;
-  typeOptions: string[];
   colorOptions: string[];
   materialOptions: string[];
   colorHexMap: Record<string, string>;
@@ -31,7 +28,6 @@ interface Props {
 
 const countActive = (f: Filters): number => {
   let n = 0;
-  if (f.type) n += 1;
   if (f.color) n += 1;
   if (f.material) n += 1;
   if (f.seasons.length > 0) n += 1;
@@ -39,10 +35,9 @@ const countActive = (f: Filters): number => {
   return n;
 };
 
-/** 筛选栏（PRD FR-06）：服装类型/颜色/材质单选，季节多选并集，只看喜爱 */
+/** 筛选栏（PRD FR-06）：v0.7.0 起移除「服装类型」维度（类型即分组），保留颜色/材质/季节/只看喜爱 */
 const FilterBar: React.FC<Props> = ({
   filters,
-  typeOptions,
   colorOptions,
   materialOptions,
   colorHexMap,
@@ -54,7 +49,7 @@ const FilterBar: React.FC<Props> = ({
   const renderRow = (
     label: string,
     options: string[],
-    key: 'type' | 'color' | 'material',
+    key: 'color' | 'material',
     withDot = false
   ) => (
     <View className={styles.row} key={key}>
@@ -98,7 +93,6 @@ const FilterBar: React.FC<Props> = ({
         // v0.6：筛选面板定长，超出部分纵向滑动
         <ScrollView scrollY className={styles.bodyScroll}>
           <View className={styles.body}>
-            {renderRow('类型', typeOptions, 'type')}
             {renderRow('颜色', colorOptions, 'color', true)}
             {renderRow('材质', materialOptions, 'material')}
 

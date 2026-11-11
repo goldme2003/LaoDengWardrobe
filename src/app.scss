@@ -10,3 +10,8 @@ page {
   color: $color-text-primary;
   background-color: $color-bg-page;
 }
+
+// v0.7.0：手风琴分组组头全局锚点类（供 createSelectorQuery().selectAll 定位，不做样式）
+.ldw-acc-header {
+  position: relative;
+}

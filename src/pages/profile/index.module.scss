@@ -1,0 +1,98 @@
+@use '@/styles/variables.scss' as *;
+
+.page {
+  padding: $spacing-lg $page-padding calc($spacing-lg + env(safe-area-inset-bottom));
+  background: var(--w-bg, $color-bg-page);
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.card {
+  background: var(--w-card, $color-bg-card);
+  border-radius: var(--w-radius, $radius-lg);
+  padding: $spacing-md $spacing-lg $spacing-lg;
+  margin-bottom: $spacing-md;
+  box-shadow: $shadow-card;
+}
+
+.sectionTitle {
+  display: block;
+  font-size: $font-size-md;
+  font-weight: $font-weight-semibold;
+  color: var(--w-text, $color-text-primary);
+  margin-bottom: $spacing-sm;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-sm 0;
+  border-bottom: 1rpx solid $color-divider;
+
+  &:last-of-type {
+    border-bottom: none;
+  }
+}
+
+.label {
+  font-size: $font-size-md;
+  color: var(--w-text2, $color-text-secondary);
+  flex-shrink: 0;
+}
+
+// 文本输入框（称呼/身高）
+.textInput {
+  width: 340rpx;
+  height: 72rpx;
+  background: $color-bg-page;
+  border-radius: var(--w-radius, $radius-md);
+  padding: 0 $spacing-md;
+  font-size: $font-size-md;
+  color: var(--w-text, $color-text-primary);
+  text-align: right;
+  box-sizing: border-box;
+}
+
+.picker {
+  display: flex;
+  align-items: center;
+}
+
+.value {
+  font-size: $font-size-md;
+  color: var(--w-text, $color-text-primary);
+}
+
+.arrow {
+  font-size: $font-size-md;
+  color: $color-text-tertiary;
+  margin-left: $spacing-sm;
+}
+
+.tip {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  line-height: $line-height-loose;
+  margin-top: $spacing-sm;
+}
+
+.saveBtn {
+  height: $button-height-md;
+  border-radius: $radius-button;
+  background: var(--w-color, $color-primary);
+  @include flex-center;
+  margin-top: $spacing-md;
+
+  &:active {
+    opacity: 0.9;
+    transform: scale(0.98);
+  }
+}
+
+.saveBtnText {
+  font-size: $font-size-md;
+  color: $color-text-white;
+  font-weight: $font-weight-medium;
+}

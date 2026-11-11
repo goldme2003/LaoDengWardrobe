@@ -1,7 +1,7 @@
 import { CustomDimension, Gender, ThemeId, BodyProfile } from '@/types';
 
-/** 当前版本号（v0.6：在「我的」页展示） */
-export const APP_VERSION = 'v0.6.0';
+/** 当前版本号（在「我的」页展示） */
+export const APP_VERSION = 'v1.0.0';
 
 /** 性别选项（v0.5） */
 export const GENDER_OPTIONS: { value: Gender; label: string }[] = [
@@ -50,8 +50,8 @@ export const TYPE_PRESETS = [
   '其他'
 ];
 
-/** 内外穿（固定枚举） */
-export const LAYER_OPTIONS = ['内穿', '外穿'];
+/** 内外穿（固定枚举；v1.0.0 用户要求：外穿展示优先于内穿） */
+export const LAYER_OPTIONS = ['外穿', '内穿'];
 
 /** 颜色预设（含展示用色值） */
 export const COLOR_PRESETS: { name: string; hex: string }[] = [
@@ -95,6 +95,28 @@ export const SEASON_OPTIONS = ['春', '夏', '秋', '冬'];
 
 /** 尺码预设（选填扩展属性，PRD v0.3） */
 export const SIZE_OPTIONS = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+
+/** 裤装腰围尺码档位（v0.7.0：24–40 英寸，共 17 档；服装类型为「裤装」时使用） */
+export const WAIST_SIZE_OPTIONS: string[] = Array.from({ length: 17 }, (_, i) => String(24 + i));
+
+/** 常用上衣尺码选项（v0.7.0：字母码 + 常见身高码，支持 170/175/M/L 等格式） */
+export const TOP_SIZE_OPTIONS = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '160', '165', '170', '175', '180', '185'];
+
+/** 常用鞋码选项（v0.7.0：35–46 码） */
+export const SHOE_SIZE_OPTIONS: string[] = Array.from({ length: 12 }, (_, i) => String(35 + i));
+
+/** 常用衣物尺寸字段定义（v0.7.0：「我的」页个人信息使用，BodyProfile 扩展） */
+export interface ClothingSizeFieldDef {
+  key: 'topSize' | 'pantsSize' | 'shoeSize';
+  label: string;
+  options: string[];
+}
+
+export const CLOTHING_SIZE_FIELD_DEFS: ClothingSizeFieldDef[] = [
+  { key: 'topSize', label: '上衣尺码', options: TOP_SIZE_OPTIONS },
+  { key: 'pantsSize', label: '裤装尺码', options: WAIST_SIZE_OPTIONS },
+  { key: 'shoeSize', label: '鞋码', options: SHOE_SIZE_OPTIONS }
+];
 
 /** 适用场合预设（选填扩展属性，多选） */
 export const OCCASION_OPTIONS = ['日常', '通勤', '运动', '正式', '居家', '旅行'];
@@ -165,6 +187,7 @@ export const CUSTOM_MAX_LEN: Record<CustomDimension, number> = {
 /** ============================================
  * 风格主题集（v0.5：不同衣橱选择不同整体风格主题，
  * 含页面底色/主色/卡片底色/文本色/卡片圆角风格，而非仅控件颜色）
+ * v0.7.0：提高底色/主色饱和度与对比度，并新增天气卡片用变量（weatherBg/weatherAccent）
  * ============================================ */
 export interface ThemeStyle {
   id: ThemeId;
@@ -185,80 +208,96 @@ export interface ThemeStyle {
   radius: string;
   /** 主题图标 */
   emoji: string;
+  /** 天气卡片底色（v0.7.0） */
+  weatherBg: string;
+  /** 天气卡片强调色（v0.7.0） */
+  weatherAccent: string;
 }
 
 export const THEME_SETS: ThemeStyle[] = [
   {
     id: 'warm',
     name: '焦糖暖棕',
-    bg: '#F7F4EF',
-    primary: '#B07D50',
-    primaryLight: '#CE9B6F',
+    bg: '#F7EFDF',
+    primary: '#A96B32',
+    primaryLight: '#D69758',
     card: '#FFFFFF',
-    text: '#2B2420',
-    textSecondary: '#6B5E52',
+    text: '#271E14',
+    textSecondary: '#6E5B45',
     radius: '16rpx',
-    emoji: '🧺'
+    emoji: '🧺',
+    weatherBg: '#F3E6CC',
+    weatherAccent: '#A96B32'
   },
   {
     id: 'ocean',
     name: '海雾蓝',
-    bg: '#EDF3FA',
-    primary: '#3B6FB5',
-    primaryLight: '#6C93CB',
+    bg: '#E7F0FA',
+    primary: '#2E64B8',
+    primaryLight: '#6B97D6',
     card: '#FFFFFF',
-    text: '#1E2A3A',
-    textSecondary: '#5B6B7E',
+    text: '#182740',
+    textSecondary: '#4F647E',
     radius: '16rpx',
-    emoji: '🌊'
+    emoji: '🌊',
+    weatherBg: '#D8E9F9',
+    weatherAccent: '#2E64B8'
   },
   {
     id: 'mint',
     name: '薄荷奶绿',
-    bg: '#EFF7F1',
-    primary: '#4C9E5E',
-    primaryLight: '#7DBC8C',
+    bg: '#E9F5EC',
+    primary: '#35944A',
+    primaryLight: '#77BC8A',
     card: '#FFFFFF',
-    text: '#1F2E23',
-    textSecondary: '#5E7264',
+    text: '#182B1E',
+    textSecondary: '#54705F',
     radius: '32rpx',
-    emoji: '🌿'
+    emoji: '🌿',
+    weatherBg: '#D9EFE0',
+    weatherAccent: '#35944A'
   },
   {
     id: 'honey',
     name: '蜜橙拿铁',
-    bg: '#FBF3EA',
-    primary: '#E8684A',
-    primaryLight: '#F09A85',
-    card: '#FFFDF9',
-    text: '#33241D',
-    textSecondary: '#7A6459',
+    bg: '#FCF0E0',
+    primary: '#E45530',
+    primaryLight: '#F19167',
+    card: '#FFFDF8',
+    text: '#2E1F15',
+    textSecondary: '#7D604E',
     radius: '16rpx',
-    emoji: '🍊'
+    emoji: '🍊',
+    weatherBg: '#FAE3CB',
+    weatherAccent: '#E45530'
   },
   {
     id: 'rose',
     name: '豆沙玫瑰',
-    bg: '#FAF0F1',
-    primary: '#B56576',
-    primaryLight: '#D08E9C',
+    bg: '#F9ECEF',
+    primary: '#B25268',
+    primaryLight: '#D488A0',
     card: '#FFFCFC',
-    text: '#332228',
-    textSecondary: '#7D6069',
+    text: '#2E1E26',
+    textSecondary: '#7D5865',
     radius: '32rpx',
-    emoji: '🌸'
+    emoji: '🌸',
+    weatherBg: '#F5DDE2',
+    weatherAccent: '#B25268'
   },
   {
     id: 'ink',
     name: '黑胡桃墨调',
-    bg: '#EFEFED',
-    primary: '#3A3A38',
-    primaryLight: '#6E6E6A',
+    bg: '#ECEBE7',
+    primary: '#2F2F2B',
+    primaryLight: '#6B6B63',
     card: '#FFFFFF',
-    text: '#222222',
-    textSecondary: '#6B6B66',
+    text: '#1B1B18',
+    textSecondary: '#64645C',
     radius: '8rpx',
-    emoji: '🖤'
+    emoji: '🖤',
+    weatherBg: '#E1E0DA',
+    weatherAccent: '#4E4E46'
   }
 ];
 
@@ -278,7 +317,9 @@ export const themeVarsOf = (w?: { themeId?: ThemeId; color?: string } | null): R
     '--w-card': t.card,
     '--w-text': t.text,
     '--w-text2': t.textSecondary,
-    '--w-radius': t.radius
+    '--w-radius': t.radius,
+    '--w-weather-bg': t.weatherBg,
+    '--w-weather-accent': t.weatherAccent
   };
 };
 

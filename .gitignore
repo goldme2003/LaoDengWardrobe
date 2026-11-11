@@ -5,6 +5,7 @@ miniprogram_npm/
 # 构建产物
 dist/
 build/
+.swc/
 
 # 环境与密钥
 .env

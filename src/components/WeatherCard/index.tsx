@@ -14,7 +14,8 @@ interface Props {
   onRetry: () => void;
 }
 
-/** 天气卡片（PRD FR-09）：城市、今日天气与气温、未来 3 日简报 */
+/** 天气卡片（PRD FR-09）：城市、今日天气与气温、未来 3 日简报
+ * v0.7.0 用户意见 1：紧凑化布局，整卡高度控制在页面可视区约 30% 以内 */
 const WeatherCard: React.FC<Props> = ({
   weather,
   loading,
@@ -26,50 +27,52 @@ const WeatherCard: React.FC<Props> = ({
 }) => {
   return (
     <View className={styles.card}>
+      {/* 第一行：城市 + 状态/重试 + 切换城市 */}
       <View className={styles.header}>
         <Text className={styles.city}>{weather ? weather.city : '天气'}</Text>
         {loading && <Text className={styles.stateText}>加载中…</Text>}
         {failed && !loading && (
           <Text className={styles.retry} onClick={onRetry}>
-            天气获取失败，点击重试
+            获取失败，点击重试
           </Text>
         )}
+        <Picker
+          mode='selector'
+          range={cityOptions}
+          value={Math.max(0, cityOptions.indexOf(activeCity))}
+          onChange={(e) => onSelectCity(cityOptions[Number(e.detail.value)])}
+        >
+          <View className={styles.citySwitch}>
+            <Text className={styles.citySwitchText}>切换城市</Text>
+            <Text className={styles.citySwitchArrow}>▾</Text>
+          </View>
+        </Picker>
       </View>
 
       {weather && !failed && (
         <>
-          <View className={styles.today}>
-            <View className={styles.todayLeft}>
+          {/* 第二行：今日天气（左） + 未来 3 日简报（右），横向并排压缩高度 */}
+          <View className={styles.bodyRow}>
+            <View className={styles.today}>
               <Text className={styles.todayIcon}>{weatherIcon(weather.today.cond)}</Text>
-              <Text className={styles.todayCond}>{weather.today.cond}</Text>
-              <Text className={styles.todayRange}>
-                {weather.today.low}° ~ {weather.today.high}°
-              </Text>
-            </View>
-            {/* v0.6：城市仅在拨盘选择器中切换一次，不再平铺常见城市 */}
-            <Picker
-              mode='selector'
-              range={cityOptions}
-              value={Math.max(0, cityOptions.indexOf(activeCity))}
-              onChange={(e) => onSelectCity(cityOptions[Number(e.detail.value)])}
-            >
-              <View className={styles.citySwitch}>
-                <Text className={styles.citySwitchText}>切换城市</Text>
-                <Text className={styles.citySwitchArrow}>▾</Text>
-              </View>
-            </Picker>
-          </View>
-          <View className={styles.days}>
-            {weather.days.map((d) => (
-              <View key={d.date} className={styles.dayItem}>
-                <Text className={styles.dayDate}>{d.date}</Text>
-                <Text className={styles.dayIcon}>{weatherIcon(d.cond)}</Text>
-                <Text className={styles.dayCond}>{d.cond}</Text>
-                <Text className={styles.dayRange}>
-                  {d.low}°/{d.high}°
+              <View className={styles.todayInfo}>
+                <Text className={styles.todayCond}>{weather.today.cond}</Text>
+                <Text className={styles.todayRange}>
+                  {weather.today.low}° ~ {weather.today.high}°
                 </Text>
               </View>
-            ))}
+            </View>
+            <View className={styles.days}>
+              {weather.days.map((d) => (
+                <View key={d.date} className={styles.dayItem}>
+                  <Text className={styles.dayDate}>{d.date}</Text>
+                  <Text className={styles.dayIcon}>{weatherIcon(d.cond)}</Text>
+                  <Text className={styles.dayRange}>
+                    {d.low}°/{d.high}°
+                  </Text>
+                </View>
+              ))}
+            </View>
           </View>
         </>
       )}

@@ -1,3 +1,3 @@
 export default definePageConfig({
-  navigationBarTitleText: '编辑备选'
+  navigationBarTitleText: '编辑试穿'
 })

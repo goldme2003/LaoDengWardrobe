@@ -7,7 +7,7 @@ export type ThemeId = 'warm' | 'ocean' | 'mint' | 'honey' | 'rose' | 'ink';
 /** 衣橱（一位用户的独立衣物集合） */
 export interface Wardrobe {
   id: string;
-  /** 用户名称，即命名规则中的「用户」，创建后不可修改 */
+  /** 衣橱主人称呼（≤10 字），v0.7.0 起可在「我的」页修改；命名规则不含称呼，修改不影响已有衣物名称 */
   name: string;
   /** 衣橱主题色（取自所选风格主题的主色） */
   color: string;
@@ -46,6 +46,12 @@ export interface BodyProfile {
   thigh?: number;
   /** 脚长 mm（鞋码参考，补充） */
   footLength?: number;
+  /** 常用上衣尺码（v0.7.0：如 170/175/M/L 等，字符串兼容字母码与数字码） */
+  topSize?: string;
+  /** 常用裤装尺码（v0.7.0：24–40 腰围档位） */
+  pantsSize?: string;
+  /** 常用鞋码（v0.7.0：如 38/40 等） */
+  shoeSize?: string;
 }
 
 /** 购入信息（v0.5，均为选填） */
@@ -86,7 +92,7 @@ export interface ClothingItem {
   wardrobeId: string;
   /** 照片组 1-9 张，第 1 张为主图 */
   photos: string[];
-  /** 系统自动命名：用户-服装类型-编号；允许手动修改 */
+  /** 系统自动命名：服装类型-编号（v0.7.0 起不含称呼前缀）；允许手动修改 */
   name: string;
   /** 用户是否手动修改过名称 */
   renamed: boolean;

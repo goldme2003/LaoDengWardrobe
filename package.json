@@ -1,8 +1,8 @@
 {
-  "name": "taro_template",
+  "name": "laodeng-wardrobe",
   "version": "1.0.0",
   "private": true,
-  "description": "taro_template",
+  "description": "老登衣柜：个人衣物管理微信小程序，支持多衣橱分类、着装日记与明日穿搭推荐。",
   "templateInfo": {
     "name": "react",
     "typescript": true,
