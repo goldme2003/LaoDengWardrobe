@@ -1,7 +1,7 @@
 {
   "miniprogramRoot": "./",
-  "projectname": "taro_template",
-  "description": "taro_template",
+  "projectname": "laodeng-wardrobe",
+  "description": "老登衣柜：个人衣物管理微信小程序",
   "appid": "touristappid",
   "setting": {
     "urlCheck": true,
