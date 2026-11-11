@@ -40,7 +40,7 @@ const AccordionList: React.FC<Props> = ({
         const collapsed = !!collapsedMap[g.type];
         return (
           <View key={g.type} className={styles.group}>
-            <View className={styles.header} onClick={() => onToggleGroup(g.type)}>
+            <View className={`${styles.header} ldw-acc-header`} onClick={() => onToggleGroup(g.type)}>
               <Text className={styles.name}>{g.type}</Text>
               <Text className={styles.count}>{g.list.length} 件</Text>
               <Text className={classnames(styles.arrow, !collapsed && styles.arrowOpen)}>›</Text>

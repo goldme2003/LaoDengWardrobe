@@ -23,6 +23,12 @@ const WardrobesPage: React.FC = () => {
 
   const goCreate = () => Taro.navigateTo({ url: '/pages/wardrobe-new/index' });
 
+  // v0.7.0 用户意见 5：修改入口 —— 先切换为当前衣橱，再进入个人信息修改页（该页编辑当前衣橱主人信息）
+  const goEditProfile = (id: string) => {
+    setCurrentWardrobe(id);
+    Taro.navigateTo({ url: '/pages/profile/index' });
+  };
+
   const handleDelete = (id: string, wardrobeName: string) => {
     if (wardrobes.length <= 1) {
       Taro.showToast({ title: '至少保留一个衣橱', icon: 'none' });
@@ -73,6 +79,9 @@ const WardrobesPage: React.FC = () => {
                   </Text>
                 </View>
                 <View className={styles.spacer} />
+                <Text className={styles.editBtn} onClick={() => goEditProfile(w.id)}>
+                  修改
+                </Text>
                 {w.id !== currentWardrobeId && (
                   <Text className={styles.switchBtn} onClick={() => setCurrentWardrobe(w.id)}>
                     切换

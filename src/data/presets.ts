@@ -1,7 +1,7 @@
 import { CustomDimension, Gender, ThemeId, BodyProfile } from '@/types';
 
 /** 当前版本号（在「我的」页展示） */
-export const APP_VERSION = 'v0.7.0';
+export const APP_VERSION = 'v1.0.0';
 
 /** 性别选项（v0.5） */
 export const GENDER_OPTIONS: { value: Gender; label: string }[] = [
@@ -50,8 +50,8 @@ export const TYPE_PRESETS = [
   '其他'
 ];
 
-/** 内外穿（固定枚举） */
-export const LAYER_OPTIONS = ['内穿', '外穿'];
+/** 内外穿（固定枚举；v1.0.0 用户要求：外穿展示优先于内穿） */
+export const LAYER_OPTIONS = ['外穿', '内穿'];
 
 /** 颜色预设（含展示用色值） */
 export const COLOR_PRESETS: { name: string; hex: string }[] = [
@@ -98,6 +98,25 @@ export const SIZE_OPTIONS = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 
 /** 裤装腰围尺码档位（v0.7.0：24–40 英寸，共 17 档；服装类型为「裤装」时使用） */
 export const WAIST_SIZE_OPTIONS: string[] = Array.from({ length: 17 }, (_, i) => String(24 + i));
+
+/** 常用上衣尺码选项（v0.7.0：字母码 + 常见身高码，支持 170/175/M/L 等格式） */
+export const TOP_SIZE_OPTIONS = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '160', '165', '170', '175', '180', '185'];
+
+/** 常用鞋码选项（v0.7.0：35–46 码） */
+export const SHOE_SIZE_OPTIONS: string[] = Array.from({ length: 12 }, (_, i) => String(35 + i));
+
+/** 常用衣物尺寸字段定义（v0.7.0：「我的」页个人信息使用，BodyProfile 扩展） */
+export interface ClothingSizeFieldDef {
+  key: 'topSize' | 'pantsSize' | 'shoeSize';
+  label: string;
+  options: string[];
+}
+
+export const CLOTHING_SIZE_FIELD_DEFS: ClothingSizeFieldDef[] = [
+  { key: 'topSize', label: '上衣尺码', options: TOP_SIZE_OPTIONS },
+  { key: 'pantsSize', label: '裤装尺码', options: WAIST_SIZE_OPTIONS },
+  { key: 'shoeSize', label: '鞋码', options: SHOE_SIZE_OPTIONS }
+];
 
 /** 适用场合预设（选填扩展属性，多选） */
 export const OCCASION_OPTIONS = ['日常', '通勤', '运动', '正式', '居家', '旅行'];
