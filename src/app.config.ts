@@ -7,6 +7,7 @@ export default defineAppConfig({
     'pages/tryout-edit/index',
     'pages/diary/index',
     'pages/mine/index',
+    'pages/profile/index',
     'pages/add/index',
     'pages/detail/index'
   ],
@@ -31,7 +32,7 @@ export default defineAppConfig({
       },
       {
         pagePath: 'pages/tryout/index',
-        text: '备选',
+        text: '试穿',
         iconPath: 'assets/tabbar/closet.png',
         selectedIconPath: 'assets/tabbar/closet-selected.png'
       },

@@ -441,14 +441,15 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       const s = get();
       const wid = s.currentWardrobeId;
       const next: BodyProfile = { ...(s.bodyProfiles[wid] || {}) };
+      const mutable = next as Record<string, number | string | undefined>;
       Object.keys(patch).forEach((k) => {
         const key = k as keyof BodyProfile;
-        const v = patch[key];
+        const v = patch[key] as number | string | undefined;
         // 空值删除字段，避免无效数据
         if (v === undefined || v === null || (typeof v === 'number' && isNaN(v))) {
-          delete next[key];
+          delete mutable[key];
         } else {
-          next[key] = v;
+          mutable[key] = v;
         }
       });
       commit({ bodyProfiles: { ...s.bodyProfiles, [wid]: next } });
@@ -471,7 +472,7 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
         id: genId(),
         wardrobeId: s.currentWardrobeId,
         photos: input.photos,
-        name: (input.name || '').trim() || '未命名备选',
+        name: (input.name || '').trim() || '未命名试穿',
         type: input.type,
         color: input.color,
         brand: (input.brand || '').trim(),

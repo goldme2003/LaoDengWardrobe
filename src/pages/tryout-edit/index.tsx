@@ -44,7 +44,7 @@ const TryoutEditPage: React.FC = () => {
   useEffect(() => {
     if (editing) {
       setPhotos(editing.photos || []);
-      setName(editing.name === '未命名备选' ? '' : editing.name);
+      setName(editing.name === '未命名试穿' ? '' : editing.name);
       setType(editing.type || '');
       setColor(editing.color || '');
       setBrand(editing.brand || '');
@@ -217,7 +217,7 @@ const TryoutEditPage: React.FC = () => {
 
       <View className={styles.bottomBar}>
         <View className={styles.saveBtn} onClick={handleSave}>
-          <Text className={styles.saveBtnText}>{editing ? '保存修改' : '保存备选'}</Text>
+          <Text className={styles.saveBtnText}>{editing ? '保存修改' : '保存试穿'}</Text>
         </View>
       </View>
     </View>

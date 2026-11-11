@@ -32,7 +32,7 @@ const TryoutPage: React.FC = () => {
   const goConvert = (id: string) => {
     Taro.showModal({
       title: '转正式衣物',
-      content: '将携带照片与已填信息进入衣物录入页，保存后移除该备选。',
+      content: '将携带照片与已填信息进入衣物录入页，保存后移除该试穿。',
       success: (res) => {
         if (res.confirm) {
           Taro.navigateTo({ url: `/pages/add/index?fromTryout=${id}` });
@@ -43,7 +43,7 @@ const TryoutPage: React.FC = () => {
 
   const handleDelete = (item: TryoutItem) => {
     Taro.showModal({
-      title: '删除备选',
+      title: '删除试穿',
       content: `删除「${item.name}」后不可恢复，确定删除吗？`,
       confirmColor: '#F53F3F',
       success: (res) => {
@@ -60,9 +60,9 @@ const TryoutPage: React.FC = () => {
       {list.length === 0 ? (
         <EmptyState
           icon='🛍️'
-          title='还没有备选衣物'
+          title='还没有试穿衣物'
           desc='把准备购入的试穿照或展示图先存到这里'
-          actionText='添加备选'
+          actionText='添加试穿'
           onAction={goAdd}
         />
       ) : (

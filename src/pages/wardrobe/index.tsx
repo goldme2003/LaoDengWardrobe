@@ -21,6 +21,8 @@ const PLAN_TYPE_ORDER = ['上装', '外套', '裤装', '裙装', '连衣裙', '�
 const DIRECTION_HYSTERESIS = 20;
 /** 滚动联动：手动操作后短时间不再触发自动逻辑 */
 const MANUAL_GUARD_MS = 800;
+/** 滚动联动：自动收起/展开的最小触发间隔（节流，保证平滑不卡顿） */
+const AUTO_THROTTLE_MS = 160;
 
 /** 衣柜首页（PRD FR-06/FR-09）：天气 + 衣橱切换 + 筛选 + 手风琴分组衣物列表 */
 const WardrobePage: React.FC = () => {
@@ -57,7 +59,7 @@ const WardrobePage: React.FC = () => {
   const scrollDir = useRef<'init' | 'down' | 'up'>('init');
   const oppoAcc = useRef(0);
   const lastManualTs = useRef(0);
-  const queryingBottom = useRef(false);
+  const lastAutoTs = useRef(0);
   const windowHeight = useRef(667);
   useEffect(() => {
     try {
@@ -201,24 +203,28 @@ const WardrobePage: React.FC = () => {
   const showAccordion = !planMode && !isFiltering && currentItems.length > 0 && filtered.length > 0;
 
   // 是否存在收起中的分组（滚动联动判断用，ref 同步）
-  const anyCollapsedRef = useRef(false);
+  const collapsedMapRef = useRef(collapsedMap);
   useEffect(() => {
-    anyCollapsedRef.current = listGroups.some((g) => collapsedMap[g.type]);
-  }, [listGroups, collapsedMap]);
+    collapsedMapRef.current = collapsedMap;
+  }, [collapsedMap]);
 
-  // v0.7：滚动联动（PRD FR-06 第 2 条）—— 上滑接近页面底部自动收起全部分组；回滚自动全部展开。
-  // 通过方向 + 位置判断：底部哨兵进入视口视为「接近底部」；方向反转需超过迟滞阈值；手动操作后 800ms 内不触发。
+  // v0.7.0 用户意见 2：滚动联动重构（移动端通用交互）——
+  // 上滑浏览：组头滚出视口顶部的分组自动逐个收起（每次一组，节流防抖动）；
+  // 回滚浏览：组头重新回到视口内的分组自动逐个展开；
+  // 方向反转需超过迟滞阈值，手动操作后 800ms 内不触发，自动逻辑 160ms 节流。
   usePageScroll((res) => {
     if (!showAccordion) return;
     const y = res.scrollTop || 0;
     const delta = y - lastScrollTop.current;
     lastScrollTop.current = y;
-    if (Math.abs(delta) < 1) return; // 过滤微小抖动
+    if (Math.abs(delta) < 2) return; // 过滤微小抖动
     const toward: 'down' | 'up' = delta > 0 ? 'down' : 'up';
     if (scrollDir.current === 'init') {
       scrollDir.current = toward;
       oppoAcc.current = 0;
-    } else if (scrollDir.current !== toward) {
+      return;
+    }
+    if (scrollDir.current !== toward) {
       // 方向反转：累计位移超过迟滞阈值才切换方向
       oppoAcc.current += Math.abs(delta);
       if (oppoAcc.current < DIRECTION_HYSTERESIS) return;
@@ -229,36 +235,36 @@ const WardrobePage: React.FC = () => {
     }
     // 手动操作后短时间内不触发自动逻辑
     if (Date.now() - lastManualTs.current < MANUAL_GUARD_MS) return;
+    // 节流：降低测量频率，保证滚动平滑
+    const now = Date.now();
+    if (now - lastAutoTs.current < AUTO_THROTTLE_MS) return;
+    lastAutoTs.current = now;
 
-    if (toward === 'up') {
-      // 回滚：自动展开全部分组
-      if (anyCollapsedRef.current) {
-        lastManualTs.current = Date.now();
-        setCollapsedMap({});
-      }
-      return;
-    }
-    // 上滑：接近页面底部（底部哨兵已进入视口）时收起全部分组
-    if (!anyCollapsedRef.current && !queryingBottom.current) {
-      queryingBottom.current = true;
-      Taro.createSelectorQuery()
-        .select('#ldwListBottom')
-        .boundingClientRect((rect) => {
-          queryingBottom.current = false;
-          const top = (rect as { top?: number } | null | undefined)?.top;
-          if (top !== undefined && top < windowHeight.current) {
+    // 测量各分组组头的视口位置
+    Taro.createSelectorQuery()
+      .selectAll('.ldw-acc-header')
+      .boundingClientRect((rects) => {
+        const list = (rects || []) as { top: number }[];
+        if (list.length !== listGroups.length) return;
+        if (toward === 'down') {
+          // 上滑：第一个「组头已滚出视口顶部且仍展开」的分组 → 自动收起（一次一组）
+          const idx = listGroups.findIndex((g, i) => !collapsedMapRef.current[g.type] && list[i].top < 0);
+          if (idx >= 0) {
             lastManualTs.current = Date.now();
-            setCollapsedMap(() => {
-              const next: Record<string, boolean> = {};
-              listGroups.forEach((g) => {
-                next[g.type] = true;
-              });
-              return next;
-            });
+            setCollapsedMap((prev) => ({ ...prev, [listGroups[idx].type]: true }));
           }
-        })
-        .exec();
-    }
+        } else {
+          // 回滚：第一个「组头回到视口内且已收起」的分组 → 自动展开（一次一组）
+          const idx = listGroups.findIndex(
+            (g, i) => collapsedMapRef.current[g.type] && list[i].top >= 0 && list[i].top < windowHeight.current
+          );
+          if (idx >= 0) {
+            lastManualTs.current = Date.now();
+            setCollapsedMap((prev) => ({ ...prev, [listGroups[idx].type]: false }));
+          }
+        }
+      })
+      .exec();
   });
 
   // v0.7：组头点击手动切换展开/收起
@@ -269,10 +275,11 @@ const WardrobePage: React.FC = () => {
 
   // v0.7：再次点击底部「衣柜」标签时弹出衣橱切换弹层
   // useTabItemTap 仅在点击 tabBar 标签本身时触发，进入页面/switchTab 不会触发，无首次进入误触发问题
+  // v0.7.0 用户意见 3：改为开关式切换——点击一次弹出菜单，再点击一次收回菜单
   useTabItemTap((res) => {
     // Taro 类型声明 index 为 string，微信端实际为 number，统一转数字比较
     if (Number(res.index) === 0) {
-      setSwitcherOpen(true);
+      setSwitcherOpen((open) => !open);
     }
   });
 
@@ -387,8 +394,6 @@ const WardrobePage: React.FC = () => {
                 onItemPress={goDetail}
                 onToggleFavorite={toggleFavorite}
               />
-              {/* 滚动联动哨兵：检测列表底部是否进入视口 */}
-              <View id='ldwListBottom' className={styles.listSentinel} />
             </>
           ) : (
             <View className={styles.grid}>

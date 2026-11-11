@@ -46,6 +46,12 @@ export interface BodyProfile {
   thigh?: number;
   /** 脚长 mm（鞋码参考，补充） */
   footLength?: number;
+  /** 常用上衣尺码（v0.7.0：如 170/175/M/L 等，字符串兼容字母码与数字码） */
+  topSize?: string;
+  /** 常用裤装尺码（v0.7.0：24–40 腰围档位） */
+  pantsSize?: string;
+  /** 常用鞋码（v0.7.0：如 38/40 等） */
+  shoeSize?: string;
 }
 
 /** 购入信息（v0.5，均为选填） */
