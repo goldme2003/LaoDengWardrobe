@@ -1,7 +1,7 @@
 import { CustomDimension, Gender, ThemeId, BodyProfile } from '@/types';
 
 /** 当前版本号（在「我的」页展示） */
-export const APP_VERSION = 'v0.7.0';
+export const APP_VERSION = 'v1.0.0';
 
 /** 性别选项（v0.5） */
 export const GENDER_OPTIONS: { value: Gender; label: string }[] = [
@@ -50,8 +50,8 @@ export const TYPE_PRESETS = [
   '其他'
 ];
 
-/** 内外穿（固定枚举） */
-export const LAYER_OPTIONS = ['内穿', '外穿'];
+/** 内外穿（固定枚举；v1.0.0 用户要求：外穿展示优先于内穿） */
+export const LAYER_OPTIONS = ['外穿', '内穿'];
 
 /** 颜色预设（含展示用色值） */
 export const COLOR_PRESETS: { name: string; hex: string }[] = [
