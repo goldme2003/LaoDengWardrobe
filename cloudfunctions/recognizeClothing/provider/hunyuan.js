@@ -1,10 +1,12 @@
 /** 腾讯混元视觉大模型调用封装（PRD 9.3 阶段1）
- * 密钥从云函数环境变量 HUNYUAN_API_KEY 读取（兼容 sk- 开头的 OpenAI 兼容密钥），
+ * 密钥从云函数环境变量 HUNYUAN_API_KEY 读取（sk- 开头 OpenAI 兼容密钥），
  * 本地联调可放同目录 private.config.json（已 gitignore，方案 R3：绝不打包进前端）
- * 走混元 OpenAI 兼容端点 api.hunyuan.cloud.tencent.com/v1/chat/completions（无需 CAM 签名）
- * Provider 层抽象：如需切换千问 VL 等供应商，仅替换本文件（方案 R6） */
+ * 端点：https://tokenhub.tencentmaas.com/v1/chat/completions（OpenAI 兼容，模型 hy4）
+ * Provider 层抽象：如需切换供应商，仅替换本文件（方案 R6） */
 const https = require('https');
 const path = require('path');
+
+const HOST = 'tokenhub.tencentmaas.com';
 
 /** 本地联调密钥兜底（环境变量优先；文件不入库） */
 function loadLocalKey() {
@@ -38,7 +40,7 @@ function httpsPostJson(urlPath, apiKey, body) {
     const data = JSON.stringify(body);
     const req = https.request(
       {
-        hostname: 'api.hunyuan.cloud.tencent.com',
+        hostname: HOST,
         path: urlPath,
         method: 'POST',
         headers: {
@@ -82,7 +84,7 @@ async function callHunyuanVision(imageBase64) {
     throw new Error('MISSING_SECRET: 未配置 HUNYUAN_API_KEY（环境变量或 private.config.json）');
   }
   const res = await httpsPostJson('/v1/chat/completions', apiKey, {
-    model: process.env.HUNYUAN_MODEL || 'hunyuan-turbos-vision',
+    model: process.env.HUNYUAN_MODEL || 'hy4',
     messages: [
       {
         role: 'user',
