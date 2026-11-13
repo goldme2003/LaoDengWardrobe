@@ -20,6 +20,9 @@ private.*.js
 .DS_Store
 Thumbs.db
 
+# 微信开发者工具本地私有配置（不入库）
+project.private.config.json
+
 # 日志与临时文件
 *.log
 npm-debug.*
