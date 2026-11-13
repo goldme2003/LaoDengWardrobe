@@ -4,7 +4,7 @@
   "description": "衣物图片识别与属性自动填充（PRD 9.3）：混元视觉含衣判定/品类颜色识别 + 腾讯云 OCR 吊牌文字提取 + 熔断计数",
   "main": "index.js",
   "dependencies": {
-    "tencentcloud-sdk-nodejs": "^4.0.900",
+    "tencentcloud-sdk-nodejs-ocr": "^4.0.900",
     "wx-server-sdk": "~2.6.3"
   }
 }

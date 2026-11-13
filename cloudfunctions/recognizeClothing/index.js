@@ -84,15 +84,23 @@ exports.main = async (event) => {
     }
 
     // ⑤ 吊牌 → OCR → 规则解析（方案 S2 场景）
+    // CAM 密钥（SecretId/Key）就绪时走腾讯云通用印刷体 OCR（Q2 正式链路）；
+    // 未就绪时降级用混元直接读取的吊牌文字（tagText），避免链路中断
     let ocrText = '';
     let ocrUsed = false;
     if (vision.hasTag) {
-      try {
-        const ocr = await generalBasicOCR(imageBase64);
-        ocrText = ocr.text;
-        ocrUsed = true;
-      } catch (e) {
-        console.warn('[recognize] OCR 失败，静默跳过文字属性', e && e.message);
+      const hasCamSecret = !!process.env.TENCENT_SECRET_ID && !!process.env.TENCENT_SECRET_KEY;
+      if (hasCamSecret) {
+        try {
+          const ocr = await generalBasicOCR(imageBase64);
+          ocrText = ocr.text;
+          ocrUsed = true;
+        } catch (e) {
+          console.warn('[recognize] OCR 失败，降级用模型读取的吊牌文字', e && e.message);
+        }
+      }
+      if (!ocrText && vision.tagText) {
+        ocrText = String(vision.tagText);
       }
     }
 
