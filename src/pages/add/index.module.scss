@@ -332,6 +332,41 @@
   margin-top: $spacing-xs;
 }
 
+/* v1.2（PRD 9.3）：自动识别状态行 */
+.recognRow {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  margin-top: $spacing-sm;
+  padding: $spacing-sm $spacing-md;
+  border-radius: $radius-md;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.recognTip {
+  flex: 1;
+  min-width: 0;
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+}
+
+.recognAction {
+  flex: none;
+  padding: 4rpx 16rpx;
+  border-radius: $radius-round;
+  border: 1rpx solid $color-border;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.recognActionText {
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+}
+
+
 .bottomBar {
   position: fixed;
   left: 0;

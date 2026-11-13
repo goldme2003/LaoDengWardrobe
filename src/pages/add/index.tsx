@@ -1,9 +1,17 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { View, Text, Image, Input, Textarea, Picker } from '@tarojs/components';
 import Taro, { useRouter } from '@tarojs/taro';
 import OptionSelector from '@/components/OptionSelector';
 import BrandPicker from '@/components/BrandPicker';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
+import {
+  recognizePhoto,
+  recognizeAvailable,
+  isAutoRecognizeOn,
+  setAutoRecognize,
+  checkBudget
+} from '@/services/recognize';
+import { RecognizeResult } from '@/services/recognize';
 import {
   LAYER_OPTIONS,
   COLOR_PRESETS,
@@ -72,6 +80,84 @@ const AddItemPage: React.FC = () => {
   const [purchasePhoto, setPurchasePhoto] = useState('');
   const [remark, setRemark] = useState('');
   const [name, setName] = useState('');
+
+  // v1.2 识别功能（PRD 9.3）：自动识别状态与手动入口
+  const [recognizing, setRecognizing] = useState(false);
+  const [recognTip, setRecognTip] = useState('');
+  const recogTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // v1.2：自动识别主图（仅新增模式 + 功能可用 + 开关开启）；800ms 防抖 + 同图结果缓存；
+  // 失败/超时不自动重试（避免浪费调用），提供「重新识别」手动入口（方案 2.3/2.4，Q4 自动触发）
+  const mainPhoto = photos[0] || '';
+  useEffect(() => {
+    if (editing || fromTryoutId) return; // 编辑/备选转正式已有预填，不自动触发
+    if (!recognizeAvailable() || !isAutoRecognizeOn()) return;
+    if (!mainPhoto || /^https?:/.test(mainPhoto)) return; // 示例图为网络图，不上传识别
+    if (checkBudget() === 'exceeded') {
+      setRecognTip('本月识别额度已用尽，下月自动恢复');
+      return;
+    }
+    if (recogTimer.current) clearTimeout(recogTimer.current);
+    setRecognTip('');
+    recogTimer.current = setTimeout(() => {
+      runRecognize(mainPhoto, true);
+    }, 800);
+    return () => {
+      if (recogTimer.current) clearTimeout(recogTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainPhoto]);
+
+  // v1.2：执行识别并预填（仅填充空字段；用户已填/已改的值一律不覆盖，方案 2.4-1）
+  const runRecognize = async (photo: string, silent: boolean) => {
+    if (recognizing) return;
+    setRecognizing(true);
+    setRecognTip('');
+    const outcome = await recognizePhoto(photo);
+    setRecognizing(false);
+    if (outcome.code === 'OK') {
+      applyRecognize(outcome.data);
+      return;
+    }
+    if (outcome.code === 'NO_CLOTHING') {
+      setRecognTip('未识别到衣物，请重新拍摄');
+      if (!silent) Taro.showToast({ title: outcome.message, icon: 'none' });
+      return;
+    }
+    if (outcome.code === 'PRIVACY_DENIED') {
+      setRecognTip('已关闭自动识别');
+      return;
+    }
+    setRecognTip(outcome.code === 'BUDGET_EXCEEDED' ? outcome.message : '识别不可用，请手动填写');
+  };
+
+  const applyRecognize = (data: RecognizeResult) => {
+    setType((prev) => prev || data.category);
+    setLayer((prev) => prev || data.layer);
+    setColor((prev) => prev || data.color);
+    setMaterial((prev) => prev || data.material);
+    setSeasons((prev) => (prev.length > 0 ? prev : data.seasons.slice(0, 2)));
+    setSize((prev) => prev || data.size);
+    setBrand((prev) => prev || data.brand);
+    const extra = [data.careText ? `清洗：${data.careText}` : '', data.remarkExtra || '']
+      .filter(Boolean)
+      .join('；');
+    if (extra) setRemark((prev) => (prev ? prev : extra.slice(0, REMARK_MAX_LEN)));
+    setRecognTip('已自动预填，请核对并修改');
+    if (data.warnings && data.warnings.length > 0) {
+      console.info('[Add] 识别提示', data.warnings);
+    }
+    Taro.showToast({ title: '识别完成，已预填', icon: 'none' });
+  };
+
+  // v1.2：手动重新识别（用户点按触发，受熔断限制但不受自动开关限制）
+  const manualRecognize = () => {
+    if (!mainPhoto || /^https?:/.test(mainPhoto)) {
+      Taro.showToast({ title: '请先拍照或选择本地照片', icon: 'none' });
+      return;
+    }
+    runRecognize(mainPhoto, false);
+  };
 
   // 已有衣物使用过的品牌（下拉前置）
   const usedBrands = useMemo(
@@ -303,6 +389,30 @@ const AddItemPage: React.FC = () => {
           </View>
         </View>
         <Text className={styles.remarkCount}>点击照片设为主图，第 1 张为列表展示图</Text>
+
+        {/* v1.2（PRD 9.3）：自动识别状态行（仅微信端且已配置云环境时展示） */}
+        {recognizeAvailable() && (
+          <View className={styles.recognRow}>
+            <Text className={styles.recognTip}>
+              {recognizing ? '正在识别衣物属性…' : recognTip || '已开启自动识别（主图）'}
+            </Text>
+            <View
+              className={styles.recognAction}
+              onClick={() => {
+                const next = !isAutoRecognizeOn();
+                setAutoRecognize(next);
+                setRecognTip(next ? '' : '已关闭自动识别，可点「重新识别」手动触发');
+              }}
+            >
+              <Text className={styles.recognActionText}>{isAutoRecognizeOn() ? '关闭自动' : '开启自动'}</Text>
+            </View>
+            {!recognizing && (
+              <View className={styles.recognAction} onClick={manualRecognize}>
+                <Text className={styles.recognActionText}>重新识别</Text>
+              </View>
+            )}
+          </View>
+        )}
       </View>
 
       <View className={styles.formCard}>
