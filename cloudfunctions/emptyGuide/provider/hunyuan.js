@@ -56,9 +56,21 @@ function httpsPostJson(urlPath, apiKey, body) {
 
 const GENDER_TEXT = { male: '男性', female: '女性', other: '未指定' };
 
-function buildPrompt(gender, age, wardrobeName) {
-  return `你是一位专业穿搭顾问。用户性别：${GENDER_TEXT[gender] || '未指定'}，年龄：${age} 岁，衣橱「${wardrobeName}」目前为空。
-请给出 1 条简短、具体、可执行的开启衣橱建议，不超过 50 字，并按年龄段调整品类侧重（18 岁以下偏校园，18-30 岁偏通勤/休闲，31-50 岁偏通勤/质感，50 岁以上偏舒适/保暖）。
+/** 天气描述（v1.4.0 C 模块）：有温度用「x~y℃」+ 现象，仅有现象只给现象 */
+function weatherText(w) {
+  if (!w) return '';
+  const parts = [];
+  if (typeof w.low === 'number' && typeof w.high === 'number') parts.push(`${w.low}~${w.high}℃`);
+  if (w.cond) parts.push(w.cond);
+  return parts.join(' ');
+}
+
+function buildPrompt(gender, age, wardrobeName, weather) {
+  const wt = weatherText(weather);
+  const weatherLine = wt ? `\n当前天气：${wt}，建议需适配该天气（温度档位决定厚薄与品类，雨天优先防水/带伞，低温侧重保暖）。`
+    : '';
+  return `你是一位专业穿搭顾问。用户性别：${GENDER_TEXT[gender] || '未指定'}，年龄：${age} 岁，衣橱「${wardrobeName}」目前为空。${weatherLine}
+请给出 1 条简短、具体、可执行的开启衣橱建议（着装方向），不超过 50 字，并按年龄段调整品类侧重（18 岁以下偏校园，18-30 岁偏通勤/休闲，31-50 岁偏通勤/质感，50 岁以上偏舒适/保暖）。
 只输出 JSON，不要输出其他文字，格式：{"tips":["建议内容"]}`;
 }
 
@@ -66,7 +78,7 @@ function buildPrompt(gender, age, wardrobeName) {
  * 生成空衣橱引导文案
  * @returns {Promise<string[]>} 1 条建议（解析失败抛错，由调用方降级）
  */
-async function callHunyuanGuide(gender, age, wardrobeName) {
+async function callHunyuanGuide(gender, age, wardrobeName, weather) {
   const apiKey = process.env.HUNYUAN_API_KEY || loadLocalKey();
   if (!apiKey) {
     throw new Error('MISSING_SECRET: 未配置 HUNYUAN_API_KEY（环境变量或 private.config.json）');
@@ -75,7 +87,7 @@ async function callHunyuanGuide(gender, age, wardrobeName) {
     model: process.env.HUNYUAN_MODEL || 'hy4',
     messages: [
       { role: 'system', content: '你只输出严格 JSON，不输出解释性文字。' },
-      { role: 'user', content: buildPrompt(gender, age, wardrobeName) }
+      { role: 'user', content: buildPrompt(gender, age, wardrobeName, weather) }
     ],
     temperature: 0.7,
     max_tokens: 200

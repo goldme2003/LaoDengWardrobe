@@ -22,6 +22,13 @@
 .desc {
   font-size: $font-size-md;
   color: $color-text-tertiary;
+  margin-bottom: $spacing-sm;
+}
+
+/* v1.4.0：次级引导提示（添加衣物获取更精准推荐） */
+.hint {
+  font-size: $font-size-sm;
+  color: $color-text-disabled;
   margin-bottom: $spacing-lg;
 }
 

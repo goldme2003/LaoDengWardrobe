@@ -200,21 +200,25 @@ const WardrobePage: React.FC = () => {
   const showAccordion = !planMode && !isFiltering && currentItems.length > 0 && filtered.length > 0;
 
   // v1.2.1：空衣橱时加载专属引导文案（性别/年龄取自当前衣橱主人，PRD 9.1.2）
+  // v1.4.0（C 模块天气增强）：天气加载完成后再请求引导，传入当前天气生成天气适配建议；
+  // 天气失败（weatherFailed）时降级为无天气上下文，引导照常展示
   const emptyGender = currentWardrobe?.gender;
   const emptyAge = currentWardrobe?.age ?? null;
+  const weatherResolved = weather !== null || weatherFailed;
   useEffect(() => {
     if (currentItems.length > 0 || isFiltering) {
       setEmptyGuideTip('');
       return;
     }
+    if (!weatherResolved) return; // 等天气首次加载完成（成功或失败）再取建议
     let alive = true;
-    getEmptyGuide(emptyGender, emptyAge).then((tip) => {
+    getEmptyGuide(emptyGender, emptyAge, weather).then((tip) => {
       if (alive) setEmptyGuideTip(tip);
     });
     return () => {
       alive = false;
     };
-  }, [currentItems.length, isFiltering, emptyGender, emptyAge]);
+  }, [currentItems.length, isFiltering, emptyGender, emptyAge, weatherResolved, weather]);
 
   // v1.1：listGroups 的 ref 同步（滚动/定位回调中读取，避免闭包过期）
   const listGroupsRef = useRef(listGroups);
@@ -448,6 +452,7 @@ const WardrobePage: React.FC = () => {
               icon='🧥'
               title='这个衣橱还空着'
               desc={emptyGuideTip || '拍几张照片，记录第一件衣物吧'}
+              hint='添加自有衣物后，可按你的身材与当前天气获取更精准的个性化推荐'
               actionText='添加衣物'
               onAction={goAdd}
             />
