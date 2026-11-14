@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "openapi": []
+  },
+  "name": "emptyGuide",
+  "version": "1.0.0",
+  "description": "空衣橱专属引导文案（混元动态生成 + 兜底）",
+  "main": "index.js",
+  "dependencies": {}
+}

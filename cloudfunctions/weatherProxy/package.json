@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "openapi": []
+  },
+  "name": "weatherProxy",
+  "version": "1.0.0",
+  "description": "天气代理（腾讯位置服务逆地理 + 和风天气，密钥不下发前端）",
+  "main": "index.js",
+  "dependencies": {}
+}
