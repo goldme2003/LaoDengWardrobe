@@ -38,12 +38,13 @@
 6. **禁止** 改写已推送的提交（对已推送提交做 `rebase`、`commit --amend`）、删除或覆盖远端已有内容。
 7. 提交信息遵循 Conventional Commits 前缀 + 中文描述，例如
    `feat: 新增衣物筛选`、`docs: 更新 PRD v0.3`、`fix: 修复照片组上传失败`。
+8. **可预览版本推送约定（v1.2.0 起确认）**：每次经测试确认无 bug 的可预览版本，必须推送至 `origin/untested`；`package.json` 的 `version` 同步升版，开发日志追加条目并同步文件名版本号。
 
 ## 分支说明
 
 | 分支 | 用途 | 说明 |
 | --- | --- | --- |
-| `untested` | 日常开发与预览版本 | v0.1.0-alpha 起，含 `src/`、`config/` 全部源码；推送到此 |
+| `untested` | 日常开发与预览版本 | v0.1.0-alpha 起，含 `src/`、`config/`、`cloudfunctions/` 全部源码；当前最新版本 v1.2.0；推送到此 |
 | `main` | 文档基线 + 版本快照 | `docs/`、`.gitignore`、`AGENTS.md`；另承载经用户确认的版本快照（当前 v1.0.0 正式发布版，由 `untested` 合入）；日常开发仍在 `untested` |
 
 ## 网络与环境
