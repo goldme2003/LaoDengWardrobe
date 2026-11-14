@@ -154,6 +154,10 @@ export interface WeatherInfo {
   city: string;
   today: WeatherDay;
   days: WeatherDay[];
+  /** v1.2.1：true 表示云端不可用、回退的本地模拟数据（用于界面角标提示） */
+  mock?: boolean;
+  /** v1.2.1：云端不可用原因（仅 mock = true 时有值，供诊断展示） */
+  notice?: string;
 }
 
 /** 新建衣物入参（必填属性在保存时校验；尺码/品牌/场合/购入信息为选填扩展属性） */

@@ -9,7 +9,9 @@ import ItemCard from '@/components/ItemCard';
 import EmptyState from '@/components/EmptyState';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
 import { getWeather } from '@/services/weather';
-import { CITY_OPTIONS, DEFAULT_CITY } from '@/data/mockWeather';
+import { getEmptyGuide } from '@/services/emptyGuide';
+import { DEFAULT_CITY } from '@/data/mockWeather';
+import { CITY_GROUPS } from '@/data/cities';
 import { COLOR_PRESETS, MATERIAL_PRESETS, themeVarsOf, getThemeById } from '@/data/presets';
 import { ClothingItem, WeatherInfo } from '@/types';
 import styles from './index.module.scss';
@@ -47,6 +49,8 @@ const WardrobePage: React.FC = () => {
   const [switcherOpen, setSwitcherOpen] = useState(false);
   // v1.1：侧边标签栏选中类型（随滚动联动/手风琴展开收起同步更新）
   const [activeType, setActiveType] = useState('');
+  // v1.2.1：空衣橱专属引导文案（云函数按性别/年龄动态生成，失败用兜底）
+  const [emptyGuideTip, setEmptyGuideTip] = useState('');
 
   // 滚动联动状态（用 ref，避免高频渲染）
   const lastScrollTop = useRef(0);
@@ -194,6 +198,23 @@ const WardrobePage: React.FC = () => {
     filters.color || filters.material || filters.seasons.length > 0 || filters.onlyFavorite;
   // v0.7：手风琴分组展示条件（无筛选 + 非明日穿搭模式 + 有衣物）
   const showAccordion = !planMode && !isFiltering && currentItems.length > 0 && filtered.length > 0;
+
+  // v1.2.1：空衣橱时加载专属引导文案（性别/年龄取自当前衣橱主人，PRD 9.1.2）
+  const emptyGender = currentWardrobe?.gender;
+  const emptyAge = currentWardrobe?.age ?? null;
+  useEffect(() => {
+    if (currentItems.length > 0 || isFiltering) {
+      setEmptyGuideTip('');
+      return;
+    }
+    let alive = true;
+    getEmptyGuide(emptyGender, emptyAge).then((tip) => {
+      if (alive) setEmptyGuideTip(tip);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [currentItems.length, isFiltering, emptyGender, emptyAge]);
 
   // v1.1：listGroups 的 ref 同步（滚动/定位回调中读取，避免闭包过期）
   const listGroupsRef = useRef(listGroups);
@@ -343,7 +364,7 @@ const WardrobePage: React.FC = () => {
         weather={weather}
         loading={weatherLoading}
         failed={weatherFailed}
-        cityOptions={CITY_OPTIONS}
+        cityGroups={CITY_GROUPS}
         activeCity={activeCity}
         onSelectCity={(c) => {
           setCity(c);
@@ -425,8 +446,8 @@ const WardrobePage: React.FC = () => {
           {currentItems.length === 0 && !isFiltering ? (
             <EmptyState
               icon='🧥'
-              title='衣橱还是空的'
-              desc='拍几张照片，记录第一件衣物吧'
+              title='这个衣橱还空着'
+              desc={emptyGuideTip || '拍几张照片，记录第一件衣物吧'}
               actionText='添加衣物'
               onAction={goAdd}
             />

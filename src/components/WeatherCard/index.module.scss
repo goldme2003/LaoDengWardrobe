@@ -35,7 +35,22 @@
   color: $color-error;
 }
 
-// v0.6：切换城市按钮（拨盘选择器触发），紧凑化后移入首行右侧
+// v1.2.1：模拟数据角标（云端不可用回退提示）
+.mockBadge {
+  font-size: $font-size-xs;
+  color: #b26a00;
+  background: rgba(255, 196, 106, 0.28);
+  border-radius: $radius-round;
+  padding: 2rpx 12rpx;
+  margin-right: $spacing-sm;
+  flex-shrink: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 300rpx;
+}
+
+// v0.6：切换城市按钮，紧凑化后移入首行右侧
 .citySwitch {
   margin-left: auto;
   display: flex;
@@ -44,6 +59,114 @@
   border-radius: $radius-round;
   padding: 6rpx 16rpx;
   flex-shrink: 0;
+}
+
+// ---------- v1.3.0：城市选择弹层（≤1/3 屏高，拼音首字母分组） ----------
+.sheetMask {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.sheet {
+  background: #fff;
+  border-radius: 24rpx 24rpx 0 0;
+  // 面板高度不超过屏幕 1/3（含标题行）
+  max-height: 33vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sheetHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 28rpx 8rpx;
+  flex-shrink: 0;
+}
+
+.sheetTitle {
+  font-size: $font-size-md;
+  font-weight: $font-weight-semibold;
+  color: $color-text-primary;
+}
+
+.sheetClose {
+  font-size: $font-size-sm;
+  color: var(--w-weather-accent, #2f6f5e);
+  padding: 4rpx 12rpx;
+}
+
+.sheetBody {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.sheetScroll {
+  flex: 1;
+  min-height: 0;
+  max-height: calc(33vh - 88rpx);
+  padding: 0 0 24rpx 28rpx;
+  box-sizing: border-box;
+}
+
+.group {
+  margin-top: 12rpx;
+}
+
+.groupLetter {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  font-weight: $font-weight-semibold;
+}
+
+.groupGrid {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 8rpx;
+}
+
+.cityCell {
+  width: 148rpx;
+  margin: 0 16rpx 12rpx 0;
+  padding: 10rpx 0;
+  text-align: center;
+  font-size: $font-size-sm;
+  color: $color-text-primary;
+  background: #f5f6f8;
+  border-radius: $radius-sm;
+}
+
+.cityCellActive {
+  color: #fff;
+  background: var(--w-weather-accent, #2f6f5e);
+  font-weight: $font-weight-semibold;
+}
+
+.indexBar {
+  width: 48rpx;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8rpx 0 16rpx;
+  background: #fafafa;
+}
+
+.indexLetter {
+  font-size: 20rpx;
+  color: $color-text-tertiary;
+  line-height: 1.5;
 }
 
 .citySwitchText {
