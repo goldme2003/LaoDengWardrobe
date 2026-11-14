@@ -1,0 +1,45 @@
+@use '@/styles/variables.scss' as *;
+
+// 固定悬浮于页面右侧、垂直居中的类型索引栏
+.wrap {
+  position: fixed;
+  right: 8rpx;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  padding: 10rpx 6rpx;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(8rpx);
+  border-radius: $radius-round;
+  box-shadow: $shadow-card;
+  max-height: 62vh;
+  box-sizing: border-box;
+}
+
+.item {
+  padding: 10rpx 14rpx;
+  border-radius: $radius-round;
+
+  &:active {
+    opacity: 0.75;
+  }
+}
+
+.itemActive {
+  background: var(--w-color, $color-primary);
+}
+
+.text {
+  font-size: 22rpx;
+  line-height: 1.2;
+  color: var(--w-text2, $color-text-secondary);
+  writing-mode: horizontal-tb;
+  white-space: nowrap;
+}
+
+.textActive {
+  color: $color-text-white;
+  font-weight: $font-weight-semibold;
+}

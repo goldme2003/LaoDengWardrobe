@@ -1,6 +1,6 @@
 {
   "name": "laodeng-wardrobe",
-  "version": "1.0.0",
+  "version": "1.2.1",
   "private": true,
   "description": "老登衣柜：个人衣物管理微信小程序，支持多衣橱分类、着装日记与明日穿搭推荐。",
   "templateInfo": {

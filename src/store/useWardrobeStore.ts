@@ -101,6 +101,9 @@ const loadData = (): LdwData => {
         console.info('[Store] 旧版身体数据已迁移到当前衣橱');
       }
       stored.bodyProfiles = bodyProfiles;
+      // v1.1：旧数据缺字段兜底，避免异常数据导致页面崩溃
+      stored.customOptions = stored.customOptions || [];
+      stored.counters = stored.counters || {};
       stored.favoriteBrands = stored.favoriteBrands || [];
       stored.tryoutItems = stored.tryoutItems || [];
       stored.diaryEntries = stored.diaryEntries || [];

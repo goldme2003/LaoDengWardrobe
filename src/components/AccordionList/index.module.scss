@@ -55,6 +55,7 @@
   justify-content: space-between;
 }
 
+// v1.1：一行两列网格，宽度按百分比自适应（适配不同屏幕宽度，避免溢出/错位）
 .gridItem {
-  width: 327rpx;
+  width: calc((100% - 24rpx) / 2);
 }

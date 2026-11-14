@@ -35,7 +35,7 @@ const AccordionList: React.FC<Props> = ({
   onToggleFavorite
 }) => {
   return (
-    <View className={styles.wrap}>
+    <View className={`${styles.wrap} ldw-acc-wrap`}>
       {groups.map((g) => {
         const collapsed = !!collapsedMap[g.type];
         return (

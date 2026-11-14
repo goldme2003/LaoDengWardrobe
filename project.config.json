@@ -3,7 +3,7 @@
   "cloudfunctionRoot": "cloudfunctions/",
   "projectname": "laodeng-wardrobe",
   "description": "老登衣柜：个人衣物管理微信小程序",
-  "appid": "touristappid",
+  "appid": "wxe42fe1ecc2645be1",
   "setting": {
     "urlCheck": true,
     "es6": false,
@@ -17,10 +17,25 @@
     "coverView": true,
     "showShadowRootInWxmlPanel": false,
     "scopeDataCheck": false,
-    "useCompilerModule": false
+    "useCompilerModule": false,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
   },
   "compileType": "miniprogram",
   "simulatorType": "wechat",
   "simulatorPluginLibVersion": {},
-  "condition": {}
+  "condition": {},
+  "libVersion": "3.18.0",
+  "srcMiniprogramRoot": "dist/",
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "editorSetting": {
+    "tabIndent": "insertSpaces",
+    "tabSize": 2
+  }
 }

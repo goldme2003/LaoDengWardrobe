@@ -4,14 +4,52 @@
   padding: $spacing-lg $page-padding 160rpx;
 }
 
+// v1.1：上部衣橱切换区 = 横向切换器 + 「切换衣橱」按钮
+// 注意：类名使用 ward 前缀，避免与衣橱管理页（pages/wardrobes）同名类冲突
+.wardSwitcherRow {
+  display: flex;
+  align-items: flex-start;
+}
+
+.wardSwitcherSlot {
+  flex: 1;
+  min-width: 0;
+}
+
+.wardSwitchBtn {
+  flex: none;
+  width: fit-content;
+  position: relative;
+  z-index: 1;
+  margin-left: $spacing-sm;
+  margin-top: $spacing-xs;
+  height: 64rpx;
+  padding: 0 $spacing-md;
+  border-radius: $radius-round;
+  background: var(--w-color, $color-primary);
+  display: flex;
+  align-items: center;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.wardSwitchBtnText {
+  font-size: $font-size-sm;
+  color: $color-text-white;
+  white-space: nowrap;
+}
+
 .grid {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
 }
 
+// v1.1：一行两列网格，宽度按百分比自适应（适配不同屏幕宽度，避免溢出/错位）
 .gridItem {
-  width: 327rpx;
+  width: calc((100% - 24rpx) / 2);
 }
 
 // v0.7：再点「衣柜」标签弹出的衣橱切换底部弹层（样式与「我的」页弹层一致）
@@ -33,6 +71,28 @@
   border-radius: $radius-lg $radius-lg 0 0;
   padding: $spacing-lg $spacing-lg calc($spacing-lg + env(safe-area-inset-bottom));
   box-sizing: border-box;
+}
+
+.sheetHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: $spacing-md;
+}
+
+.sheetManage {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.sheetManageText {
+  font-size: $font-size-sm;
+  color: var(--w-primary, $color-primary);
+}
+
+.sheetHead .sheetTitle {
+  margin-bottom: 0;
 }
 
 .sheetTitle {
