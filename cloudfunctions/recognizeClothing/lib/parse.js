@@ -139,6 +139,8 @@ function buildAttributes(vision, ocrText, opts) {
   const result = {
     category,
     color,
+    // 方案 2.3 返回结构要求 colors[]；保留单值 color 兼容既有表单控件
+    colors: color ? [color] : [],
     layer,
     seasons,
     material,
@@ -147,6 +149,13 @@ function buildAttributes(vision, ocrText, opts) {
     careText,
     compositionText,
     confidence: conf,
+    // 方案 2.3 返回结构要求 confidence{}（分字段置信度；当前模型仅给出品类整体置信度）
+    confidenceMap: {
+      category: conf,
+      color: conf,
+      layer: conf,
+      overall: conf
+    },
     warnings
   };
   // 材质未映射成功时把成分原文交给备注

@@ -51,9 +51,18 @@ async function downloadAsBase64(fileID) {
 
 exports.main = async (event) => {
   const started = Date.now();
-  // 连通性探测（部署联调用）
+  // 连通性探测（部署联调/排障用）：一次性返回关键配置与部署自检信息
   if (event.action === 'ping') {
-    return { code: 'OK', hasSecret: !!process.env.TENCENT_SECRET_ID, budget: MONTHLY_BUDGET };
+    return {
+      code: 'OK',
+      hasSecret: !!process.env.TENCENT_SECRET_ID,
+      hasHunyuanKey: !!process.env.HUNYUAN_API_KEY,
+      hasOcrKeys: !!(process.env.TENCENT_SECRET_ID && process.env.TENCENT_SECRET_KEY),
+      model: process.env.HUNYUAN_MODEL || 'hy4',
+      endpoint: 'tokenhub.tencentmaas.com/v1/chat/completions',
+      budget: MONTHLY_BUDGET,
+      usage: await getUsage(`${new Date().getFullYear()}-${new Date().getMonth() + 1}`)
+    };
   }
 
   if (!event.imageFileID) {

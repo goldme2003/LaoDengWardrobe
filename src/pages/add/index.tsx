@@ -113,7 +113,12 @@ const AddItemPage: React.FC = () => {
     if (recognizing) return;
     setRecognizing(true);
     setRecognTip('');
+    // 方案 2.4-2：5s 未返回时给出「可继续手动填写」提示，不中断请求、不阻塞录入
+    const slowTimer = setTimeout(() => {
+      setRecognTip('识别较慢，可继续手动填写（完成后自动预填）');
+    }, 5000);
     const outcome = await recognizePhoto(photo);
+    clearTimeout(slowTimer);
     setRecognizing(false);
     if (outcome.code === 'OK') {
       applyRecognize(outcome.data);
@@ -128,13 +133,17 @@ const AddItemPage: React.FC = () => {
       setRecognTip('已关闭自动识别');
       return;
     }
-    setRecognTip(outcome.code === 'BUDGET_EXCEEDED' ? outcome.message : '识别不可用，请手动填写');
+    if (outcome.code === 'BUDGET_EXCEEDED' || outcome.code === 'NOT_DEPLOYED') {
+      setRecognTip(outcome.message);
+      return;
+    }
+    setRecognTip(outcome.code === 'NOT_CONFIGURED' ? '识别服务未配置，请联系维护者' : '识别不可用，请手动填写');
   };
 
   const applyRecognize = (data: RecognizeResult) => {
     setType((prev) => prev || data.category);
     setLayer((prev) => prev || data.layer);
-    setColor((prev) => prev || data.color);
+    setColor((prev) => prev || data.color || (data.colors && data.colors[0]) || '');
     setMaterial((prev) => prev || data.material);
     setSeasons((prev) => (prev.length > 0 ? prev : data.seasons.slice(0, 2)));
     setSize((prev) => prev || data.size);
@@ -143,7 +152,8 @@ const AddItemPage: React.FC = () => {
       .filter(Boolean)
       .join('；');
     if (extra) setRemark((prev) => (prev ? prev : extra.slice(0, REMARK_MAX_LEN)));
-    setRecognTip('已自动预填，请核对并修改');
+    const warn = data.warnings && data.warnings.length > 0 ? data.warnings[0] : '';
+    setRecognTip(warn ? `已预填，注意：${warn}` : '已自动预填，请核对并修改');
     if (data.warnings && data.warnings.length > 0) {
       console.info('[Add] 识别提示', data.warnings);
     }
@@ -388,7 +398,7 @@ const AddItemPage: React.FC = () => {
             <Text className={styles.actionBtnText}>添加示例照片</Text>
           </View>
         </View>
-        <Text className={styles.remarkCount}>点击照片设为主图，第 1 张为列表展示图</Text>
+        <Text className={styles.remarkCount}>点击照片设为主图，第 1 张为列表展示图；识别按当前主图进行</Text>
 
         {/* v1.2（PRD 9.3）：自动识别状态行（仅微信端且已配置云环境时展示） */}
         {recognizeAvailable() && (

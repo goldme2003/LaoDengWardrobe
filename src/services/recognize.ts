@@ -14,6 +14,8 @@ import {
 export interface RecognizeResult {
   category: string;
   color: string;
+  /** 方案 2.3：颜色数组（主色在前）；color 单值保留用于表单控件 */
+  colors?: string[];
   layer: string;
   seasons: string[];
   material: string;
@@ -22,6 +24,8 @@ export interface RecognizeResult {
   careText: string;
   compositionText: string;
   confidence: number;
+  /** 方案 2.3：分字段置信度 */
+  confidenceMap?: Record<string, number>;
   warnings: string[];
   remarkExtra?: string;
 }
@@ -30,6 +34,7 @@ type FailureCode =
   | 'NO_CLOTHING'
   | 'BUDGET_EXCEEDED'
   | 'NOT_CONFIGURED'
+  | 'NOT_DEPLOYED'
   | 'RECOGNIZE_FAILED'
   | 'UNAVAILABLE'
   | 'PRIVACY_DENIED';
@@ -41,6 +46,9 @@ const CACHE_KEY = 'ldw_recognize_cache';
 const AUTO_SWITCH_KEY = 'ldw_recognize_auto';
 const PRIVACY_KEY = 'ldw_recognize_privacy_ok';
 const CACHE_MAX = 20;
+/** 方案 2.3：上传压缩图 ≤1MB、长边 ≤1280px */
+const MAX_UPLOAD_BYTES = 1024 * 1024;
+const MAX_EDGE = 1280;
 
 let cloudInited = false;
 function initCloud(): boolean {
@@ -152,6 +160,92 @@ function cacheKeyOf(path: string): string {
   return path.split('/').pop() || path;
 }
 
+export interface PreparedImage {
+  path: string;
+  width: number;
+  height: number;
+  sizeKB: number;
+  compressed: boolean;
+}
+
+/** 读取文件大小（字节）；失败返回 0（不阻塞） */
+function fileSizeOf(filePath: string): Promise<number> {
+  return new Promise((resolve) => {
+    try {
+      Taro.getFileSystemManager().getFileInfo({
+        filePath,
+        success: (r: { size?: number }) => resolve(Number(r.size) || 0),
+        fail: () => resolve(0)
+      } as never);
+    } catch (e) {
+      resolve(0);
+    }
+  });
+}
+
+/**
+ * 方案 2.3：上传前校验并压缩图片（长边 ≤1280px、体积 ≤1MB）
+ * 任一步失败都回退原图，不阻塞识别
+ */
+export async function prepareImage(photoPath: string): Promise<PreparedImage> {
+  let width = 0;
+  let height = 0;
+  try {
+    const info = await Taro.getImageInfo({ src: photoPath });
+    width = info.width;
+    height = info.height;
+  } catch (e) {
+    console.warn('[Recognize] 读取图片信息失败，按原图上传', e);
+  }
+  let path = photoPath;
+  let compressed = false;
+  const longEdge = Math.max(width, height);
+  if (longEdge > MAX_EDGE) {
+    try {
+      const scale = MAX_EDGE / longEdge;
+      const res = await Taro.compressImage({
+        src: photoPath,
+        quality: 80,
+        compressedWidth: Math.round(width * scale),
+        compressedHeight: Math.round(height * scale)
+      } as never);
+      path = (res as { tempFilePath?: string }).tempFilePath || photoPath;
+      compressed = path !== photoPath;
+    } catch (e) {
+      console.warn('[Recognize] 尺寸压缩失败，按原图上传', e);
+    }
+  }
+  let size = await fileSizeOf(path);
+  if (size > MAX_UPLOAD_BYTES) {
+    try {
+      const res2 = await Taro.compressImage({ src: path, quality: 50 } as never);
+      const next = (res2 as { tempFilePath?: string }).tempFilePath;
+      if (next) {
+        path = next;
+        compressed = true;
+        size = await fileSizeOf(path);
+      }
+    } catch (e) {
+      console.warn('[Recognize] 体积压缩失败，按当前文件上传', e);
+    }
+  }
+  return { path, width, height, sizeKB: Math.round(size / 1024), compressed };
+}
+
+/** 区分「云函数未部署」与普通识别失败，便于排障 */
+function classifyCallError(e: unknown): FailureCode {
+  const raw = String(
+    (e as { errMsg?: string; message?: string; errCode?: number })?.errMsg ||
+      (e as { message?: string })?.message ||
+      e
+  );
+  if (/FunctionName|FunctionNotFound|-501000|env.*not.*exist|INVALID_ENV|Cloud API isn't enabled/i.test(raw)) {
+    return 'NOT_DEPLOYED';
+  }
+  return 'RECOGNIZE_FAILED';
+}
+
+
 /**
  * 识别单张照片（微信端）：上传云存储 → 云函数 → 结构化结果
  * 失败不抛异常，返回带 code 的结果对象，由调用方决定提示方式（方案 2.4-3）
@@ -175,17 +269,32 @@ export async function recognizePhoto(photoPath: string): Promise<RecognizeOutcom
     return { code: 'PRIVACY_DENIED', message: '已取消自动识别' };
   }
   try {
-    // 上传压缩图至云存储（临时文件 → cloud://）
-    const cloudPath = `recognize/${Date.now()}_${Math.floor(Math.random() * 1e6)}.jpg`;
-    const up = await Taro.cloud.uploadFile({ cloudPath, filePath: photoPath });
+    // 上传前压缩校验（≤1MB、长边 ≤1280），再上传云存储（临时文件 → cloud://）
+    const prepared = await prepareImage(photoPath);
+    const ext = /\.png$/i.test(prepared.path) ? 'png' : 'jpg';
+    const cloudPath = `recognize/${Date.now()}_${Math.floor(Math.random() * 1e6)}.${ext}`;
+    const up = await Taro.cloud.uploadFile({ cloudPath, filePath: prepared.path });
     if (!up.fileID) throw new Error('upload failed');
-
-    const res = await Taro.cloud.callFunction({
-      name: RECOGNIZE_FN_NAME,
-      data: { imageFileID: up.fileID }
+    console.info('[Recognize] 图片就绪', {
+      sizeKB: prepared.sizeKB,
+      compressed: prepared.compressed,
+      edge: `${prepared.width}x${prepared.height}`
     });
-    const result = (res.result || {}) as { code: string; message?: string; data?: RecognizeResult };
-    console.info('[Recognize] 云函数返回, code =', result.code, 'elapsed =', (res as unknown as { elapsed?: number }).elapsed);
+
+    let result: { code: string; message?: string; data?: RecognizeResult };
+    try {
+      const res = await Taro.cloud.callFunction({
+        name: RECOGNIZE_FN_NAME,
+        data: { imageFileID: up.fileID }
+      });
+      result = (res.result || {}) as { code: string; message?: string; data?: RecognizeResult };
+      console.info('[Recognize] 云函数返回, code =', result.code, 'elapsed =', (res as unknown as { elapsed?: number }).elapsed);
+    } finally {
+      // 识别完成即删除云端临时图片，避免云存储累积（不影响结果）
+      Taro.cloud.deleteFile({ fileList: [up.fileID] }).catch((err: unknown) => {
+        console.warn('[Recognize] 临时文件清理失败（不影响识别）', err);
+      });
+    }
 
     if (result.code === 'OK' && result.data) {
       incrLocalUsage();
@@ -198,6 +307,10 @@ export async function recognizePhoto(photoPath: string): Promise<RecognizeOutcom
     };
   } catch (e) {
     console.error('[Recognize] 识别调用失败', e);
-    return { code: 'RECOGNIZE_FAILED', message: '识别失败，请手动填写' };
+    const code = classifyCallError(e);
+    return {
+      code,
+      message: code === 'NOT_DEPLOYED' ? '识别服务未部署（云函数 recognizeClothing）' : '识别失败，请手动填写'
+    };
   }
 }

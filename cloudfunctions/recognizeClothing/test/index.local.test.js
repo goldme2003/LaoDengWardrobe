@@ -132,9 +132,11 @@ function reset() {
     const r = await cloudFn.main({ imageFileID: 'cloud://ok.jpg' });
     assert.strictEqual(r.code, 'OK');
     const d = r.data;
-    const want = ['category', 'color', 'layer', 'seasons', 'material', 'size', 'brand', 'careText', 'compositionText', 'confidence', 'warnings'];
+    const want = ['category', 'color', 'colors', 'layer', 'seasons', 'material', 'size', 'brand', 'careText', 'compositionText', 'confidence', 'confidenceMap', 'warnings'];
     const missing = want.filter((k) => !(k in d));
     assert.strictEqual(missing.length, 0, `data 缺字段: ${missing.join(',')}`);
+    assert.deepStrictEqual(d.colors, ['藏青'], `colors=${JSON.stringify(d.colors)}`);
+    assert.strictEqual(d.confidenceMap.category, 0.92, `confidenceMap=${JSON.stringify(d.confidenceMap)}`);
     assert.strictEqual(d.category, '上装', `T恤→上装, 实际=${d.category}`);
     assert.strictEqual(d.color, '藏青');
     assert.strictEqual(d.layer, '外穿');
@@ -231,8 +233,11 @@ function reset() {
     const r = await cloudFn.main({ action: 'ping' });
     assert.strictEqual(r.code, 'OK');
     assert.strictEqual(typeof r.hasSecret, 'boolean');
+    assert.strictEqual(typeof r.hasHunyuanKey, 'boolean');
     assert.strictEqual(r.budget, 50);
-    // 已知问题：hasSecret 只检查 TENCENT_SECRET_ID，不反映 HUNYUAN_API_KEY（测试方案 A1 判定标准已注明）
+    assert.strictEqual(r.model, 'hy4');
+    // 已知问题 ISSUE-A1-01 已修复：ping 现同时返回 hasHunyuanKey，可探测混元密钥是否配置
+    assert.strictEqual(r.hasHunyuanKey, false, '本地未设置 HUNYUAN_API_KEY');
     assert.strictEqual(r.hasSecret, true, 'mock 环境仅设置了 TENCENT_SECRET_ID');
   });
 
