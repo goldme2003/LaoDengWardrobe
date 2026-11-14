@@ -10,7 +10,8 @@ import EmptyState from '@/components/EmptyState';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
 import { getWeather } from '@/services/weather';
 import { getEmptyGuide } from '@/services/emptyGuide';
-import { CITY_OPTIONS, DEFAULT_CITY } from '@/data/mockWeather';
+import { DEFAULT_CITY } from '@/data/mockWeather';
+import { CITY_GROUPS } from '@/data/cities';
 import { COLOR_PRESETS, MATERIAL_PRESETS, themeVarsOf, getThemeById } from '@/data/presets';
 import { ClothingItem, WeatherInfo } from '@/types';
 import styles from './index.module.scss';
@@ -363,7 +364,7 @@ const WardrobePage: React.FC = () => {
         weather={weather}
         loading={weatherLoading}
         failed={weatherFailed}
-        cityOptions={CITY_OPTIONS}
+        cityGroups={CITY_GROUPS}
         activeCity={activeCity}
         onSelectCity={(c) => {
           setCity(c);
