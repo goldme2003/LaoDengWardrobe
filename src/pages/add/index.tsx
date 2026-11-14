@@ -133,11 +133,18 @@ const AddItemPage: React.FC = () => {
       setRecognTip('已关闭自动识别');
       return;
     }
-    if (outcome.code === 'BUDGET_EXCEEDED' || outcome.code === 'NOT_DEPLOYED') {
+    if (
+      outcome.code === 'BUDGET_EXCEEDED' ||
+      outcome.code === 'NOT_DEPLOYED' ||
+      outcome.code === 'NOT_CONFIGURED' ||
+      outcome.code === 'TIMEOUT' ||
+      outcome.code === 'RECOGNIZE_FAILED'
+    ) {
+      // 直接展示云函数回传的分阶段原因，便于真机排障
       setRecognTip(outcome.message);
       return;
     }
-    setRecognTip(outcome.code === 'NOT_CONFIGURED' ? '识别服务未配置，请联系维护者' : '识别不可用，请手动填写');
+    setRecognTip('识别不可用，请手动填写');
   };
 
   const applyRecognize = (data: RecognizeResult) => {

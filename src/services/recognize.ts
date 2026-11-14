@@ -35,6 +35,7 @@ type FailureCode =
   | 'BUDGET_EXCEEDED'
   | 'NOT_CONFIGURED'
   | 'NOT_DEPLOYED'
+  | 'TIMEOUT'
   | 'RECOGNIZE_FAILED'
   | 'UNAVAILABLE'
   | 'PRIVACY_DENIED';
@@ -242,6 +243,10 @@ function classifyCallError(e: unknown): FailureCode {
   if (/FunctionName|FunctionNotFound|-501000|env.*not.*exist|INVALID_ENV|Cloud API isn't enabled/i.test(raw)) {
     return 'NOT_DEPLOYED';
   }
+  // 云函数超时（默认 3s 时必现）/ 网络超时
+  if (/time out|timeout|-504003|CLIENT_TIMEOUT/i.test(raw)) {
+    return 'TIMEOUT';
+  }
   return 'RECOGNIZE_FAILED';
 }
 
@@ -283,10 +288,17 @@ export async function recognizePhoto(photoPath: string): Promise<RecognizeOutcom
 
     let result: { code: string; message?: string; data?: RecognizeResult };
     try {
-      const res = await Taro.cloud.callFunction({
+      // 客户端 30s 硬超时：避免平台超时后 UI 长时间无响应
+      const callTask = Taro.cloud.callFunction({
         name: RECOGNIZE_FN_NAME,
         data: { imageFileID: up.fileID }
       });
+      const res = await Promise.race([
+        callTask,
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('CLIENT_TIMEOUT')), 30000);
+        })
+      ]);
       result = (res.result || {}) as { code: string; message?: string; data?: RecognizeResult };
       console.info('[Recognize] 云函数返回, code =', result.code, 'elapsed =', (res as unknown as { elapsed?: number }).elapsed);
     } finally {
@@ -308,9 +320,12 @@ export async function recognizePhoto(photoPath: string): Promise<RecognizeOutcom
   } catch (e) {
     console.error('[Recognize] 识别调用失败', e);
     const code = classifyCallError(e);
-    return {
-      code,
-      message: code === 'NOT_DEPLOYED' ? '识别服务未部署（云函数 recognizeClothing）' : '识别失败，请手动填写'
-    };
+    const message =
+      code === 'NOT_DEPLOYED'
+        ? '识别服务未部署（云函数 recognizeClothing）'
+        : code === 'TIMEOUT'
+          ? '识别超时，请重试或手动填写'
+          : '识别失败，请手动填写';
+    return { code, message };
   }
 }

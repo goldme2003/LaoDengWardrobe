@@ -79,11 +79,14 @@ exports.main = async (event) => {
     return { code: 'BUDGET_EXCEEDED', message: '本月识别额度已用尽，下月自动恢复', usage: { month: monthKey, estCost } };
   }
 
+  let stage = 'init';
   try {
     // ② 下载图片
+    stage = 'download';
     const imageBase64 = await downloadAsBase64(event.imageFileID);
 
     // ③ 混元视觉：含衣判定 + 品类/颜色/内外穿/季节 + 吊牌检测
+    stage = 'vision';
     const vision = await callHunyuanVision(imageBase64);
 
     // ④ 非衣物 → 明确提示（验收：误报率 ≤5%）
@@ -114,6 +117,7 @@ exports.main = async (event) => {
     }
 
     // ⑥ 属性映射与置信度过滤（<0.6 的品类不预填）
+    stage = 'parse';
     const attrs = buildAttributes(vision, ocrText, { minConfidence: 0.6, month: now.getMonth() + 1 });
     if (attrs.confidence < 0.6) attrs.category = '';
 
@@ -127,11 +131,25 @@ exports.main = async (event) => {
       elapsed: Date.now() - started
     };
   } catch (e) {
-    console.error('[recognize] 识别失败', e && e.message);
-    const msg = (e && e.message) || '';
+    const msg = (e && e.message) || String(e);
+    console.error('[recognize] 识别失败', stage, msg);
     if (msg.startsWith('MISSING_SECRET')) {
-      return { code: 'NOT_CONFIGURED', message: '识别服务未配置，请联系维护者' };
+      return { code: 'NOT_CONFIGURED', message: '识别服务未配置（缺少 HUNYUAN_API_KEY）', stage, detail: msg };
     }
-    return { code: 'RECOGNIZE_FAILED', message: '识别失败，请手动填写' };
+    // 分阶段回传具体原因，便于真机排障（不含密钥信息）
+    const brief = msg.slice(0, 120);
+    if (/HUNYUAN_TIMEOUT/.test(msg)) {
+      return { code: 'RECOGNIZE_FAILED', message: '模型响应超时（请重试；若持续超时请确认云函数超时时间 ≥30s）', stage, detail: brief };
+    }
+    if (/HUNYUAN_HTTP_401|HUNYUAN_HTTP_403/.test(msg)) {
+      return { code: 'RECOGNIZE_FAILED', message: '模型鉴权失败（API Key 无效或无该模型权限）', stage, detail: brief };
+    }
+    if (/HUNYUAN_HTTP_/.test(msg)) {
+      return { code: 'RECOGNIZE_FAILED', message: `模型接口异常：${brief}`, stage, detail: brief };
+    }
+    if (/HUNYUAN_/.test(msg)) {
+      return { code: 'RECOGNIZE_FAILED', message: `模型返回异常：${brief}`, stage, detail: brief };
+    }
+    return { code: 'RECOGNIZE_FAILED', message: `识别失败（阶段：${stage}）`, stage, detail: brief };
   }
 };

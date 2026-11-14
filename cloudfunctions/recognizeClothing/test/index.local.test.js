@@ -163,12 +163,14 @@ function reset() {
   });
 
   // ---- E5 无效 fileID ----
-  await t('E5', 'downloadFile 失败 → RECOGNIZE_FAILED 兜底', async () => {
+  await t('E5', 'downloadFile 失败 → RECOGNIZE_FAILED 兜底（含阶段标记）', async () => {
     reset();
     downloadError = new Error('downloadFile:fail file not exist');
     const r = await cloudFn.main({ imageFileID: 'cloud://not-exist.jpg' });
     assert.strictEqual(r.code, 'RECOGNIZE_FAILED');
-    assert.strictEqual(r.message, '识别失败，请手动填写');
+    assert.strictEqual(r.message, '识别失败（阶段：download）');
+    assert.strictEqual(r.stage, 'download');
+    assert.ok(/file not exist/.test(r.detail), `detail=${r.detail}`);
   });
 
   // ---- NOT_CONFIGURED 映射（A4 对应编排层）----
@@ -177,7 +179,8 @@ function reset() {
     mockVisionError = new Error('MISSING_SECRET: 未配置 HUNYUAN_API_KEY');
     const r = await cloudFn.main({ imageFileID: 'cloud://ok.jpg' });
     assert.strictEqual(r.code, 'NOT_CONFIGURED');
-    assert.strictEqual(r.message, '识别服务未配置，请联系维护者');
+    assert.strictEqual(r.message, '识别服务未配置（缺少 HUNYUAN_API_KEY）');
+    assert.strictEqual(r.stage, 'vision', `stage=${r.stage}`);
   });
   await t('E8-2', '其他异常 → RECOGNIZE_FAILED 兜底', async () => {
     reset();
