@@ -5,6 +5,16 @@ import { CLOUD_READY, WEATHER_FN_NAME } from '@/config/cloud';
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/** 云端失败原因归类为用户可读的短文案（真机角标展示用） */
+const normalizeCloudError = (raw: string): string => {
+  if (/NOT_CONFIGURED/i.test(raw)) return '云端未配置天气密钥';
+  if (/FunctionName|could not be found|not found|INVALID/i.test(raw)) return '天气云函数未部署';
+  if (/timeout|TIMEOUT|abort/i.test(raw)) return '云端请求超时';
+  if (/WEATHER_UNAVAILABLE| Unsupported city/i.test(raw)) return '该城市暂不支持';
+  if (!raw || raw === 'WEATHER_UNAVAILABLE') return '云端服务不可用';
+  return raw.slice(0, 40);
+};
+
 /** 云端天气（PRD 9.4 / 9.1 阶段 A）：云函数 weatherProxy 归一化后直接返回 WeatherInfo */
 const getFromCloud = async (city: string): Promise<WeatherInfo> => {
   const res = await Taro.cloud.callFunction({
@@ -29,7 +39,13 @@ export const getWeather = async (city: string): Promise<WeatherInfo> => {
     try {
       return await getFromCloud(city);
     } catch (e) {
-      console.warn('[Weather] 云端天气不可用，回退模拟数据：', (e as Error).message);
+      const reason = normalizeCloudError((e as Error).message || 'UNKNOWN');
+      console.warn('[Weather] 云端天气不可用，回退模拟数据：', reason);
+      await delay(300);
+      const target = WEATHER_MOCK[city] ? city : DEFAULT_CITY;
+      const data = WEATHER_MOCK[target];
+      if (!data) throw new Error('天气数据不可用');
+      return { city: target, today: data.today, days: data.days, mock: true, notice: reason };
     }
   }
   await delay(300);
@@ -39,7 +55,7 @@ export const getWeather = async (city: string): Promise<WeatherInfo> => {
     console.error('[Weather] 未找到城市天气数据, city =', city);
     throw new Error('天气数据不可用');
   }
-  return { city: target, today: data.today, days: data.days };
+  return { city: target, today: data.today, days: data.days, mock: true, notice: 'CLOUD_DISABLED' };
 };
 
 /** 逆地理：坐标 → 城市名（D-2 定位接口审核通过后启用；失败返回空串由调用方降级城市选择） */

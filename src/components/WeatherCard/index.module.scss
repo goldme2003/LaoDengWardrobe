@@ -35,6 +35,21 @@
   color: $color-error;
 }
 
+// v1.2.1：模拟数据角标（云端不可用回退提示）
+.mockBadge {
+  font-size: $font-size-xs;
+  color: #b26a00;
+  background: rgba(255, 196, 106, 0.28);
+  border-radius: $radius-round;
+  padding: 2rpx 12rpx;
+  margin-right: $spacing-sm;
+  flex-shrink: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 300rpx;
+}
+
 // v0.6：切换城市按钮（拨盘选择器触发），紧凑化后移入首行右侧
 .citySwitch {
   margin-left: auto;

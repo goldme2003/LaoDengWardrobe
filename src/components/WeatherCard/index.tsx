@@ -30,6 +30,10 @@ const WeatherCard: React.FC<Props> = ({
       {/* 第一行：城市 + 状态/重试 + 切换城市 */}
       <View className={styles.header}>
         <Text className={styles.city}>{weather ? weather.city : '天气'}</Text>
+        {/* v1.2.1：模拟数据角标——云端不可用回退时可见，便于真机判断云函数链路是否生效 */}
+        {weather?.mock && !loading && (
+          <Text className={styles.mockBadge}>模拟{weather.notice ? `·${weather.notice}` : ''}</Text>
+        )}
         {loading && <Text className={styles.stateText}>加载中…</Text>}
         {failed && !loading && (
           <Text className={styles.retry} onClick={onRetry}>
