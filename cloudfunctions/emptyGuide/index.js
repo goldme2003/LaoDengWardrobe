@@ -22,12 +22,14 @@ const FALLBACK = {
 
 function fallbackTip(gender, age, weather) {
   const base = age < 18 ? FALLBACK.teen : age <= 30 ? FALLBACK.young : age <= 50 ? FALLBACK.middle : FALLBACK.senior;
-  // 有天气上下文时，按温度档位补充天气适配提示（拼接后仍 ≤50 字）
+  // 有天气上下文时，按温度档位补充天气适配提示（拼接后仍 ≤50 字；
+  // 先截断再去掉句尾标点，避免出现「都搭。，建议加件外套」式双标点）
   if (weather && typeof weather.avg === 'number') {
     const avg = weather.avg;
     const extra =
       avg < 5 ? '注意防寒保暖' : avg <= 15 ? '建议加件外套' : avg <= 22 ? '薄外套即可' : avg <= 28 ? '穿轻薄透气款' : '选清凉防晒穿搭';
-    return `${base.slice(0, MAX_LEN - extra.length - 1)}，${extra}`;
+    const head = base.slice(0, MAX_LEN - extra.length - 1).replace(/[。，、；,.\s]+$/, '');
+    return `${head}，${extra}`;
   }
   return base.slice(0, MAX_LEN);
 }

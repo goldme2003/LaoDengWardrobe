@@ -31,7 +31,9 @@ const fallbackTip = (age: number, weather?: WeatherInfo | null): string => {
     const avg = Math.round((weather.today.low + weather.today.high) / 2);
     const extra =
       avg < 5 ? '注意防寒保暖' : avg <= 15 ? '建议加件外套' : avg <= 22 ? '薄外套即可' : avg <= 28 ? '穿轻薄透气款' : '选清凉防晒穿搭';
-    return `${base.slice(0, 50 - extra.length - 1)}，${extra}`;
+    // 先截断再去掉句尾标点，避免「都搭。，建议加件外套」式双标点
+    const head = base.slice(0, 50 - extra.length - 1).replace(/[。，、；,.\s]+$/, '');
+    return `${head}，${extra}`;
   }
   return base.slice(0, 50);
 };

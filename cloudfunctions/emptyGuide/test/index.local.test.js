@@ -69,9 +69,10 @@ async function run() {
   });
 
   const coldWeather = await fn.main({ action: 'guide', gender: 'male', age: 40, weather: { cond: '晴', low: -3, high: 2 } });
-  check('E7 低温档兜底文案含保暖提示（仅 fallback 源校验）', () => {
+  check('E7 低温档兜底文案含保暖提示且无双标点（仅 fallback 源校验）', () => {
     if (coldWeather.source === 'fallback') {
       assert.ok(/保暖/.test(coldWeather.tips[0]), coldWeather.tips[0]);
+      assert.ok(!/。，|，。|。。/.test(coldWeather.tips[0]), coldWeather.tips[0]);
     }
   });
 

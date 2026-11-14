@@ -89,15 +89,20 @@ async function callHunyuanGuide(gender, age, wardrobeName, weather) {
       { role: 'system', content: '你只输出严格 JSON，不输出解释性文字。' },
       { role: 'user', content: buildPrompt(gender, age, wardrobeName, weather) }
     ],
-    temperature: 0.7,
-    max_tokens: 200
+    temperature: 0.7
+    // 不设 max_tokens：与 recognizeClothing 保持一致；实测限制 200 时 hy4 可能
+    // 将输出写入 reasoning 字段或被截断，导致 content 为空（BAD_MODEL_OUTPUT）
   });
-  const text =
-    res && res.choices && res.choices[0] && res.choices[0].message
-      ? res.choices[0].message.content
-      : '';
-  const m = String(text).match(/\{[\s\S]*\}/);
-  if (!m) throw new Error('BAD_MODEL_OUTPUT: ' + String(text).slice(0, 200));
+  const message =
+    res && res.choices && res.choices[0] && res.choices[0].message ? res.choices[0].message : null;
+  // content 为空时兜底取 reasoning_content（部分模型档位会把结果写进思考字段）
+  const text = String((message && message.content) || (message && message.reasoning_content) || '');
+  const m = text.match(/\{[\s\S]*\}/);
+  if (!m) {
+    // 带上原始响应片段，便于云端日志定位（此前仅输出空串无法诊断）
+    const raw = text ? text.slice(0, 200) : JSON.stringify(res).slice(0, 300);
+    throw new Error('BAD_MODEL_OUTPUT: ' + raw);
+  }
   const parsed = JSON.parse(m[0]);
   const tips = Array.isArray(parsed.tips) ? parsed.tips.filter((t) => typeof t === 'string' && t.trim()) : [];
   if (!tips.length) throw new Error('EMPTY_TIPS');
