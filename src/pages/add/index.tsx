@@ -357,6 +357,8 @@ const AddItemPage: React.FC = () => {
     } else {
       const created = addItem(payload);
       console.info('[Add] 保存衣物, name =', created.name);
+      // v1.2.0：记录新增衣物类型，衣柜页返回后由右侧标签栏定位到对应分组
+      Taro.setStorageSync('ldw_jump_type', created.type);
       // 备选转正式：保存成功后移除备选条目
       if (fromTryoutId) {
         deleteTryout(fromTryoutId);

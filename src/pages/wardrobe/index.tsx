@@ -2,7 +2,6 @@ import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { View, Text, Image } from '@tarojs/components';
 import Taro, { usePullDownRefresh, useDidShow, usePageScroll, useReachBottom } from '@tarojs/taro';
 import WeatherCard from '@/components/WeatherCard';
-import WardrobeSwitcher from '@/components/WardrobeSwitcher';
 import FilterBar, { Filters, EMPTY_FILTERS } from '@/components/FilterBar';
 import AccordionList, { AccordionGroup } from '@/components/AccordionList';
 import TypeSideBar from '@/components/TypeSideBar';
@@ -17,13 +16,6 @@ import styles from './index.module.scss';
 
 /** 分组类型顺序（自定义类型排在预设之后） */
 const PLAN_TYPE_ORDER = ['上装', '外套', '裤装', '裙装', '连衣裙', '内衣', '家居服', '鞋履', '配饰', '其他'];
-
-/** 滚动联动：方向反转需累计超过该位移才切换方向（避免抖动） */
-const DIRECTION_HYSTERESIS = 20;
-/** 滚动联动：手动操作后短时间不再触发自动逻辑 */
-const MANUAL_GUARD_MS = 800;
-/** 滚动联动：自动收起/展开的最小触发间隔（节流，保证平滑不卡顿） */
-const AUTO_THROTTLE_MS = 160;
 
 /** 衣柜首页（PRD FR-06/FR-09）：天气 + 衣橱切换 + 筛选 + 手风琴分组衣物列表 */
 const WardrobePage: React.FC = () => {
@@ -58,13 +50,8 @@ const WardrobePage: React.FC = () => {
 
   // 滚动联动状态（用 ref，避免高频渲染）
   const lastScrollTop = useRef(0);
-
-  // down = 上滑（朝页面底部），up = 回滚（朝页面顶部）
-  const scrollDir = useRef<'init' | 'down' | 'up'>('init');
-  const oppoAcc = useRef(0);
   const lastManualTs = useRef(0);
-  const lastAutoTs = useRef(0);
-  // v1.1：侧边栏选中态同步独立节流（不受方向迟滞/手动守卫限制）
+  // v1.1：侧边栏选中态同步独立节流
   const lastSyncTs = useRef(0);
   const windowHeight = useRef(667);
   useEffect(() => {
@@ -169,8 +156,6 @@ const WardrobePage: React.FC = () => {
   useEffect(() => {
     setCollapsedMap({});
     lastScrollTop.current = 0;
-    scrollDir.current = 'init';
-    oppoAcc.current = 0;
     activeTypeRef.current = '';
     setActiveType('');
   }, [currentWardrobeId]);
@@ -298,77 +283,32 @@ const WardrobePage: React.FC = () => {
     }, wasCollapsed ? 150 : 0);
   }, []);
 
+  // v1.2.0：新增衣物返回后，右侧标签栏自动选中并定位到该衣物所属分组
+  useDidShow(() => {
+    try {
+      const jumpType = Taro.getStorageSync('ldw_jump_type') as string;
+      if (!jumpType) return;
+      Taro.removeStorageSync('ldw_jump_type');
+      setTimeout(() => scrollToGroup(jumpType), 350);
+    } catch (e) {
+      // 读取失败时静默跳过，不影响正常浏览
+    }
+  });
+
   // 是否存在收起中的分组（滚动联动判断用，ref 同步）
   const collapsedMapRef = useRef(collapsedMap);
   useEffect(() => {
     collapsedMapRef.current = collapsedMap;
   }, [collapsedMap]);
 
-  // v0.7.0 用户意见 2：滚动联动重构（移动端通用交互）——
-  // 上滑浏览：组头滚出视口顶部的分组自动逐个收起（每次一组，节流防抖动）；
-  // 回滚浏览：组头重新回到视口内的分组自动逐个展开；
-  // 方向反转需超过迟滞阈值，手动操作后 800ms 内不触发，自动逻辑 160ms 节流。
-  usePageScroll((res) => {
+  // v1.2.0：取消手风琴「滑动自动收起/展开」（原自动缩放导致浏览时空间反复变化）
+  // 分组默认全部展开，仅保留手动点击组头展开/收起；滚动只用于同步右侧标签栏选中态。
+  usePageScroll(() => {
     if (!showAccordion) return;
-    const y = res.scrollTop || 0;
-    const delta = y - lastScrollTop.current;
-    lastScrollTop.current = y;
-    if (Math.abs(delta) < 2) return; // 过滤微小抖动
-    const toward: 'down' | 'up' = delta > 0 ? 'down' : 'up';
-    // v1.1：侧边栏选中态同步——所有滚动事件均联动（独立节流），不受方向迟滞/手动守卫限制
     const nowTs = Date.now();
-    if (nowTs - lastSyncTs.current >= 120) {
-      lastSyncTs.current = nowTs;
-      syncActiveType();
-    }
-    if (scrollDir.current === 'init') {
-      // 首次滚动事件仅建立方向，跳过收起/展开逻辑
-      scrollDir.current = toward;
-      oppoAcc.current = 0;
-      return;
-    }
-    if (scrollDir.current !== toward) {
-      // 方向反转：累计位移超过迟滞阈值才切换方向
-      oppoAcc.current += Math.abs(delta);
-      if (oppoAcc.current < DIRECTION_HYSTERESIS) return;
-      scrollDir.current = toward;
-      oppoAcc.current = 0;
-    } else {
-      oppoAcc.current = 0;
-    }
-    // 手动操作后短时间内不触发自动逻辑
-    if (Date.now() - lastManualTs.current < MANUAL_GUARD_MS) return;
-    // 节流：降低测量频率，保证滚动平滑
-    const now = Date.now();
-    if (now - lastAutoTs.current < AUTO_THROTTLE_MS) return;
-    lastAutoTs.current = now;
-
-    // 测量各分组组头的视口位置（自动收起/展开联动；选中态同步由 syncActiveType 统一处理）
-    Taro.createSelectorQuery()
-      .selectAll('.ldw-acc-header')
-      .boundingClientRect((rects) => {
-        const list = (rects || []) as { top: number }[];
-        const groups = listGroupsRef.current;
-        if (list.length !== groups.length) return;
-        if (toward === 'down') {
-          // 上滑：第一个「组头已滚出视口顶部且仍展开」的分组 → 自动收起（一次一组）
-          const idx = listGroups.findIndex((g, i) => !collapsedMapRef.current[g.type] && list[i].top < 0);
-          if (idx >= 0) {
-            lastManualTs.current = Date.now();
-            setCollapsedMap((prev) => ({ ...prev, [listGroups[idx].type]: true }));
-          }
-        } else {
-          // 回滚：第一个「组头回到视口内且已收起」的分组 → 自动展开（一次一组）
-          const idx = listGroups.findIndex(
-            (g, i) => collapsedMapRef.current[g.type] && list[i].top >= 0 && list[i].top < windowHeight.current
-          );
-          if (idx >= 0) {
-            lastManualTs.current = Date.now();
-            setCollapsedMap((prev) => ({ ...prev, [listGroups[idx].type]: false }));
-          }
-        }
-      })
-      .exec();
+    if (nowTs - lastSyncTs.current < 120) return;
+    lastSyncTs.current = nowTs;
+    syncActiveType();
   });
 
   // v1.1：滚动触底时立即选中最后一个分组（最终选中态以测量回调的几何判定为准）
@@ -414,16 +354,8 @@ const WardrobePage: React.FC = () => {
       {/* weatherTick 变化触发重新加载 */}
       <LoadTrigger tick={weatherTick} onLoad={loadWeather} />
 
-      {/* v1.1：上部衣橱切换区 = 横向切换器 + 「切换衣橱」按钮（点击弹出衣橱选择弹层） */}
+      {/* v1.2.0：移除上部横向「全衣橱展示区」，衣橱切换只保留独立「切换衣橱」入口 */}
       <View className={styles.wardSwitcherRow}>
-        <View className={styles.wardSwitcherSlot}>
-          <WardrobeSwitcher
-            wardrobes={counts}
-            currentId={currentWardrobeId}
-            onSelect={setCurrentWardrobe}
-            onManage={goManage}
-          />
-        </View>
         <View className={styles.wardSwitchBtn} onClick={() => setSwitcherOpen(true)}>
           <Text className={styles.wardSwitchBtnText}>切换衣橱</Text>
         </View>
@@ -543,7 +475,12 @@ const WardrobePage: React.FC = () => {
       {switcherOpen && (
         <View className={styles.sheetMask} onClick={() => setSwitcherOpen(false)}>
           <View className={styles.sheet} onClick={(e) => e.stopPropagation()}>
-            <Text className={styles.sheetTitle}>切换衣橱</Text>
+            <View className={styles.sheetHead}>
+              <Text className={styles.sheetTitle}>切换衣橱</Text>
+              <View className={styles.sheetManage} onClick={goManage}>
+                <Text className={styles.sheetManageText}>管理衣橱</Text>
+              </View>
+            </View>
             <View className={styles.sheetList}>
               {counts.map((w) => (
                 <View
