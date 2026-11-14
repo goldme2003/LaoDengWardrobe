@@ -40,12 +40,20 @@ async function run() {
   });
 
   const noKey = await fn.main({ action: 'weather', city: '北京' });
-  check('W5 未配置和风 Key 时返回 NOT_CONFIGURED', () => {
-    if (process.env.QWEATHER_KEY) {
-      assert.notStrictEqual(noKey.code, 'BAD_PARAM');
-    } else {
-      assert.strictEqual(noKey.code, 'NOT_CONFIGURED');
+  check('W5 无和风 Key 时走免密钥数据源或明确降级', () => {
+    assert.ok(['OK', 'WEATHER_UNAVAILABLE', 'NOT_CONFIGURED'].includes(noKey.code), `code=${noKey.code}`);
+  });
+
+  check('W6 北京天气字段完整（联网时）', () => {
+    if (noKey.code !== 'OK') {
+      console.log(`    跳过：当前网络不可达（${noKey.code}）`);
+      return;
     }
+    const d = noKey.data;
+    assert.ok(d.today && d.today.cond && Number.isFinite(d.today.high) && Number.isFinite(d.today.low));
+    assert.strictEqual(d.days.length, 3);
+    assert.ok(['qweather', 'weather.com.cn'].includes(noKey.source));
+    console.log(`    北京 ${d.today.cond} ${d.today.low}~${d.today.high}℃ 来源=${noKey.source}`);
   });
 
   console.log(`\nweatherProxy: ${pass} passed, ${fail} failed`);

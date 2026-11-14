@@ -8,6 +8,28 @@ const https = require('https');
 const MAP_HOST = 'apis.map.qq.com';
 const GEO_HOST = 'geoapi.qweather.com';
 const WEATHER_HOST = 'devapi.qweather.com';
+const CN_HOST = 'd1.weather.com.cn';
+/** 中国天气网城市编码（免密钥数据源，覆盖当前城市列表） */
+const CITY_CODE = {
+  北京: '101010100',
+  上海: '101020100',
+  广州: '101280101',
+  深圳: '101280601',
+  杭州: '101210101',
+  成都: '101270101',
+  武汉: '101200101',
+  西安: '101110101',
+  重庆: '101040100',
+  南京: '101190101'
+};
+/** 中国天气网天气现象编码 → 展示文案 */
+const CN_WEATHER = {
+  '00': '晴', '01': '多云', '02': '阴', '03': '阵雨', '04': '雷阵雨', '05': '雷阵雨',
+  '06': '雨夹雪', '07': '小雨', '08': '中雨', '09': '大雨', '10': '暴雨', '11': '大暴雨',
+  '12': '特大暴雨', '13': '阵雪', '14': '小雪', '15': '中雪', '16': '大雪', '17': '暴雪',
+  '18': '雾', '19': '冻雨', '20': '沙尘暴', '29': '浮尘', '30': '扬沙', '31': '强沙尘暴',
+  '32': '浓雾', '53': '霾'
+};
 /** 缓存 30 分钟（容器内复用；前端另有 10 分钟本地缓存） */
 const TTL = 30 * 60 * 1000;
 const cache = new Map();
@@ -30,10 +52,10 @@ function mapCond(text) {
   return '多云';
 }
 
-function getJson(hostname, path) {
+function getRaw(hostname, path, headers) {
   return new Promise((resolve, reject) => {
     const req = https.request(
-      { hostname, path, method: 'GET', timeout: 8000 },
+      { hostname, path, method: 'GET', timeout: 8000, headers: headers || {} },
       (res) => {
         let buf = '';
         res.on('data', (c) => (buf += c));
@@ -42,11 +64,7 @@ function getJson(hostname, path) {
             reject(new Error(`${hostname.toUpperCase()}_HTTP_${res.statusCode}: ${buf.slice(0, 200)}`));
             return;
           }
-          try {
-            resolve(JSON.parse(buf));
-          } catch (e) {
-            reject(new Error(`${hostname.toUpperCase()}_BAD_JSON`));
-          }
+          resolve(buf);
         });
       }
     );
@@ -56,8 +74,18 @@ function getJson(hostname, path) {
   });
 }
 
-function httpGet(hostname, path) {
-  return getJson(hostname, path);
+function getJson(hostname, path, headers) {
+  return getRaw(hostname, path, headers).then((buf) => {
+    try {
+      return JSON.parse(buf);
+    } catch (e) {
+      throw new Error(`${hostname.toUpperCase()}_BAD_JSON`);
+    }
+  });
+}
+
+function httpGet(hostname, path, headers) {
+  return getJson(hostname, path, headers);
 }
 
 /** 逆地理：坐标 → 城市名 */
@@ -108,21 +136,71 @@ function normalize(city, daily) {
   };
 }
 
-async function fetchWeather(city) {
-  const cached = cache.get(city);
-  if (cached && Date.now() - cached.ts < TTL) return cached.data;
+/** 和风天气：城市 → LocationID → 3 天预报 */
+async function fetchFromQWeather(city) {
   const loc = await lookupLocation(city);
   const key = process.env.QWEATHER_KEY;
-  const res = await httpGet(
-    WEATHER_HOST,
-    `/v7/weather/3d?location=${loc.id}&key=${key}&lang=zh`
-  );
+  const res = await httpGet(WEATHER_HOST, `/v7/weather/3d?location=${loc.id}&key=${key}&lang=zh`);
   if (res.code !== '200' || !res.daily || res.daily.length < 3) {
     throw new Error(`QWEATHER_API_${res.code || 'EMPTY'}`);
   }
-  const data = normalize(loc.name || city, res.daily);
-  cache.set(city, { data, ts: Date.now() });
-  return data;
+  return normalize(loc.name || city, res.daily);
+}
+
+/** 中国天气网（免密钥兜底数据源）：weather_index 页面内嵌 JSON */
+async function fetchFromWeatherCn(city) {
+  const code = CITY_CODE[city];
+  if (!code) throw new Error('CN_CITY_UNSUPPORTED');
+  const text = await getRaw(CN_HOST, `/weather_index/${code}.html`, {
+    Referer: 'https://www.weather.com.cn/',
+    'User-Agent': 'Mozilla/5.0'
+  });
+  const m = String(text).match(/var\s+fc\s*=\s*(\{[\s\S]*\})\s*;?\s*$/);
+  if (!m) throw new Error('CN_BAD_PAYLOAD');
+  const fc = JSON.parse(m[1]);
+  const list = (fc.f || []).slice(0, 4);
+  if (list.length < 4) throw new Error('CN_EMPTY_FC');
+  const toItem = (d, label) => ({
+    date: label,
+    cond: CN_WEATHER[d.fa] || '多云',
+    low: Math.round(Number(d.fd)),
+    high: Math.round(Number(d.fc))
+  });
+  return {
+    city,
+    today: toItem(list[0], '今天'),
+    days: [toItem(list[1], '明天'), toItem(list[2], '后天'), toItem(list[3], '大后天')]
+  };
+}
+
+/** 数据源链路：和风（有 Key 时）→ 中国天气网（免密钥）→ 失败抛错交由上层降级 */
+async function fetchWeather(city) {
+  const cached = cache.get(city);
+  if (cached && Date.now() - cached.ts < TTL) return cached;
+
+  const errors = [];
+  if (process.env.QWEATHER_KEY) {
+    try {
+      const data = await fetchFromQWeather(city);
+      const hit = { data, source: 'qweather', ts: Date.now() };
+      cache.set(city, hit);
+      return hit;
+    } catch (e) {
+      errors.push(`qweather:${e.message}`);
+      console.error('[weatherProxy] 和风失败，尝试中国天气网：', e.message);
+    }
+  }
+
+  try {
+    const data = await fetchFromWeatherCn(city);
+    const hit = { data, source: 'weather.com.cn', ts: Date.now() };
+    cache.set(city, hit);
+    return hit;
+  } catch (e) {
+    errors.push(`cn:${e.message}`);
+  }
+
+  throw new Error(errors.join(' | '));
 }
 
 exports.main = async (event = {}) => {
@@ -163,8 +241,8 @@ exports.main = async (event = {}) => {
   if (!city) return { code: 'BAD_PARAM', message: '缺少城市名' };
 
   try {
-    const data = await fetchWeather(city);
-    return { code: 'OK', data };
+    const hit = await fetchWeather(city);
+    return { code: 'OK', data: hit.data, source: hit.source };
   } catch (e) {
     if (/MISSING_SECRET/.test(e.message)) {
       return { code: 'NOT_CONFIGURED', message: '未配置 QWEATHER_KEY', detail: e.message };
