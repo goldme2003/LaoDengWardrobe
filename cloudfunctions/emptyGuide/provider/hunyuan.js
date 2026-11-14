@@ -29,7 +29,7 @@ function httpsPostJson(urlPath, apiKey, body) {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(data)
         },
-        timeout: 15000
+        timeout: 25000
       },
       (res) => {
         let buf = '';
@@ -83,6 +83,7 @@ async function callHunyuanGuide(gender, age, wardrobeName, weather) {
   if (!apiKey) {
     throw new Error('MISSING_SECRET: 未配置 HUNYUAN_API_KEY（环境变量或 private.config.json）');
   }
+  const startedAt = Date.now();
   const res = await httpsPostJson('/v1/chat/completions', apiKey, {
     model: process.env.HUNYUAN_MODEL || 'hy4',
     messages: [
@@ -106,6 +107,7 @@ async function callHunyuanGuide(gender, age, wardrobeName, weather) {
   const parsed = JSON.parse(m[0]);
   const tips = Array.isArray(parsed.tips) ? parsed.tips.filter((t) => typeof t === 'string' && t.trim()) : [];
   if (!tips.length) throw new Error('EMPTY_TIPS');
+  console.log(`[emptyGuide] 混元生成成功，耗时 ${Date.now() - startedAt}ms`);
   return tips.slice(0, 1).map((t) => t.replace(/\s+/g, ' ').trim().slice(0, 50));
 }
 
