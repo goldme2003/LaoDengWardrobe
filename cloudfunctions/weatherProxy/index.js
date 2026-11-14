@@ -237,7 +237,8 @@ exports.main = async (event = {}) => {
     return { code: 'BAD_PARAM', message: '未知 action' };
   }
 
-  const city = typeof event.city === 'string' ? event.city.trim().slice(0, 20) : '';
+  const rawCity = typeof event.city === 'string' ? event.city.trim().slice(0, 20) : '';
+  const city = rawCity.replace(/市$/, '');
   if (!city) return { code: 'BAD_PARAM', message: '缺少城市名' };
 
   try {
