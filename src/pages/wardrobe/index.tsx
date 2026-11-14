@@ -7,9 +7,11 @@ import AccordionList, { AccordionGroup } from '@/components/AccordionList';
 import TypeSideBar from '@/components/TypeSideBar';
 import ItemCard from '@/components/ItemCard';
 import EmptyState from '@/components/EmptyState';
+import RecommendCard from '@/components/RecommendCard';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
 import { getWeather } from '@/services/weather';
 import { getEmptyGuide } from '@/services/emptyGuide';
+import { buildOutfits } from '@/services/recommend';
 import { DEFAULT_CITY } from '@/data/mockWeather';
 import { CITY_GROUPS } from '@/data/cities';
 import { COLOR_PRESETS, MATERIAL_PRESETS, themeVarsOf, getThemeById } from '@/data/presets';
@@ -32,6 +34,7 @@ const WardrobePage: React.FC = () => {
   // v0.6：明日穿搭勾选（按衣橱归属）
   const tomorrowOutfits = useWardrobeStore((s) => s.tomorrowOutfits);
   const toggleTomorrowItem = useWardrobeStore((s) => s.toggleTomorrowItem);
+  const adoptTomorrowItems = useWardrobeStore((s) => s.adoptTomorrowItems);
   // v0.6：「我的」页跳转携带的筛选预设
   const wardrobeFilterPreset = useWardrobeStore((s) => s.wardrobeFilterPreset);
   const consumeWardrobeFilterPreset = useWardrobeStore((s) => s.consumeWardrobeFilterPreset);
@@ -198,6 +201,25 @@ const WardrobePage: React.FC = () => {
     filters.color || filters.material || filters.seasons.length > 0 || filters.onlyFavorite;
   // v0.7：手风琴分组展示条件（无筛选 + 非明日穿搭模式 + 有衣物）
   const showAccordion = !planMode && !isFiltering && currentItems.length > 0 && filtered.length > 0;
+
+  // v1.4.0（B/D 模块）：规则引擎推荐——有天气且有衣物时生成 1–3 套穿搭；
+  // 天气失败或衣橱为空时返回空数组不展示（降级矩阵），空衣橱走 C 模块引导
+  const outfits = useMemo(
+    () => (weather && !weatherFailed ? buildOutfits(weather, currentItems) : []),
+    [weather, weatherFailed, currentItems]
+  );
+  const [outfitIdx, setOutfitIdx] = useState(0);
+  useEffect(() => {
+    setOutfitIdx(0);
+  }, [outfits]);
+  const outfit = outfits.length > 0 ? outfits[outfitIdx % outfits.length] : null;
+  const outfitAdopted = !!outfit && outfit.items.every((it) => tomorrowIds.includes(it.id));
+  const handleShuffle = useCallback(() => setOutfitIdx((i) => (i + 1) % outfits.length), [outfits.length]);
+  const handleAdopt = useCallback(() => {
+    if (!outfit) return;
+    adoptTomorrowItems(outfit.items.map((it) => it.id));
+    Taro.showToast({ title: '已加入明日穿搭', icon: 'success' });
+  }, [outfit, adoptTomorrowItems]);
 
   // v1.2.1：空衣橱时加载专属引导文案（性别/年龄取自当前衣橱主人，PRD 9.1.2）
   // v1.4.0（C 模块天气增强）：天气加载完成后再请求引导，传入当前天气生成天气适配建议；
@@ -446,6 +468,16 @@ const WardrobePage: React.FC = () => {
             colorHexMap={colorHexMap}
             onChange={setFilters}
           />
+
+          {/* v1.4.0（B/D 模块）：今日穿搭推荐卡片，换一件轮换 / 一键采纳写入明日穿搭；筛选时不展示 */}
+          {!isFiltering && outfit && (
+            <RecommendCard
+              outfit={outfit}
+              adopted={outfitAdopted}
+              onShuffle={handleShuffle}
+              onAdopt={handleAdopt}
+            />
+          )}
 
           {currentItems.length === 0 && !isFiltering ? (
             <EmptyState

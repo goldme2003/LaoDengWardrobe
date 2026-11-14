@@ -184,6 +184,8 @@ export interface WardrobeStore extends LdwData {
   deleteDiaryEntry: (id: string) => void;
   /** 切换明日穿搭勾选（v0.6：作用于当前衣橱） */
   toggleTomorrowItem: (itemId: string) => void;
+  /** 一键采纳推荐（v1.4.0 D 阶段）：批量加入当前衣橱明日穿搭勾选，已勾选的自动跳过 */
+  adoptTomorrowItems: (itemIds: string[]) => void;
   /** 设置首页待应用筛选预设（v0.6 跳转用） */
   setWardrobeFilterPreset: (preset: 'favorite') => void;
   /** 消费首页筛选预设（首页应用后清空） */
@@ -532,6 +534,22 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       const wid = s.currentWardrobeId;
       const list = s.tomorrowOutfits[wid] || [];
       const next = list.includes(itemId) ? list.filter((v) => v !== itemId) : [...list, itemId];
+      commit({ tomorrowOutfits: { ...s.tomorrowOutfits, [wid]: next } });
+    },
+
+    adoptTomorrowItems: (itemIds) => {
+      const s = get();
+      const wid = s.currentWardrobeId;
+      const list = s.tomorrowOutfits[wid] || [];
+      const next = [...list];
+      itemIds.forEach((id) => {
+        if (!next.includes(id)) next.push(id);
+      });
+      if (next.length === list.length) {
+        console.info('[Store] 一键采纳：推荐衣物均已在明日穿搭中，跳过');
+        return;
+      }
+      console.info('[Store] 一键采纳推荐到明日穿搭, 新增件数 =', next.length - list.length);
       commit({ tomorrowOutfits: { ...s.tomorrowOutfits, [wid]: next } });
     },
 
