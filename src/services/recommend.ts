@@ -9,6 +9,10 @@ import type { ClothingItem, WeatherDay, WeatherInfo } from '@/types';
 export interface RecommendOutfit {
   items: ClothingItem[];
   reason: string;
+  /** v1.4.3：该套搭配实际适用的场景（用户未指定时按衣物关键词推断，兜底「日常」） */
+  scene: SceneId;
+  /** 场景中文标签，用于卡片「适用场景」标注与理由文案 */
+  sceneLabel: string;
 }
 
 /** 搭配场景（v1.4.1）：只开放预设选项，不支持自由输入；取值与衣物「适用场合」预设一致 */
@@ -131,16 +135,36 @@ const sceneScore = (item: ClothingItem, scene: SceneId): number => {
   return occasionHit + keywordHit;
 };
 
+/** v1.4.3：推断一套搭配的适用场景——用户指定且有效时直接采用；
+ *  否则按组合内衣物关键词/适用场合得分取最高者，均无命中时兜底「日常」 */
+const inferScene = (items: ClothingItem[], effectiveScene: SceneId): SceneId => {
+  if (effectiveScene !== 'all') return effectiveScene;
+  let best: SceneId = '日常';
+  let bestScore = 0;
+  SCENE_OPTIONS.forEach((s) => {
+    if (s.id === 'all') return;
+    const score = items.reduce((n, it) => n + sceneScore(it, s.id), 0);
+    if (score > bestScore) {
+      bestScore = score;
+      best = s.id;
+    }
+  });
+  return best;
+};
+
+const labelOfScene = (scene: SceneId): string =>
+  (SCENE_OPTIONS.find((s) => s.id === scene) || SCENE_OPTIONS[0]).label;
+
 const buildReason = (
   weather: WeatherInfo,
   day: WeatherDay,
   dayLabel: string,
   meta: { label: string; tip: string },
-  scene: SceneId,
+  sceneLabel: string,
   items: ClothingItem[]
 ): string => {
-  const sceneText = scene === 'all' ? '' : `${scene}场景，`;
-  return `${weather.city}${dayLabel} ${day.low}~${day.high}℃ ${day.cond}，${sceneText}${meta.label}；${items
+  // v1.4.3：每条推荐明确标注适用场景，格式「针对通勤，可以……」
+  return `${weather.city}${dayLabel} ${day.low}~${day.high}℃ ${day.cond}，针对${sceneLabel}，可以${items
     .map((i) => i.name)
     .join(' + ')}，${meta.tip}`;
 };
@@ -201,7 +225,13 @@ export const buildOutfits = (
     const sig = combo.map((c) => c.id).sort().join(',');
     if (combo.length > 0 && !seen.has(sig)) {
       seen.add(sig);
-      outfits.push({ items: combo, reason: buildReason(weather, day, dayLabel, meta, effectiveScene, combo) });
+      const sceneOfOutfit = inferScene(combo, effectiveScene);
+      outfits.push({
+        items: combo,
+        scene: sceneOfOutfit,
+        sceneLabel: labelOfScene(sceneOfOutfit),
+        reason: buildReason(weather, day, dayLabel, meta, labelOfScene(sceneOfOutfit), combo)
+      });
     }
   }
   return outfits;

@@ -51,14 +51,47 @@
 }
 
 // v0.6：切换城市按钮，紧凑化后移入首行右侧
-.citySwitch {
+// v1.4.3：城市/衣橱切换统一放入右上角容器
+.headerRight {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.citySwitch {
   display: flex;
   align-items: center;
   background: rgba(255, 255, 255, 0.7);
   border-radius: $radius-round;
   padding: 6rpx 16rpx;
   flex-shrink: 0;
+}
+
+// v1.4.3：切换衣橱按钮（天气卡右上角，主题色强调）
+.wardSwitch {
+  display: flex;
+  align-items: center;
+  margin-left: 10rpx;
+  padding: 6rpx 16rpx;
+  border-radius: $radius-round;
+  background: var(--w-weather-accent, #2f6f5e);
+  flex-shrink: 0;
+  max-width: 260rpx;
+}
+
+.wardSwitchText {
+  font-size: $font-size-xs;
+  color: #fff;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.wardSwitchArrow {
+  font-size: $font-size-xs;
+  color: rgba(255, 255, 255, 0.85);
+  margin-left: 4rpx;
 }
 
 // ---------- v1.3.0：城市选择弹层（≤1/3 屏高，拼音首字母分组） ----------
@@ -105,6 +138,41 @@
   padding: 4rpx 12rpx;
 }
 
+// v1.4.3：手动输入城市行
+.cityInputRow {
+  display: flex;
+  align-items: center;
+  padding: 0 28rpx 12rpx;
+  flex-shrink: 0;
+}
+
+.cityInput {
+  flex: 1;
+  height: 60rpx;
+  padding: 0 20rpx;
+  font-size: $font-size-sm;
+  color: $color-text-primary;
+  background: #f5f6f8;
+  border-radius: $radius-sm;
+  box-sizing: border-box;
+}
+
+.cityInputBtn {
+  margin-left: 12rpx;
+  flex-shrink: 0;
+  padding: 0 20rpx;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  border-radius: $radius-sm;
+  background: var(--w-weather-accent, #2f6f5e);
+}
+
+.cityInputBtnText {
+  font-size: $font-size-sm;
+  color: #fff;
+}
+
 .sheetBody {
   display: flex;
   flex: 1;
@@ -114,7 +182,8 @@
 .sheetScroll {
   flex: 1;
   min-height: 0;
-  max-height: calc(33vh - 88rpx);
+  // 面板总高 ≤1/3 屏：扣除标题行 + 手动输入行
+  max-height: calc(33vh - 160rpx);
   padding: 0 0 24rpx 28rpx;
   box-sizing: border-box;
 }

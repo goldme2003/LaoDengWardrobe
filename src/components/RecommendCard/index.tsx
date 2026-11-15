@@ -31,7 +31,11 @@ const RecommendCard: React.FC<Props> = ({
   return (
     <View className={styles.card}>
       <View className={styles.head}>
-        <Text className={styles.title}>明日穿搭推荐</Text>
+        <View className={styles.titleRow}>
+          <Text className={styles.title}>明日穿搭推荐</Text>
+          {/* v1.4.3：每条推荐明确标注适用场景 */}
+          <Text className={styles.sceneTag}>适用场景：{outfit.sceneLabel}</Text>
+        </View>
         {!loading && <Text className={styles.reason}>{outfit.reason}</Text>}
       </View>
       <View className={styles.sceneBar}>

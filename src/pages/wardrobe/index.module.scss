@@ -4,42 +4,7 @@
   padding: $spacing-lg $page-padding 160rpx;
 }
 
-// v1.1：上部衣橱切换区 = 横向切换器 + 「切换衣橱」按钮
-// 注意：类名使用 ward 前缀，避免与衣橱管理页（pages/wardrobes）同名类冲突
-.wardSwitcherRow {
-  display: flex;
-  align-items: flex-start;
-}
-
-.wardSwitcherSlot {
-  flex: 1;
-  min-width: 0;
-}
-
-.wardSwitchBtn {
-  flex: none;
-  width: fit-content;
-  position: relative;
-  z-index: 1;
-  margin-left: $spacing-sm;
-  margin-top: $spacing-xs;
-  height: 64rpx;
-  padding: 0 $spacing-md;
-  border-radius: $radius-round;
-  background: var(--w-color, $color-primary);
-  display: flex;
-  align-items: center;
-
-  &:active {
-    opacity: 0.85;
-  }
-}
-
-.wardSwitchBtnText {
-  font-size: $font-size-sm;
-  color: $color-text-white;
-  white-space: nowrap;
-}
+// v1.4.3：原独立「切换衣橱」行已移除，入口改为天气卡片右上角按钮
 
 .grid {
   display: flex;

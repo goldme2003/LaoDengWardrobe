@@ -21,6 +21,9 @@ import styles from './index.module.scss';
 /** 分组类型顺序（自定义类型排在预设之后） */
 const PLAN_TYPE_ORDER = ['上装', '外套', '裤装', '裙装', '连衣裙', '内衣', '家居服', '鞋履', '配饰', '其他'];
 
+/** v1.4.3：小程序启动标记（由 app.tsx useLaunch 写入），首次进入首页时自动执行穿搭推荐 */
+const APP_LAUNCH_FLAG = 'ldw_app_launched';
+
 /** 衣柜首页（PRD FR-06/FR-09）：天气 + 衣橱切换 + 筛选 + 手风琴分组衣物列表 */
 const WardrobePage: React.FC = () => {
   const wardrobes = useWardrobeStore((s) => s.wardrobes);
@@ -244,6 +247,21 @@ const WardrobePage: React.FC = () => {
     [scene]
   );
 
+  // v1.4.3：小程序启动后首次进入首页，自动执行一次穿搭推荐
+  // （推荐为天气 + 衣物 + 场景的同步规则计算；此处重置轮换位并展示生成态，天气返回后立即得到结果）
+  useDidShow(() => {
+    try {
+      if (Taro.getStorageSync(APP_LAUNCH_FLAG)) {
+        Taro.removeStorageSync(APP_LAUNCH_FLAG);
+        setOutfitIdx(0);
+        setRecLoading(true);
+        console.info('[Wardrobe] 启动自动执行穿搭推荐');
+      }
+    } catch (e) {
+      console.warn('[Wardrobe] 读取启动标记失败', e);
+    }
+  });
+
   // v1.2.1：空衣橱时加载专属引导文案（性别/年龄取自当前衣橱主人，PRD 9.1.2）
   // v1.4.0（C 模块天气增强）：天气加载完成后再请求引导，传入当前天气生成天气适配建议；
   // 天气失败（weatherFailed）时降级为无天气上下文，引导照常展示
@@ -415,6 +433,8 @@ const WardrobePage: React.FC = () => {
         failed={weatherFailed}
         cityGroups={CITY_GROUPS}
         activeCity={activeCity}
+        wardrobeName={currentWardrobe?.name}
+        onSwitchWardrobe={() => setSwitcherOpen(true)}
         onSelectCity={(c) => {
           if (c === activeCity) return;
           setCity(c);
@@ -426,12 +446,21 @@ const WardrobePage: React.FC = () => {
       {/* weatherTick 变化触发重新加载 */}
       <LoadTrigger tick={weatherTick} onLoad={loadWeather} />
 
-      {/* v1.2.0：移除上部横向「全衣橱展示区」，衣橱切换只保留独立「切换衣橱」入口 */}
-      <View className={styles.wardSwitcherRow}>
-        <View className={styles.wardSwitchBtn} onClick={() => setSwitcherOpen(true)}>
-          <Text className={styles.wardSwitchBtnText}>切换衣橱</Text>
-        </View>
-      </View>
+      {/* v1.4.3：推荐卡片移至天气卡片下方（筛选/明日穿搭勾选模式下不展示） */}
+      {!planMode && !isFiltering && outfit && (
+        <RecommendCard
+          outfit={outfit}
+          scenes={SCENE_OPTIONS}
+          scene={scene}
+          onSelectScene={handleSelectScene}
+          adopted={outfitAdopted}
+          loading={recLoading}
+          onShuffle={handleShuffle}
+          onAdopt={handleAdopt}
+        />
+      )}
+
+      {/* v1.4.3：移除独立「切换衣橱」行，入口移至天气卡片右上角 */}
 
       {/* v0.6 用户意见 6：明日穿搭入口（按分类勾选明天穿的衣物） */}
       {!planMode && currentItems.length > 0 && (
@@ -496,20 +525,6 @@ const WardrobePage: React.FC = () => {
             colorHexMap={colorHexMap}
             onChange={setFilters}
           />
-
-          {/* v1.4.0（B/D 模块）：明日穿搭推荐卡片，换一件轮换 / 一键采纳写入明日穿搭；筛选时不展示 */}
-          {!isFiltering && outfit && (
-            <RecommendCard
-              outfit={outfit}
-              scenes={SCENE_OPTIONS}
-              scene={scene}
-              onSelectScene={handleSelectScene}
-              adopted={outfitAdopted}
-              loading={recLoading}
-              onShuffle={handleShuffle}
-              onAdopt={handleAdopt}
-            />
-          )}
 
           {currentItems.length === 0 && !isFiltering ? (
             <EmptyState

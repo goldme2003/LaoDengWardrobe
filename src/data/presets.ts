@@ -1,7 +1,7 @@
 import { CustomDimension, Gender, ThemeId, BodyProfile } from '@/types';
 
 /** 当前版本号（在「我的」页展示） */
-export const APP_VERSION = 'v1.4.2';
+export const APP_VERSION = 'v1.4.3';
 
 /** 性别选项（v0.5） */
 export const GENDER_OPTIONS: { value: Gender; label: string }[] = [
@@ -175,13 +175,15 @@ export const WEATHER_ICONS: Record<string, string> = {
 /** 天气现象图标 */
 export const weatherIcon = (cond: string): string => WEATHER_ICONS[cond] || '🌤️';
 
-/** 自定义选项字数上限（PRD 6.1；v0.5 扩展尺码/场合维度） */
+/** 自定义选项字数上限（PRD 6.1；v0.5 扩展尺码/场合维度；v1.4.3 补充内外穿/季节） */
 export const CUSTOM_MAX_LEN: Record<CustomDimension, number> = {
   type: 10,
   color: 6,
   material: 10,
   size: 6,
-  occasion: 10
+  occasion: 10,
+  layer: 6,
+  season: 6
 };
 
 /** ============================================

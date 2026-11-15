@@ -77,11 +77,28 @@
   margin-bottom: $spacing-sm;
 }
 
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: $spacing-xs;
+}
+
 .title {
   font-size: $font-size-md;
   font-weight: $font-weight-medium;
   color: var(--text-primary, $color-text-primary);
-  margin-bottom: $spacing-xs;
+}
+
+/* v1.4.3：适用场景角标 */
+.sceneTag {
+  font-size: $font-size-xs;
+  color: var(--w-color, $color-primary);
+  background: rgba(176, 125, 80, 0.12);
+  border-radius: $radius-round;
+  padding: 2rpx 12rpx;
+  margin-left: $spacing-sm;
+  flex-shrink: 0;
 }
 
 .reason {

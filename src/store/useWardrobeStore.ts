@@ -21,6 +21,8 @@ import {
   MATERIAL_PRESETS,
   SIZE_OPTIONS,
   OCCASION_OPTIONS,
+  LAYER_OPTIONS,
+  SEASON_OPTIONS,
   getThemeById,
   DEFAULT_THEME_ID
 } from '@/data/presets';
@@ -437,6 +439,8 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       if (dimension === 'color') return get().items.some((it) => it.color === value);
       if (dimension === 'material') return get().items.some((it) => it.material === value);
       if (dimension === 'size') return get().items.some((it) => it.size === value);
+      if (dimension === 'layer') return get().items.some((it) => it.layer === value);
+      if (dimension === 'season') return get().items.some((it) => (it.seasons || []).includes(value));
       return get().items.some((it) => (it.occasions || []).includes(value));
     },
 
@@ -575,5 +579,7 @@ export const getDimensionPreset = (dimension: CustomDimension): string[] => {
   if (dimension === 'color') return COLOR_PRESETS.map((c) => c.name);
   if (dimension === 'size') return SIZE_OPTIONS;
   if (dimension === 'occasion') return OCCASION_OPTIONS;
+  if (dimension === 'layer') return LAYER_OPTIONS;
+  if (dimension === 'season') return SEASON_OPTIONS;
   return MATERIAL_PRESETS;
 };
