@@ -1,16 +1,19 @@
 /** 空衣橱专属引导文案（PRD 9.1.2 / 专项计划 3.3）
- * 入参：{ action: 'ping' | 'guide', gender: 'male'|'female'|'other', age: number, wardrobeName?: string,
+ * 入参：{ action: 'ping' | 'guide', gender: 'male'|'female'|'other', age: number,
  *        weather?: { cond?: string, low?: number, high?: number } }
  * 出参：{ code: 'OK'|'BAD_PARAM', tips: string[], source: 'hunyuan'|'fallback', weatherUsed: boolean }
  * v1.4.0（C 模块天气增强）：空衣橱时前端传入当前天气，与性别/年龄共同构成请求上下文，
  * 生成适配当前天气的着装建议；缓存键含天气签名，天气变化后可生成新文案。
- * 稳定性：模型超时/鉴权失败/解析失败一律返回内置兜底文案，前端无感。 */
+ * 稳定性：模型超时/鉴权失败/解析失败一律返回内置兜底文案，前端无感；
+ * 兜底结果同样缓存（较短 TTL），避免模型不可用时每次进入空衣橱都重复慢调用。 */
 const { callHunyuanGuide } = require('./provider/hunyuan');
 
 /** 单条建议上限（与 PRD 9.1.2 一致） */
 const MAX_LEN = 50;
-/** 实例内缓存 24 小时（云函数容器复用期间生效，前端另有本地缓存） */
+/** 模型成功结果缓存 24 小时（云函数容器复用期间生效，前端另有本地缓存） */
 const TTL = 24 * 60 * 60 * 1000;
+/** 兜底结果缓存 10 分钟，避免模型故障期重复发起慢请求 */
+const FALLBACK_TTL = 10 * 60 * 1000;
 const cache = new Map();
 
 const FALLBACK = {
@@ -45,9 +48,6 @@ function normalize(event) {
   const gender = ['male', 'female', 'other'].includes(event.gender) ? event.gender : 'other';
   const n = Number(event.age);
   const age = Number.isFinite(n) ? Math.min(99, Math.max(10, Math.round(n))) : 30;
-  const wardrobeName = typeof event.wardrobeName === 'string' && event.wardrobeName.trim()
-    ? event.wardrobeName.trim().slice(0, 20)
-    : '我的衣橱';
   // 天气上下文（可选）：仅接受规范字段，缺省/非法时视为无天气
   const w = event.weather && typeof event.weather === 'object' ? event.weather : {};
   const cond = typeof w.cond === 'string' && w.cond.trim() ? w.cond.trim().slice(0, 10) : '';
@@ -57,7 +57,7 @@ function normalize(event) {
   const weather = cond || hasTemp
     ? { cond, low: hasTemp ? Math.round(low) : null, high: hasTemp ? Math.round(high) : null, avg: hasTemp ? Math.round((low + high) / 2) : null }
     : null;
-  return { gender, age, wardrobeName, weather };
+  return { gender, age, weather };
 }
 
 exports.main = async (event = {}) => {
@@ -76,19 +76,22 @@ exports.main = async (event = {}) => {
     return { code: 'BAD_PARAM', message: '未知 action', tips: [] };
   }
 
-  const { gender, age, wardrobeName, weather } = normalize(event);
+  const { gender, age, weather } = normalize(event);
   const cacheKey = `${gender}-${age}-${weatherSig(weather)}`;
   const hit = cache.get(cacheKey);
-  if (hit && Date.now() - hit.ts < TTL) {
+  if (hit && Date.now() - hit.ts < (hit.ttl || TTL)) {
     return { code: 'OK', tips: hit.tips, source: hit.source, weatherUsed: !!weather };
   }
 
+  const startedAt = Date.now();
   try {
-    const tips = await callHunyuanGuide(gender, age, wardrobeName, weather);
-    cache.set(cacheKey, { tips, source: 'hunyuan', ts: Date.now() });
+    const tips = await callHunyuanGuide(gender, age, weather);
+    cache.set(cacheKey, { tips, source: 'hunyuan', ts: Date.now(), ttl: TTL });
     return { code: 'OK', tips, source: 'hunyuan', weatherUsed: !!weather };
   } catch (e) {
-    console.error('[emptyGuide] 混元生成失败，使用兜底文案：', e.message);
-    return { code: 'OK', tips: [fallbackTip(gender, age, weather)], source: 'fallback', weatherUsed: !!weather };
+    const tips = [fallbackTip(gender, age, weather)];
+    cache.set(cacheKey, { tips, source: 'fallback', ts: Date.now(), ttl: FALLBACK_TTL });
+    console.error(`[emptyGuide] 混元生成失败（耗时 ${Date.now() - startedAt}ms），使用兜底文案：`, e.message);
+    return { code: 'OK', tips, source: 'fallback', weatherUsed: !!weather };
   }
 };

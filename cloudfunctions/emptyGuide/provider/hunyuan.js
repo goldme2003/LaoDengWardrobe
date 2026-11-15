@@ -5,6 +5,10 @@ const https = require('https');
 const path = require('path');
 
 const HOST = 'tokenhub.tencentmaas.com';
+/** 单次请求硬超时：socket 空闲超时 + 总耗时上限（避免上游慢速回包拖到平台 60s 强杀，表现为 ret=-3） */
+const TOTAL_TIMEOUT = 25000;
+/** 连接复用：容器热启动期间复用 TLS 连接，减少重复建连开销 */
+const agent = new https.Agent({ keepAlive: true, maxSockets: 4 });
 
 function loadLocalKey() {
   try {
@@ -19,42 +23,75 @@ function loadLocalKey() {
 function httpsPostJson(urlPath, apiKey, body) {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(body);
-    const req = https.request(
-      {
-        hostname: HOST,
-        path: urlPath,
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(data)
+    let settled = false;
+    let timer = null;
+    /** 唯一出口：成功/失败/超时都走这里，保证 Promise 必定落定、定时器被清理 */
+    const finish = (err, value) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      if (err) reject(err);
+      else resolve(value);
+    };
+    let req;
+    try {
+      req = https.request(
+        {
+          hostname: HOST,
+          path: urlPath,
+          method: 'POST',
+          agent,
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(data)
+          },
+          timeout: TOTAL_TIMEOUT
         },
-        timeout: 25000
-      },
-      (res) => {
-        let buf = '';
-        res.on('data', (c) => (buf += c));
-        res.on('end', () => {
-          if (res.statusCode !== 200) {
-            reject(new Error(`HUNYUAN_HTTP_${res.statusCode}: ${buf.slice(0, 300)}`));
-            return;
-          }
-          try {
-            resolve(JSON.parse(buf));
-          } catch (e) {
-            reject(new Error('HUNYUAN_BAD_JSON: ' + buf.slice(0, 300)));
-          }
-        });
-      }
-    );
-    req.on('error', reject);
-    req.on('timeout', () => req.destroy(new Error('HUNYUAN_TIMEOUT')));
+        (res) => {
+          let buf = '';
+          res.on('data', (c) => (buf += c));
+          // 响应流异常必须捕获：无监听时 'error' 会抛未捕获异常，云函数直接崩溃（ret=-3）
+          res.on('error', (e) => finish(new Error('HUNYUAN_RESP_ERROR: ' + e.message)));
+          res.on('aborted', () => finish(new Error('HUNYUAN_ABORTED')));
+          res.on('end', () => {
+            if (res.statusCode !== 200) {
+              finish(new Error(`HUNYUAN_HTTP_${res.statusCode}: ${buf.slice(0, 300)}`));
+              return;
+            }
+            try {
+              finish(null, JSON.parse(buf));
+            } catch (e) {
+              finish(new Error('HUNYUAN_BAD_JSON: ' + buf.slice(0, 300)));
+            }
+          });
+        }
+      );
+    } catch (e) {
+      finish(e);
+      return;
+    }
+    // Node 的 timeout 只约束 socket 空闲；上游若持续缓慢回包，总耗时仍可能超过平台超时
+    timer = setTimeout(() => {
+      req.destroy();
+      finish(new Error('HUNYUAN_TIMEOUT'));
+    }, TOTAL_TIMEOUT);
+    req.on('error', (e) => finish(e));
+    req.on('timeout', () => {
+      req.destroy();
+      finish(new Error('HUNYUAN_TIMEOUT'));
+    });
     req.write(data);
     req.end();
   });
 }
 
-const GENDER_TEXT = { male: '男性', female: '女性', other: '未指定' };
+const GENDER_TEXT = { male: '男', female: '女', other: '不限' };
+
+/** 年龄段风格侧重（单次输出，压缩提示词用） */
+function ageStyle(age) {
+  return age < 18 ? '校园' : age <= 30 ? '通勤/休闲' : age <= 50 ? '通勤/质感' : '舒适/保暖';
+}
 
 /** 天气描述（v1.4.0 C 模块）：有温度用「x~y℃」+ 现象，仅有现象只给现象 */
 function weatherText(w) {
@@ -65,20 +102,17 @@ function weatherText(w) {
   return parts.join(' ');
 }
 
-function buildPrompt(gender, age, wardrobeName, weather) {
+/** 精简提示词：单条消息承载全部上下文与输出约束，尽量降低 token 消耗 */
+function buildPrompt(gender, age, weather) {
   const wt = weatherText(weather);
-  const weatherLine = wt ? `\n当前天气：${wt}，建议需适配该天气（温度档位决定厚薄与品类，雨天优先防水/带伞，低温侧重保暖）。`
-    : '';
-  return `你是一位专业穿搭顾问。用户性别：${GENDER_TEXT[gender] || '未指定'}，年龄：${age} 岁，衣橱「${wardrobeName}」目前为空。${weatherLine}
-请给出 1 条简短、具体、可执行的开启衣橱建议（着装方向），不超过 50 字，并按年龄段调整品类侧重（18 岁以下偏校园，18-30 岁偏通勤/休闲，31-50 岁偏通勤/质感，50 岁以上偏舒适/保暖）。
-只输出 JSON，不要输出其他文字，格式：{"tips":["建议内容"]}`;
+  return `穿搭顾问。${GENDER_TEXT[gender] || '不限'}，${age}岁，衣橱为空。${wt ? `天气${wt}。` : ''}给1条≤50字的入门单品建议，侧重${ageStyle(age)}。只输出JSON：{"tips":["建议"]}`;
 }
 
 /**
  * 生成空衣橱引导文案
  * @returns {Promise<string[]>} 1 条建议（解析失败抛错，由调用方降级）
  */
-async function callHunyuanGuide(gender, age, wardrobeName, weather) {
+async function callHunyuanGuide(gender, age, weather) {
   const apiKey = process.env.HUNYUAN_API_KEY || loadLocalKey();
   if (!apiKey) {
     throw new Error('MISSING_SECRET: 未配置 HUNYUAN_API_KEY（环境变量或 private.config.json）');
@@ -86,10 +120,7 @@ async function callHunyuanGuide(gender, age, wardrobeName, weather) {
   const startedAt = Date.now();
   const res = await httpsPostJson('/v1/chat/completions', apiKey, {
     model: process.env.HUNYUAN_MODEL || 'hy4',
-    messages: [
-      { role: 'system', content: '你只输出严格 JSON，不输出解释性文字。' },
-      { role: 'user', content: buildPrompt(gender, age, wardrobeName, weather) }
-    ],
+    messages: [{ role: 'user', content: buildPrompt(gender, age, weather) }],
     temperature: 0.7
     // 不设 max_tokens：与 recognizeClothing 保持一致；实测限制 200 时 hy4 可能
     // 将输出写入 reasoning 字段或被截断，导致 content 为空（BAD_MODEL_OUTPUT）
