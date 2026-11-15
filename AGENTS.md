@@ -40,6 +40,14 @@
    `feat: 新增衣物筛选`、`docs: 更新 PRD v0.3`、`fix: 修复照片组上传失败`。
 8. **可预览版本推送约定（v1.2.0 起确认）**：每次经测试确认无 bug 的可预览版本，必须推送至 `origin/untested`；`package.json` 的 `version` 同步升版，开发日志追加条目并同步文件名版本号。
 
+## 构建产物与微信开发者工具同步（强制）
+
+- 微信开发者工具的项目目录 = 本仓库根目录；`project.config.json` 已声明 `miniprogramRoot: dist/`、`cloudfunctionRoot: cloudfunctions/`。工具读取的是 `dist/` 构建产物，**不会自动跟随 `src/` 源码**，源码改了不重新构建，工具里仍是旧代码。
+- 每次修改 `src/` 后，必须执行 `npm run build:weapp`（或保持 `npm run dev:weapp` 监听），再执行 `npm run verify:sync` 校验通过；未通过不得提交、推送或生成真机二维码。
+- 真机预览 / 生成二维码 / 交付前同样先跑一次 `npm run verify:sync`。
+- `cloudfunctions/` 由工具直读本地文件，无需构建；但云端生效必须在开发者工具中右键对应云函数「上传并部署：云端安装依赖」。
+- 不得在开发者工具内直接改代码（会被下一次构建覆盖），也不得把仓库另存副本后用副本调试；若工具已绑定其他目录，应改为本仓库根目录后重新编译。
+
 ## 分支说明
 
 | 分支 | 用途 | 说明 |
