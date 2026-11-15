@@ -7,9 +7,12 @@ import AccordionList, { AccordionGroup } from '@/components/AccordionList';
 import TypeSideBar from '@/components/TypeSideBar';
 import ItemCard from '@/components/ItemCard';
 import EmptyState from '@/components/EmptyState';
+import RecommendCard from '@/components/RecommendCard';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
 import { getWeather } from '@/services/weather';
-import { getEmptyGuide } from '@/services/emptyGuide';
+import { getEmptyGuide, EmptyGuideResult } from '@/services/emptyGuide';
+import { buildOutfits, SCENE_OPTIONS, SceneId, RecommendOutfit } from '@/services/recommend';
+import { requestOutfitRecommend, composeAiReason } from '@/services/outfitRecommend';
 import { DEFAULT_CITY } from '@/data/mockWeather';
 import { CITY_GROUPS } from '@/data/cities';
 import { COLOR_PRESETS, MATERIAL_PRESETS, themeVarsOf, getThemeById } from '@/data/presets';
@@ -18,6 +21,9 @@ import styles from './index.module.scss';
 
 /** 分组类型顺序（自定义类型排在预设之后） */
 const PLAN_TYPE_ORDER = ['上装', '外套', '裤装', '裙装', '连衣裙', '内衣', '家居服', '鞋履', '配饰', '其他'];
+
+/** v1.4.3：小程序启动标记（由 app.tsx useLaunch 写入），首次进入首页时自动执行穿搭推荐 */
+const APP_LAUNCH_FLAG = 'ldw_app_launched';
 
 /** 衣柜首页（PRD FR-06/FR-09）：天气 + 衣橱切换 + 筛选 + 手风琴分组衣物列表 */
 const WardrobePage: React.FC = () => {
@@ -32,6 +38,7 @@ const WardrobePage: React.FC = () => {
   // v0.6：明日穿搭勾选（按衣橱归属）
   const tomorrowOutfits = useWardrobeStore((s) => s.tomorrowOutfits);
   const toggleTomorrowItem = useWardrobeStore((s) => s.toggleTomorrowItem);
+  const adoptTomorrowItems = useWardrobeStore((s) => s.adoptTomorrowItems);
   // v0.6：「我的」页跳转携带的筛选预设
   const wardrobeFilterPreset = useWardrobeStore((s) => s.wardrobeFilterPreset);
   const consumeWardrobeFilterPreset = useWardrobeStore((s) => s.consumeWardrobeFilterPreset);
@@ -50,7 +57,10 @@ const WardrobePage: React.FC = () => {
   // v1.1：侧边标签栏选中类型（随滚动联动/手风琴展开收起同步更新）
   const [activeType, setActiveType] = useState('');
   // v1.2.1：空衣橱专属引导文案（云函数按性别/年龄动态生成，失败用兜底）
-  const [emptyGuideTip, setEmptyGuideTip] = useState('');
+  // v1.4.1：附带来源（hunyuan/fallback），界面用绿/红角标区分，便于调试
+  const [emptyGuide, setEmptyGuide] = useState<EmptyGuideResult | null>(null);
+  // v1.4.1：搭配场景（仅预设选项，不支持自由输入）
+  const [scene, setScene] = useState<SceneId>('all');
 
   // 滚动联动状态（用 ref，避免高频渲染）
   const lastScrollTop = useRef(0);
@@ -199,22 +209,146 @@ const WardrobePage: React.FC = () => {
   // v0.7：手风琴分组展示条件（无筛选 + 非明日穿搭模式 + 有衣物）
   const showAccordion = !planMode && !isFiltering && currentItems.length > 0 && filtered.length > 0;
 
-  // v1.2.1：空衣橱时加载专属引导文案（性别/年龄取自当前衣橱主人，PRD 9.1.2）
-  const emptyGender = currentWardrobe?.gender;
-  const emptyAge = currentWardrobe?.age ?? null;
+  // v1.4.0（B/D 模块）：规则引擎推荐——有天气且有衣物时生成 1–3 套穿搭（v1.4.1 改为基于明日天气）；
+  // 天气失败或衣橱为空时返回空数组不展示（降级矩阵），空衣橱走 C 模块引导
+  const outfits = useMemo(
+    () => (weather && !weatherFailed ? buildOutfits(weather, currentItems, scene) : []),
+    [weather, weatherFailed, currentItems, scene]
+  );
+  const [outfitIdx, setOutfitIdx] = useState(0);
   useEffect(() => {
-    if (currentItems.length > 0 || isFiltering) {
-      setEmptyGuideTip('');
+    setOutfitIdx(0);
+  }, [outfits]);
+  const localOutfit = outfits.length > 0 ? outfits[outfitIdx % outfits.length] : null;
+  // v1.5.0：明日推荐改由云函数 outfitRecommend 调用混元按场景选搭；
+  // 云函数不可用/失败时回退本地规则引擎，并通过卡片角标区分来源
+  const [aiOutfit, setAiOutfit] = useState<RecommendOutfit | null>(null);
+  const [aiSource, setAiSource] = useState<'hunyuan' | 'fallback'>('fallback');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiNonce, setAiNonce] = useState(0);
+  const aiExcludeRef = useRef<string[]>([]);
+  const aiReqRef = useRef(0);
+  const recommendReady = !!weather && !weatherFailed && currentItems.length > 0;
+  useEffect(() => {
+    if (!recommendReady || !weather) {
+      setAiOutfit(null);
+      setAiLoading(false);
       return;
     }
+    const reqId = ++aiReqRef.current;
     let alive = true;
-    getEmptyGuide(emptyGender, emptyAge).then((tip) => {
-      if (alive) setEmptyGuideTip(tip);
+    setAiLoading(true);
+    setAiOutfit(null);
+    setAiSource('fallback');
+    // 「换一件」排除上一次组合：只对本次请求生效，用后即清空
+    const excludeIds = aiExcludeRef.current;
+    aiExcludeRef.current = [];
+    requestOutfitRecommend({
+      scene,
+      weather,
+      items: currentItems,
+      gender: currentWardrobe?.gender,
+      age: currentWardrobe?.age ?? null,
+      excludeIds
+    })
+      .then((res) => {
+        if (!alive || reqId !== aiReqRef.current || !res) return;
+        const itemMap = new Map(currentItems.map((it) => [it.id, it]));
+        const picked = res.itemIds.map((id) => itemMap.get(id)).filter(Boolean) as ClothingItem[];
+        if (!picked.length) return;
+        const sceneLabel = (SCENE_OPTIONS.find((s) => s.id === res.scene) || SCENE_OPTIONS[0]).label;
+        setAiSource(res.source);
+        setAiOutfit({
+          items: picked,
+          scene: res.scene,
+          sceneLabel,
+          reason: composeAiReason(weather, sceneLabel, picked, res.advice)
+        });
+        console.info(`[Wardrobe] 明日推荐来源 = ${res.source}, 场景 = ${sceneLabel}`);
+      })
+      .catch((e) => console.warn('[Wardrobe] 明日推荐生成失败：', (e as Error).message))
+      .finally(() => {
+        if (alive && reqId === aiReqRef.current) setAiLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [recommendReady, weather, weatherFailed, currentItems, scene, currentWardrobe?.gender, currentWardrobe?.age, aiNonce]);
+  const outfit = aiOutfit || localOutfit;
+  const outfitAdopted = !!outfit && outfit.items.every((it) => tomorrowIds.includes(it.id));
+  const handleShuffle = useCallback(() => {
+    if (aiLoading) return;
+    // AI 结果：带上当前组合排除，重新请求混元；本地兜底：轮换规则引擎结果
+    if (aiOutfit) {
+      aiExcludeRef.current = aiOutfit.items.map((it) => it.id);
+      setAiNonce((n) => n + 1);
+      return;
+    }
+    setOutfitIdx((i) => (i + 1) % Math.max(outfits.length, 1));
+  }, [aiLoading, aiOutfit, outfits.length]);
+  const handleAdopt = useCallback(() => {
+    if (!outfit) return;
+    adoptTomorrowItems(outfit.items.map((it) => it.id));
+    Taro.showToast({ title: '已加入明日穿搭', icon: 'success' });
+  }, [outfit, adoptTomorrowItems]);
+
+  // v1.4.2：穿搭建议重新生成的显性加载态——选择风格、切换城市共用同一套提示逻辑。
+  // 规则引擎本身是同步计算，这里保留约 600ms 最短展示时间，避免加载态一闪而过；
+  // 切换城市时若天气仍在请求，等天气返回后再开始计时，保证提示覆盖整个重算过程。
+  const [recLoading, setRecLoading] = useState(false);
+  useEffect(() => {
+    if (!recLoading) return;
+    if (weatherLoading) return;
+    const t = setTimeout(() => setRecLoading(false), 600);
+    return () => clearTimeout(t);
+  }, [recLoading, weatherLoading, scene, weather]);
+  const handleSelectScene = useCallback(
+    (next: SceneId) => {
+      if (next === scene) return;
+      setScene(next);
+      setOutfitIdx(0);
+      setAiOutfit(null);
+      aiExcludeRef.current = [];
+      setRecLoading(true);
+    },
+    [scene]
+  );
+
+  // v1.4.3：小程序启动后首次进入首页，自动执行一次穿搭推荐
+  // （推荐为天气 + 衣物 + 场景的同步规则计算；此处重置轮换位并展示生成态，天气返回后立即得到结果）
+  useDidShow(() => {
+    try {
+      if (Taro.getStorageSync(APP_LAUNCH_FLAG)) {
+        Taro.removeStorageSync(APP_LAUNCH_FLAG);
+        setOutfitIdx(0);
+        setRecLoading(true);
+        console.info('[Wardrobe] 启动自动执行穿搭推荐');
+      }
+    } catch (e) {
+      console.warn('[Wardrobe] 读取启动标记失败', e);
+    }
+  });
+
+  // v1.2.1：空衣橱时加载专属引导文案（性别/年龄取自当前衣橱主人，PRD 9.1.2）
+  // v1.4.0（C 模块天气增强）：天气加载完成后再请求引导，传入当前天气生成天气适配建议；
+  // 天气失败（weatherFailed）时降级为无天气上下文，引导照常展示
+  const emptyGender = currentWardrobe?.gender;
+  const emptyAge = currentWardrobe?.age ?? null;
+  const weatherResolved = weather !== null || weatherFailed;
+  useEffect(() => {
+    if (currentItems.length > 0 || isFiltering) {
+      setEmptyGuide(null);
+      return;
+    }
+    if (!weatherResolved) return; // 等天气首次加载完成（成功或失败）再取建议
+    let alive = true;
+    getEmptyGuide(emptyGender, emptyAge, weather).then((res) => {
+      if (alive) setEmptyGuide(res);
     });
     return () => {
       alive = false;
     };
-  }, [currentItems.length, isFiltering, emptyGender, emptyAge]);
+  }, [currentItems.length, isFiltering, emptyGender, emptyAge, weatherResolved, weather]);
 
   // v1.1：listGroups 的 ref 同步（滚动/定位回调中读取，避免闭包过期）
   const listGroupsRef = useRef(listGroups);
@@ -360,6 +494,15 @@ const WardrobePage: React.FC = () => {
 
   return (
     <View className={styles.page} style={themeStyle}>
+      {/* v1.5.0：切换衣橱入口位于天气卡片之上的右上角 */}
+      <View className={styles.wardTopRow}>
+        <View className={styles.wardTopBtn} onClick={() => setSwitcherOpen(true)}>
+          <Text className={styles.wardTopText}>
+            衣橱 · {currentWardrobe?.name || '默认衣橱'}
+          </Text>
+          <Text className={styles.wardTopArrow}>▾</Text>
+        </View>
+      </View>
       <WeatherCard
         weather={weather}
         loading={weatherLoading}
@@ -367,20 +510,32 @@ const WardrobePage: React.FC = () => {
         cityGroups={CITY_GROUPS}
         activeCity={activeCity}
         onSelectCity={(c) => {
+          if (c === activeCity) return;
           setCity(c);
           setWeatherTick((t) => t + 1);
+          setRecLoading(true); // v1.4.2：切换城市复用同一加载提示，天气返回后重算推荐
         }}
         onRetry={() => setWeatherTick((t) => t + 1)}
       />
       {/* weatherTick 变化触发重新加载 */}
       <LoadTrigger tick={weatherTick} onLoad={loadWeather} />
 
-      {/* v1.2.0：移除上部横向「全衣橱展示区」，衣橱切换只保留独立「切换衣橱」入口 */}
-      <View className={styles.wardSwitcherRow}>
-        <View className={styles.wardSwitchBtn} onClick={() => setSwitcherOpen(true)}>
-          <Text className={styles.wardSwitchBtnText}>切换衣橱</Text>
-        </View>
-      </View>
+      {/* v1.4.3：推荐卡片移至天气卡片下方（筛选/明日穿搭勾选模式下不展示） */}
+      {!planMode && !isFiltering && outfit && (
+        <RecommendCard
+          outfit={outfit}
+          scenes={SCENE_OPTIONS}
+          scene={scene}
+          onSelectScene={handleSelectScene}
+          adopted={outfitAdopted}
+          loading={recLoading || aiLoading}
+          source={aiOutfit ? aiSource : 'fallback'}
+          onShuffle={handleShuffle}
+          onAdopt={handleAdopt}
+        />
+      )}
+
+      {/* v1.4.3：移除独立「切换衣橱」行，入口移至天气卡片右上角 */}
 
       {/* v0.6 用户意见 6：明日穿搭入口（按分类勾选明天穿的衣物） */}
       {!planMode && currentItems.length > 0 && (
@@ -399,6 +554,9 @@ const WardrobePage: React.FC = () => {
       {planMode ? (
         <>
           <View className={styles.planHeader}>
+            <View className={styles.planBack} onClick={() => setPlanMode(false)}>
+              <Text className={styles.planBackText}>‹ 返回</Text>
+            </View>
             <Text className={styles.planTitle}>🧳 明日穿搭（点击勾选）</Text>
             <Text className={styles.planCount}>已选 {tomorrowIds.length} 件</Text>
           </View>
@@ -447,7 +605,13 @@ const WardrobePage: React.FC = () => {
             <EmptyState
               icon='🧥'
               title='这个衣橱还空着'
-              desc={emptyGuideTip || '拍几张照片，记录第一件衣物吧'}
+              desc={emptyGuide?.tip || '拍几张照片，记录第一件衣物吧'}
+              badge={
+                emptyGuide
+                  ? { text: emptyGuide.source === 'hunyuan' ? '云端生成' : '兜底建议', tone: emptyGuide.source === 'hunyuan' ? 'green' : 'red' }
+                  : undefined
+              }
+              hint='添加自有衣物后，可按你的身材与当前天气获取更精准的个性化推荐'
               actionText='添加衣物'
               onAction={goAdd}
             />

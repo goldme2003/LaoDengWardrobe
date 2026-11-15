@@ -7,6 +7,16 @@
   box-sizing: border-box;
 }
 
+/* v1.4.1：返回衣柜入口（tab 页无原生返回按钮） */
+.backRow {
+  padding: 0 0 $spacing-sm;
+}
+
+.backText {
+  font-size: $font-size-sm;
+  color: var(--w-color, $color-primary);
+}
+
 .card {
   background: var(--w-card, $color-bg-card);
   border-radius: var(--w-radius, $radius-lg);

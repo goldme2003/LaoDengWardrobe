@@ -54,6 +54,39 @@ async function run() {
     assert.strictEqual(noAge.tips.length, 1);
   });
 
+  // v1.4.0 C 模块天气增强
+  const withWeather = await fn.main({
+    action: 'guide',
+    gender: 'male',
+    age: 28,
+    weather: { cond: '小雨', low: 8, high: 13 }
+  });
+  check('E6 传入天气返回 weatherUsed=true 且 ≤50 字', () => {
+    assert.strictEqual(withWeather.code, 'OK');
+    assert.strictEqual(withWeather.tips.length, 1);
+    assert.ok(withWeather.tips[0].length <= 50, `长度=${withWeather.tips[0].length}`);
+    assert.strictEqual(withWeather.weatherUsed, true);
+  });
+
+  const coldWeather = await fn.main({ action: 'guide', gender: 'male', age: 40, weather: { cond: '晴', low: -3, high: 2 } });
+  check('E7 低温档兜底文案含保暖提示且无双标点（仅 fallback 源校验）', () => {
+    if (coldWeather.source === 'fallback') {
+      assert.ok(/保暖/.test(coldWeather.tips[0]), coldWeather.tips[0]);
+      assert.ok(!/。，|，。|。。/.test(coldWeather.tips[0]), coldWeather.tips[0]);
+    }
+  });
+
+  const badWeather = await fn.main({ action: 'guide', gender: 'male', age: 30, weather: { cond: '   ', low: 'x', high: null } });
+  check('E8 非法天气字段视为无天气，weatherUsed=false', () => {
+    assert.strictEqual(badWeather.code, 'OK');
+    assert.strictEqual(badWeather.weatherUsed, false);
+  });
+
+  const sameSig = await fn.main({ action: 'guide', gender: 'male', age: 28, weather: { cond: '小雨', low: 6, high: 14 } });
+  check('E9 同天气签名命中缓存（source 与首调一致）', () => {
+    assert.strictEqual(sameSig.tips[0], withWeather.tips[0]);
+  });
+
   console.log(`\nemptyGuide: ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 }

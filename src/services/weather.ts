@@ -45,7 +45,8 @@ export const getWeather = async (city: string): Promise<WeatherInfo> => {
       const target = WEATHER_MOCK[city] ? city : DEFAULT_CITY;
       const data = WEATHER_MOCK[target];
       if (!data) throw new Error('天气数据不可用');
-      return { city: target, today: data.today, days: data.days, mock: true, notice: reason };
+      // v1.4.3：回退时保留用户选择的城市名（数据为模拟值，界面已有「模拟」角标提示）
+      return { city, today: data.today, days: data.days, mock: true, notice: reason };
     }
   }
   await delay(300);
@@ -55,7 +56,7 @@ export const getWeather = async (city: string): Promise<WeatherInfo> => {
     console.error('[Weather] 未找到城市天气数据, city =', city);
     throw new Error('天气数据不可用');
   }
-  return { city: target, today: data.today, days: data.days, mock: true, notice: 'CLOUD_DISABLED' };
+  return { city, today: data.today, days: data.days, mock: true, notice: 'CLOUD_DISABLED' };
 };
 
 /** 逆地理：坐标 → 城市名（D-2 定位接口审核通过后启用；失败返回空串由调用方降级城市选择） */

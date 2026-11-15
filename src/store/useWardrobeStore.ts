@@ -21,6 +21,8 @@ import {
   MATERIAL_PRESETS,
   SIZE_OPTIONS,
   OCCASION_OPTIONS,
+  LAYER_OPTIONS,
+  SEASON_OPTIONS,
   getThemeById,
   DEFAULT_THEME_ID
 } from '@/data/presets';
@@ -184,6 +186,8 @@ export interface WardrobeStore extends LdwData {
   deleteDiaryEntry: (id: string) => void;
   /** 切换明日穿搭勾选（v0.6：作用于当前衣橱） */
   toggleTomorrowItem: (itemId: string) => void;
+  /** 一键采纳推荐（v1.4.0 D 阶段）：批量加入当前衣橱明日穿搭勾选，已勾选的自动跳过 */
+  adoptTomorrowItems: (itemIds: string[]) => void;
   /** 设置首页待应用筛选预设（v0.6 跳转用） */
   setWardrobeFilterPreset: (preset: 'favorite') => void;
   /** 消费首页筛选预设（首页应用后清空） */
@@ -435,6 +439,8 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       if (dimension === 'color') return get().items.some((it) => it.color === value);
       if (dimension === 'material') return get().items.some((it) => it.material === value);
       if (dimension === 'size') return get().items.some((it) => it.size === value);
+      if (dimension === 'layer') return get().items.some((it) => it.layer === value);
+      if (dimension === 'season') return get().items.some((it) => (it.seasons || []).includes(value));
       return get().items.some((it) => (it.occasions || []).includes(value));
     },
 
@@ -535,6 +541,22 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       commit({ tomorrowOutfits: { ...s.tomorrowOutfits, [wid]: next } });
     },
 
+    adoptTomorrowItems: (itemIds) => {
+      const s = get();
+      const wid = s.currentWardrobeId;
+      const list = s.tomorrowOutfits[wid] || [];
+      const next = [...list];
+      itemIds.forEach((id) => {
+        if (!next.includes(id)) next.push(id);
+      });
+      if (next.length === list.length) {
+        console.info('[Store] 一键采纳：推荐衣物均已在明日穿搭中，跳过');
+        return;
+      }
+      console.info('[Store] 一键采纳推荐到明日穿搭, 新增件数 =', next.length - list.length);
+      commit({ tomorrowOutfits: { ...s.tomorrowOutfits, [wid]: next } });
+    },
+
     setWardrobeFilterPreset: (preset) => {
       commit({ wardrobeFilterPreset: preset });
     },
@@ -557,5 +579,7 @@ export const getDimensionPreset = (dimension: CustomDimension): string[] => {
   if (dimension === 'color') return COLOR_PRESETS.map((c) => c.name);
   if (dimension === 'size') return SIZE_OPTIONS;
   if (dimension === 'occasion') return OCCASION_OPTIONS;
+  if (dimension === 'layer') return LAYER_OPTIONS;
+  if (dimension === 'season') return SEASON_OPTIONS;
   return MATERIAL_PRESETS;
 };

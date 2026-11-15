@@ -4,41 +4,41 @@
   padding: $spacing-lg $page-padding 160rpx;
 }
 
-// v1.1：上部衣橱切换区 = 横向切换器 + 「切换衣橱」按钮
-// 注意：类名使用 ward 前缀，避免与衣橱管理页（pages/wardrobes）同名类冲突
-.wardSwitcherRow {
+// v1.4.3：原独立「切换衣橱」行已移除，入口改为天气卡片右上角按钮
+// v1.5.0：入口再上移，位于天气卡片之上的右上角（不嵌在卡片内）
+.wardTopRow {
   display: flex;
-  align-items: flex-start;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: $spacing-sm;
 }
 
-.wardSwitcherSlot {
-  flex: 1;
-  min-width: 0;
-}
-
-.wardSwitchBtn {
-  flex: none;
-  width: fit-content;
-  position: relative;
-  z-index: 1;
-  margin-left: $spacing-sm;
-  margin-top: $spacing-xs;
-  height: 64rpx;
-  padding: 0 $spacing-md;
-  border-radius: $radius-round;
-  background: var(--w-color, $color-primary);
+.wardTopBtn {
   display: flex;
   align-items: center;
+  max-width: 420rpx;
+  padding: 8rpx 20rpx;
+  border-radius: $radius-round;
+  background: var(--w-color, $color-primary);
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.12);
 
   &:active {
     opacity: 0.85;
   }
 }
 
-.wardSwitchBtnText {
+.wardTopText {
   font-size: $font-size-sm;
   color: $color-text-white;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wardTopArrow {
+  font-size: $font-size-sm;
+  color: $color-text-white;
+  margin-left: 6rpx;
 }
 
 .grid {
@@ -251,9 +251,22 @@
 }
 
 .planTitle {
+  flex: 1;
   font-size: $font-size-md;
   font-weight: $font-weight-semibold;
   color: var(--w-text, $color-text-primary);
+  text-align: center;
+}
+
+/* v1.4.1：明日穿搭勾选模式的返回控件（原先只能滚到列表底部点「完成」） */
+.planBack {
+  padding: 4rpx 0;
+  margin-right: $spacing-sm;
+}
+
+.planBackText {
+  font-size: $font-size-sm;
+  color: var(--w-color, $color-primary);
 }
 
 .planCount {

@@ -33,6 +33,28 @@ import {
 import { CustomDimension, NewItemInput, PurchaseInfo } from '@/types';
 import styles from './index.module.scss';
 
+/** v1.4.3：按当前月份给出合理季节默认值（识别结果或用户修改前一直生效） */
+const currentSeason = (): string => {
+  const month = new Date().getMonth() + 1;
+  if (month >= 3 && month <= 5) return '春';
+  if (month >= 6 && month <= 8) return '夏';
+  if (month >= 9 && month <= 11) return '秋';
+  return '冬';
+};
+
+/** v1.4.3：新增衣物属性默认值——降低录入成本，识别结果仅在用户未改动时覆盖 */
+const DEFAULT_TYPE = '上装';
+const DEFAULT_LAYER = '外穿';
+const DEFAULT_COLOR = '白色';
+const DEFAULT_MATERIAL = '棉';
+const DEFAULT_BRAND = '未知品牌';
+const DEFAULT_OCCASION = '日常';
+const DEFAULT_SIZE = 'M';
+
+/** 属性字段 key（识别覆盖判断与编辑态保护共用） */
+type AttrKey = 'type' | 'layer' | 'color' | 'material' | 'seasons' | 'size' | 'brand';
+const ATTR_KEYS: AttrKey[] = ['type', 'layer', 'color', 'material', 'seasons', 'size', 'brand'];
+
 /** 添加/编辑衣物（PRD FR-02/FR-03/FR-05 / v0.5）：照片组 + 属性控件 + 购入信息 + 备注 */
 const AddItemPage: React.FC = () => {
   const router = useRouter();
@@ -66,14 +88,15 @@ const AddItemPage: React.FC = () => {
   const themeStyle = themeVarsOf(currentWardrobe) as unknown as React.CSSProperties;
 
   const [photos, setPhotos] = useState<string[]>([]);
-  const [type, setType] = useState('');
-  const [layer, setLayer] = useState('');
-  const [color, setColor] = useState('');
-  const [material, setMaterial] = useState('');
-  const [seasons, setSeasons] = useState<string[]>([]);
-  const [size, setSize] = useState('');
-  const [brand, setBrand] = useState('');
-  const [occasions, setOccasions] = useState<string[]>([]);
+  // v1.4.3：所有属性字段均预填合理默认值；识别结果只覆盖「用户尚未手动修改」的字段
+  const [type, setType] = useState(DEFAULT_TYPE);
+  const [layer, setLayer] = useState(DEFAULT_LAYER);
+  const [color, setColor] = useState(DEFAULT_COLOR);
+  const [material, setMaterial] = useState(DEFAULT_MATERIAL);
+  const [seasons, setSeasons] = useState<string[]>([currentSeason()]);
+  const [size, setSize] = useState(() => suggestSize(currentWardrobe?.gender, bodyProfile?.height) || DEFAULT_SIZE);
+  const [brand, setBrand] = useState(DEFAULT_BRAND);
+  const [occasions, setOccasions] = useState<string[]>([DEFAULT_OCCASION]);
   const [purchaseDate, setPurchaseDate] = useState('');
   const [purchasePlace, setPurchasePlace] = useState('');
   const [purchasePrice, setPurchasePrice] = useState('');
@@ -85,10 +108,23 @@ const AddItemPage: React.FC = () => {
   const [recognizing, setRecognizing] = useState(false);
   const [recognTip, setRecognTip] = useState('');
   const recogTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // v1.4.3：用户手动改过的字段集合——识别结果不覆盖这些字段
+  const touchedRef = useRef<Set<AttrKey>>(new Set());
+  // v1.4.3：并发保护（识别中不重复触发）与主图快照（主图变化后丢弃过期识别结果）
+  const recognizingRef = useRef(false);
+  const mainPhotoRef = useRef('');
+  const markTouched = (key: AttrKey) => {
+    touchedRef.current.add(key);
+  };
+  const isUntouched = (key: AttrKey) => !touchedRef.current.has(key);
 
   // v1.2：自动识别主图（仅新增模式 + 功能可用 + 开关开启）；800ms 防抖 + 同图结果缓存；
   // 失败/超时不自动重试（避免浪费调用），提供「重新识别」手动入口（方案 2.3/2.4，Q4 自动触发）
   const mainPhoto = photos[0] || '';
+  // v1.4.3：主图快照同步——识别返回时若主图已变，丢弃过期结果
+  useEffect(() => {
+    mainPhotoRef.current = mainPhoto;
+  }, [mainPhoto]);
   useEffect(() => {
     if (editing || fromTryoutId) return; // 编辑/备选转正式已有预填，不自动触发
     if (!recognizeAvailable() || !isAutoRecognizeOn()) return;
@@ -108,18 +144,26 @@ const AddItemPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainPhoto]);
 
-  // v1.2：执行识别并预填（仅填充空字段；用户已填/已改的值一律不覆盖，方案 2.4-1）
+  // v1.2：执行识别并预填；v1.4.3：仅覆盖用户未手动修改的字段，并丢弃主图变更后的过期结果
   const runRecognize = async (photo: string, silent: boolean) => {
-    if (recognizing) return;
+    if (recognizingRef.current) return;
+    recognizingRef.current = true;
     setRecognizing(true);
     setRecognTip('');
     // 方案 2.4-2：5s 未返回时给出「可继续手动填写」提示，不中断请求、不阻塞录入
     const slowTimer = setTimeout(() => {
-      setRecognTip('识别较慢，可继续手动填写（完成后自动预填）');
+      setRecognTip('识别较慢，可继续手动填写（已填写内容不会被覆盖）');
     }, 5000);
     const outcome = await recognizePhoto(photo);
     clearTimeout(slowTimer);
+    recognizingRef.current = false;
     setRecognizing(false);
+    // v1.4.3：识别期间用户换了主图，本次结果不再适用
+    if (photo !== mainPhotoRef.current) {
+      console.info('[Add] 主图已变更，忽略本次识别结果');
+      setRecognTip('主图已更换，本次识别结果已忽略');
+      return;
+    }
     if (outcome.code === 'OK') {
       applyRecognize(outcome.data);
       return;
@@ -147,24 +191,54 @@ const AddItemPage: React.FC = () => {
     setRecognTip('识别不可用，请手动填写');
   };
 
+  // v1.4.3：识别结果只更新未被用户手动修改的字段；识别值缺失时保留默认值
   const applyRecognize = (data: RecognizeResult) => {
-    setType((prev) => prev || data.category);
-    setLayer((prev) => prev || data.layer);
-    setColor((prev) => prev || data.color || (data.colors && data.colors[0]) || '');
-    setMaterial((prev) => prev || data.material);
-    setSeasons((prev) => (prev.length > 0 ? prev : data.seasons.slice(0, 2)));
-    setSize((prev) => prev || data.size);
-    setBrand((prev) => prev || data.brand);
+    let applied = 0;
+    if (isUntouched('type') && data.category) {
+      setType(data.category);
+      applied++;
+    }
+    if (isUntouched('layer') && data.layer) {
+      setLayer(data.layer);
+      applied++;
+    }
+    if (isUntouched('color') && (data.color || (data.colors && data.colors[0]))) {
+      setColor(data.color || (data.colors && data.colors[0]) || '');
+      applied++;
+    }
+    if (isUntouched('material') && data.material) {
+      setMaterial(data.material);
+      applied++;
+    }
+    if (isUntouched('seasons') && data.seasons && data.seasons.length > 0) {
+      setSeasons(data.seasons.slice(0, 2));
+      applied++;
+    }
+    if (isUntouched('size') && data.size) {
+      setSize(data.size);
+      applied++;
+    }
+    if (isUntouched('brand') && data.brand) {
+      setBrand(data.brand);
+      applied++;
+    }
+    console.info('[Add] 识别预填完成, 覆盖字段数 =', applied);
     const extra = [data.careText ? `清洗：${data.careText}` : '', data.remarkExtra || '']
       .filter(Boolean)
       .join('；');
     if (extra) setRemark((prev) => (prev ? prev : extra.slice(0, REMARK_MAX_LEN)));
     const warn = data.warnings && data.warnings.length > 0 ? data.warnings[0] : '';
-    setRecognTip(warn ? `已预填，注意：${warn}` : '已自动预填，请核对并修改');
+    setRecognTip(
+      applied === 0
+        ? warn || '识别完成，你已修改的字段保持原值'
+        : warn
+          ? `已预填（保留你改过的字段），注意：${warn}`
+          : '已自动预填，请核对并修改'
+    );
     if (data.warnings && data.warnings.length > 0) {
       console.info('[Add] 识别提示', data.warnings);
     }
-    Taro.showToast({ title: '识别完成，已预填', icon: 'none' });
+    Taro.showToast({ title: applied === 0 ? '已保留你的修改' : '识别完成，已预填', icon: 'none' });
   };
 
   // v1.2：手动重新识别（用户点按触发，受熔断限制但不受自动开关限制）
@@ -204,15 +278,21 @@ const AddItemPage: React.FC = () => {
       setPurchasePhoto(editing.purchase?.photo || '');
       setRemark(editing.remark);
       setName(editing.name);
+      // v1.4.3：编辑态已有值视为用户数据，手动重新识别也不覆盖
+      ATTR_KEYS.forEach((k) => touchedRef.current.add(k));
       Taro.setNavigationBarTitle({ title: '编辑衣物' });
     } else if (fromTryout) {
       setPhotos(fromTryout.photos || []);
-      setType(fromTryout.type || '');
-      setColor(fromTryout.color || '');
-      setBrand(fromTryout.brand || '');
-      setSize(fromTryout.size || '');
+      setType(fromTryout.type || DEFAULT_TYPE);
+      setColor(fromTryout.color || DEFAULT_COLOR);
+      setBrand(fromTryout.brand || DEFAULT_BRAND);
+      setSize(fromTryout.size || DEFAULT_SIZE);
       setPurchasePrice(fromTryout.price || '');
       setRemark(fromTryout.note || '');
+      // v1.4.3：备选已带的字段不参与识别覆盖
+      (['type', 'color', 'brand', 'size'] as AttrKey[]).forEach((k) => {
+        if (fromTryout[k as 'type' | 'color' | 'brand' | 'size']) touchedRef.current.add(k);
+      });
       console.info('[Add] 备选转正式预填, tryoutId =', fromTryout.id);
     } else {
       // v0.5 用户意见 10：尺码选填，根据性别与身高预填默认值（可修改）
@@ -407,13 +487,17 @@ const AddItemPage: React.FC = () => {
             <Text className={styles.actionBtnText}>添加示例照片</Text>
           </View>
         </View>
-        <Text className={styles.remarkCount}>点击照片设为主图，第 1 张为列表展示图；识别按当前主图进行</Text>
+        <Text className={styles.remarkCount}>
+          点击照片设为主图，第 1 张为列表展示图；属性已预填默认值，识别只更新你未手动修改的字段
+        </Text>
 
         {/* v1.2（PRD 9.3）：自动识别状态行（仅微信端且已配置云环境时展示） */}
         {recognizeAvailable() && (
           <View className={styles.recognRow}>
             <Text className={styles.recognTip}>
-              {recognizing ? '正在识别衣物属性…' : recognTip || '已开启自动识别（主图）'}
+              {recognizing
+                ? '正在识别衣物属性…（可继续填写，已改字段不会被覆盖）'
+                : recognTip || '已开启自动识别（主图）'}
             </Text>
             <View
               className={styles.recognAction}
@@ -463,6 +547,7 @@ const AddItemPage: React.FC = () => {
           customMaxLength={10}
           value={type}
           onChange={(v) => {
+            markTouched('type');
             const nextType = v as string;
             setType(nextType);
             // v0.7.0：切换类型后若当前尺码不在新选项集中则清空
@@ -481,8 +566,17 @@ const AddItemPage: React.FC = () => {
           required
           mode='picker'
           options={LAYER_OPTIONS}
+          customValues={customOf('layer')}
+          usedValues={usedOf('layer')}
+          allowCustom
+          customMaxLength={6}
           value={layer}
-          onChange={(v) => setLayer(v as string)}
+          onChange={(v) => {
+            markTouched('layer');
+            setLayer(v as string);
+          }}
+          onAddCustom={(v) => addCustomOption('layer', v)}
+          onRemoveCustom={(v) => removeCustomOption('layer', v)}
         />
 
         <OptionSelector
@@ -496,7 +590,10 @@ const AddItemPage: React.FC = () => {
           customMaxLength={6}
           colorHexMap={COLOR_HEX_MAP}
           value={color}
-          onChange={(v) => setColor(v as string)}
+          onChange={(v) => {
+            markTouched('color');
+            setColor(v as string);
+          }}
           onAddCustom={(v) => addCustomOption('color', v)}
           onRemoveCustom={(v) => removeCustomOption('color', v)}
         />
@@ -511,7 +608,10 @@ const AddItemPage: React.FC = () => {
           allowCustom
           customMaxLength={10}
           value={material}
-          onChange={(v) => setMaterial(v as string)}
+          onChange={(v) => {
+            markTouched('material');
+            setMaterial(v as string);
+          }}
           onAddCustom={(v) => addCustomOption('material', v)}
           onRemoveCustom={(v) => removeCustomOption('material', v)}
         />
@@ -521,8 +621,17 @@ const AddItemPage: React.FC = () => {
           required
           mode='multi'
           options={['春', '夏', '秋', '冬']}
+          customValues={customOf('season')}
+          usedValues={usedOf('season')}
+          allowCustom
+          customMaxLength={6}
           value={seasons}
-          onChange={(v) => setSeasons(v as string[])}
+          onChange={(v) => {
+            markTouched('seasons');
+            setSeasons(v as string[]);
+          }}
+          onAddCustom={(v) => addCustomOption('season', v)}
+          onRemoveCustom={(v) => removeCustomOption('season', v)}
         />
 
         <OptionSelector
@@ -539,14 +648,20 @@ const AddItemPage: React.FC = () => {
               ? '请选择腰围尺寸（英寸，选填）'
               : '请选择尺码（选填，已按个人信息预填）'
           }
-          onChange={(v) => setSize(v as string)}
+          onChange={(v) => {
+            markTouched('size');
+            setSize(v as string);
+          }}
           onAddCustom={(v) => addCustomOption('size', v)}
           onRemoveCustom={(v) => removeCustomOption('size', v)}
         />
 
         <BrandPicker
           value={brand}
-          onChange={setBrand}
+          onChange={(v) => {
+            markTouched('brand');
+            setBrand(v);
+          }}
           allBrands={allBrands}
           usedBrands={usedBrands}
           favoriteBrands={favoriteBrands}

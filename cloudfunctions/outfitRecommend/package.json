@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "openapi": []
+  },
+  "name": "outfitRecommend",
+  "version": "1.0.0",
+  "description": "明日穿搭推荐（混元按场景从衣物清单中选搭 + 兜底）",
+  "main": "index.js",
+  "dependencies": {}
+}

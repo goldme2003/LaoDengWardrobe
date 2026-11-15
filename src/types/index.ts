@@ -121,8 +121,8 @@ export interface ClothingItem {
   createdAt: number;
 }
 
-/** 自定义选项维度（v0.5：扩展至尺码与适用场合） */
-export type CustomDimension = 'type' | 'color' | 'material' | 'size' | 'occasion';
+/** 自定义选项维度（v0.5：扩展至尺码与适用场合；v1.4.3：补充内外穿与季节，保证所有属性可手动输入） */
+export type CustomDimension = 'type' | 'color' | 'material' | 'size' | 'occasion' | 'layer' | 'season';
 
 /** 自定义选项 */
 export interface CustomOption {
