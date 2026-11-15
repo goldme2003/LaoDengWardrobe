@@ -101,6 +101,31 @@
   flex-shrink: 0;
 }
 
+// v1.5.0：场景 + 来源角标容器
+.tagRow {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.sourceTag {
+  font-size: 20rpx;
+  border-radius: $radius-round;
+  padding: 2rpx 10rpx;
+  margin-left: 8rpx;
+  flex-shrink: 0;
+}
+
+.sourceGreen {
+  color: #1f8a5b;
+  background: rgba(31, 138, 91, 0.12);
+}
+
+.sourceRed {
+  color: #c0392b;
+  background: rgba(192, 57, 43, 0.12);
+}
+
 .reason {
   font-size: $font-size-sm;
   color: $color-text-tertiary;

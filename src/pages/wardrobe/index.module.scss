@@ -5,6 +5,41 @@
 }
 
 // v1.4.3：原独立「切换衣橱」行已移除，入口改为天气卡片右上角按钮
+// v1.5.0：入口再上移，位于天气卡片之上的右上角（不嵌在卡片内）
+.wardTopRow {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: $spacing-sm;
+}
+
+.wardTopBtn {
+  display: flex;
+  align-items: center;
+  max-width: 420rpx;
+  padding: 8rpx 20rpx;
+  border-radius: $radius-round;
+  background: var(--w-color, $color-primary);
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.12);
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.wardTopText {
+  font-size: $font-size-sm;
+  color: $color-text-white;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wardTopArrow {
+  font-size: $font-size-sm;
+  color: $color-text-white;
+  margin-left: 6rpx;
+}
 
 .grid {
   display: flex;

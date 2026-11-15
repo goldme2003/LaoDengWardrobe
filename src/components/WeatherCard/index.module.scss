@@ -51,47 +51,15 @@
 }
 
 // v0.6：切换城市按钮，紧凑化后移入首行右侧
-// v1.4.3：城市/衣橱切换统一放入右上角容器
-.headerRight {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
+// v1.5.0：切换衣橱入口上移至天气卡片之外，卡片内仅保留切换城市
 .citySwitch {
+  margin-left: auto;
   display: flex;
   align-items: center;
   background: rgba(255, 255, 255, 0.7);
   border-radius: $radius-round;
   padding: 6rpx 16rpx;
   flex-shrink: 0;
-}
-
-// v1.4.3：切换衣橱按钮（天气卡右上角，主题色强调）
-.wardSwitch {
-  display: flex;
-  align-items: center;
-  margin-left: 10rpx;
-  padding: 6rpx 16rpx;
-  border-radius: $radius-round;
-  background: var(--w-weather-accent, #2f6f5e);
-  flex-shrink: 0;
-  max-width: 260rpx;
-}
-
-.wardSwitchText {
-  font-size: $font-size-xs;
-  color: #fff;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.wardSwitchArrow {
-  font-size: $font-size-xs;
-  color: rgba(255, 255, 255, 0.85);
-  margin-left: 4rpx;
 }
 
 // ---------- v1.3.0：城市选择弹层（≤1/3 屏高，拼音首字母分组） ----------

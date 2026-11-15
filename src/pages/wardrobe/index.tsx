@@ -11,7 +11,8 @@ import RecommendCard from '@/components/RecommendCard';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
 import { getWeather } from '@/services/weather';
 import { getEmptyGuide, EmptyGuideResult } from '@/services/emptyGuide';
-import { buildOutfits, SCENE_OPTIONS, SceneId } from '@/services/recommend';
+import { buildOutfits, SCENE_OPTIONS, SceneId, RecommendOutfit } from '@/services/recommend';
+import { requestOutfitRecommend, composeAiReason } from '@/services/outfitRecommend';
 import { DEFAULT_CITY } from '@/data/mockWeather';
 import { CITY_GROUPS } from '@/data/cities';
 import { COLOR_PRESETS, MATERIAL_PRESETS, themeVarsOf, getThemeById } from '@/data/presets';
@@ -218,9 +219,73 @@ const WardrobePage: React.FC = () => {
   useEffect(() => {
     setOutfitIdx(0);
   }, [outfits]);
-  const outfit = outfits.length > 0 ? outfits[outfitIdx % outfits.length] : null;
+  const localOutfit = outfits.length > 0 ? outfits[outfitIdx % outfits.length] : null;
+  // v1.5.0：明日推荐改由云函数 outfitRecommend 调用混元按场景选搭；
+  // 云函数不可用/失败时回退本地规则引擎，并通过卡片角标区分来源
+  const [aiOutfit, setAiOutfit] = useState<RecommendOutfit | null>(null);
+  const [aiSource, setAiSource] = useState<'hunyuan' | 'fallback'>('fallback');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiNonce, setAiNonce] = useState(0);
+  const aiExcludeRef = useRef<string[]>([]);
+  const aiReqRef = useRef(0);
+  const recommendReady = !!weather && !weatherFailed && currentItems.length > 0;
+  useEffect(() => {
+    if (!recommendReady || !weather) {
+      setAiOutfit(null);
+      setAiLoading(false);
+      return;
+    }
+    const reqId = ++aiReqRef.current;
+    let alive = true;
+    setAiLoading(true);
+    setAiOutfit(null);
+    setAiSource('fallback');
+    // 「换一件」排除上一次组合：只对本次请求生效，用后即清空
+    const excludeIds = aiExcludeRef.current;
+    aiExcludeRef.current = [];
+    requestOutfitRecommend({
+      scene,
+      weather,
+      items: currentItems,
+      gender: currentWardrobe?.gender,
+      age: currentWardrobe?.age ?? null,
+      excludeIds
+    })
+      .then((res) => {
+        if (!alive || reqId !== aiReqRef.current || !res) return;
+        const itemMap = new Map(currentItems.map((it) => [it.id, it]));
+        const picked = res.itemIds.map((id) => itemMap.get(id)).filter(Boolean) as ClothingItem[];
+        if (!picked.length) return;
+        const sceneLabel = (SCENE_OPTIONS.find((s) => s.id === res.scene) || SCENE_OPTIONS[0]).label;
+        setAiSource(res.source);
+        setAiOutfit({
+          items: picked,
+          scene: res.scene,
+          sceneLabel,
+          reason: composeAiReason(weather, sceneLabel, picked, res.advice)
+        });
+        console.info(`[Wardrobe] 明日推荐来源 = ${res.source}, 场景 = ${sceneLabel}`);
+      })
+      .catch((e) => console.warn('[Wardrobe] 明日推荐生成失败：', (e as Error).message))
+      .finally(() => {
+        if (alive && reqId === aiReqRef.current) setAiLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [recommendReady, weather, weatherFailed, currentItems, scene, currentWardrobe?.gender, currentWardrobe?.age, aiNonce]);
+  const outfit = aiOutfit || localOutfit;
   const outfitAdopted = !!outfit && outfit.items.every((it) => tomorrowIds.includes(it.id));
-  const handleShuffle = useCallback(() => setOutfitIdx((i) => (i + 1) % outfits.length), [outfits.length]);
+  const handleShuffle = useCallback(() => {
+    if (aiLoading) return;
+    // AI 结果：带上当前组合排除，重新请求混元；本地兜底：轮换规则引擎结果
+    if (aiOutfit) {
+      aiExcludeRef.current = aiOutfit.items.map((it) => it.id);
+      setAiNonce((n) => n + 1);
+      return;
+    }
+    setOutfitIdx((i) => (i + 1) % Math.max(outfits.length, 1));
+  }, [aiLoading, aiOutfit, outfits.length]);
   const handleAdopt = useCallback(() => {
     if (!outfit) return;
     adoptTomorrowItems(outfit.items.map((it) => it.id));
@@ -242,6 +307,8 @@ const WardrobePage: React.FC = () => {
       if (next === scene) return;
       setScene(next);
       setOutfitIdx(0);
+      setAiOutfit(null);
+      aiExcludeRef.current = [];
       setRecLoading(true);
     },
     [scene]
@@ -427,14 +494,21 @@ const WardrobePage: React.FC = () => {
 
   return (
     <View className={styles.page} style={themeStyle}>
+      {/* v1.5.0：切换衣橱入口位于天气卡片之上的右上角 */}
+      <View className={styles.wardTopRow}>
+        <View className={styles.wardTopBtn} onClick={() => setSwitcherOpen(true)}>
+          <Text className={styles.wardTopText}>
+            衣橱 · {currentWardrobe?.name || '默认衣橱'}
+          </Text>
+          <Text className={styles.wardTopArrow}>▾</Text>
+        </View>
+      </View>
       <WeatherCard
         weather={weather}
         loading={weatherLoading}
         failed={weatherFailed}
         cityGroups={CITY_GROUPS}
         activeCity={activeCity}
-        wardrobeName={currentWardrobe?.name}
-        onSwitchWardrobe={() => setSwitcherOpen(true)}
         onSelectCity={(c) => {
           if (c === activeCity) return;
           setCity(c);
@@ -454,7 +528,8 @@ const WardrobePage: React.FC = () => {
           scene={scene}
           onSelectScene={handleSelectScene}
           adopted={outfitAdopted}
-          loading={recLoading}
+          loading={recLoading || aiLoading}
+          source={aiOutfit ? aiSource : 'fallback'}
           onShuffle={handleShuffle}
           onAdopt={handleAdopt}
         />

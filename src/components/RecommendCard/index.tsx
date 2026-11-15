@@ -13,6 +13,8 @@ interface Props {
   adopted: boolean;
   /** v1.4.2：生成中（选择风格 / 切换城市后展示显性加载态） */
   loading: boolean;
+  /** v1.5.0：推荐来源（hunyuan = 混元生成，fallback = 本地/云端兜底） */
+  source?: 'hunyuan' | 'fallback';
   onShuffle: () => void;
   onAdopt: () => void;
 }
@@ -25,6 +27,7 @@ const RecommendCard: React.FC<Props> = ({
   onSelectScene,
   adopted,
   loading,
+  source,
   onShuffle,
   onAdopt
 }) => {
@@ -33,8 +36,16 @@ const RecommendCard: React.FC<Props> = ({
       <View className={styles.head}>
         <View className={styles.titleRow}>
           <Text className={styles.title}>明日穿搭推荐</Text>
-          {/* v1.4.3：每条推荐明确标注适用场景 */}
-          <Text className={styles.sceneTag}>适用场景：{outfit.sceneLabel}</Text>
+          <View className={styles.tagRow}>
+            {/* v1.4.3：每条推荐明确标注适用场景 */}
+            <Text className={styles.sceneTag}>适用场景：{outfit.sceneLabel}</Text>
+            {/* v1.5.0：来源区分——绿色混元生成 / 红色兜底 */}
+            {!!source && (
+              <Text className={`${styles.sourceTag} ${source === 'hunyuan' ? styles.sourceGreen : styles.sourceRed}`}>
+                {source === 'hunyuan' ? '混元生成' : '兜底推荐'}
+              </Text>
+            )}
+          </View>
         </View>
         {!loading && <Text className={styles.reason}>{outfit.reason}</Text>}
       </View>

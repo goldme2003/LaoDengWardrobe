@@ -14,9 +14,6 @@ interface Props {
   activeCity: string;
   onSelectCity: (city: string) => void;
   onRetry: () => void;
-  /** v1.4.3：切换衣橱入口移至天气卡片右上角 */
-  wardrobeName?: string;
-  onSwitchWardrobe: () => void;
 }
 
 /** 天气卡片（PRD FR-09）：城市、今日天气与气温、未来 3 日简报
@@ -29,9 +26,7 @@ const WeatherCard: React.FC<Props> = ({
   cityGroups,
   activeCity,
   onSelectCity,
-  onRetry,
-  wardrobeName,
-  onSwitchWardrobe
+  onRetry
 }) => {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [scrollInto, setScrollInto] = useState('');
@@ -78,16 +73,9 @@ const WeatherCard: React.FC<Props> = ({
             获取失败，点击重试
           </Text>
         )}
-        <View className={styles.headerRight}>
-          <View className={styles.citySwitch} onClick={openSheet}>
-            <Text className={styles.citySwitchText}>切换城市</Text>
-            <Text className={styles.citySwitchArrow}>▾</Text>
-          </View>
-          {/* v1.4.3：切换衣橱按钮移至天气卡片右上角 */}
-          <View className={styles.wardSwitch} onClick={onSwitchWardrobe}>
-            <Text className={styles.wardSwitchText}>{wardrobeName ? `衣橱·${wardrobeName}` : '切换衣橱'}</Text>
-            <Text className={styles.wardSwitchArrow}>▾</Text>
-          </View>
+        <View className={styles.citySwitch} onClick={openSheet}>
+          <Text className={styles.citySwitchText}>切换城市</Text>
+          <Text className={styles.citySwitchArrow}>▾</Text>
         </View>
       </View>
 
