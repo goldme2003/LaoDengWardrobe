@@ -53,6 +53,7 @@ const markers = [
   ['dist/pages/wardrobe/index.js', 'sceneChip', '推荐卡片场景标签'],
   ['dist/pages/wardrobe/index.js', 'planBack', '明日穿搭返回控件'],
   ['dist/pages/wardrobe/index.js', 'hunyuan', '空态建议来源角标'],
+  ['dist/pages/wardrobe/index.js', 'spinner', '推荐生成加载态'],
   ['dist/pages/tryout/index.js', 'backRow', '试穿页返回控件']
 ];
 for (const [file, needle, label] of markers) {

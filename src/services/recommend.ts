@@ -134,19 +134,20 @@ const sceneScore = (item: ClothingItem, scene: SceneId): number => {
 const buildReason = (
   weather: WeatherInfo,
   day: WeatherDay,
+  dayLabel: string,
   meta: { label: string; tip: string },
   scene: SceneId,
   items: ClothingItem[]
 ): string => {
   const sceneText = scene === 'all' ? '' : `${scene}场景，`;
-  return `${weather.city}明日 ${day.low}~${day.high}℃ ${day.cond}，${sceneText}${meta.label}；${items
+  return `${weather.city}${dayLabel} ${day.low}~${day.high}℃ ${day.cond}，${sceneText}${meta.label}；${items
     .map((i) => i.name)
     .join(' + ')}，${meta.tip}`;
 };
 
 /**
  * 生成明日穿搭推荐（1–3 套）
- * @param weather 天气信息（优先取明日预报 `days[1]`，缺失时回退今日）
+ * @param weather 天气信息（取明日预报 `days[0]`，缺失时回退今日）
  * @param items 当前衣橱衣物列表（非空）
  * @param scene 搭配场景（预设选项，默认 'all' 不限）
  * @returns 1–3 套推荐，每套含衣物与模板生成的推荐理由；不可推荐时返回空数组
@@ -159,7 +160,11 @@ export const buildOutfits = (
   if (!weather || !weather.today || !items || items.length === 0) return [];
 
   // v1.4.1：推荐卡片基于明日天气（与「一键采纳到明日穿搭」语义对齐），无明日预报时回退今日
-  const day = (weather.days && weather.days[1]) || weather.today;
+  // v1.4.2：`days[0]` 即「明天」（weatherProxy / mockWeather 的 days 顺序为 明天/后天/大后天），
+  //         原先误取 `days[1]`（后天），导致推荐基准错位一天
+  const hasTomorrow = !!(weather.days && weather.days[0]);
+  const day = hasTomorrow ? weather.days[0] : weather.today;
+  const dayLabel = hasTomorrow ? '明日' : '今日';
   const avg = Math.round((day.low + day.high) / 2);
   const band = bandOf(avg);
   const meta = BAND_META[band];
@@ -196,7 +201,7 @@ export const buildOutfits = (
     const sig = combo.map((c) => c.id).sort().join(',');
     if (combo.length > 0 && !seen.has(sig)) {
       seen.add(sig);
-      outfits.push({ items: combo, reason: buildReason(weather, day, meta, effectiveScene, combo) });
+      outfits.push({ items: combo, reason: buildReason(weather, day, dayLabel, meta, effectiveScene, combo) });
     }
   }
   return outfits;

@@ -11,17 +11,28 @@ interface Props {
   onSelectScene: (scene: SceneId) => void;
   /** 推荐衣物是否已全部加入明日穿搭（已采纳则按钮置灰） */
   adopted: boolean;
+  /** v1.4.2：生成中（选择风格 / 切换城市后展示显性加载态） */
+  loading: boolean;
   onShuffle: () => void;
   onAdopt: () => void;
 }
 
 /** 明日穿搭推荐卡片（v1.4.0 B/D 阶段）：规则引擎生成 1–3 套，「换一件」轮换、「一键采纳」写入明日穿搭勾选 */
-const RecommendCard: React.FC<Props> = ({ outfit, scenes, scene, onSelectScene, adopted, onShuffle, onAdopt }) => {
+const RecommendCard: React.FC<Props> = ({
+  outfit,
+  scenes,
+  scene,
+  onSelectScene,
+  adopted,
+  loading,
+  onShuffle,
+  onAdopt
+}) => {
   return (
     <View className={styles.card}>
       <View className={styles.head}>
         <Text className={styles.title}>明日穿搭推荐</Text>
-        <Text className={styles.reason}>{outfit.reason}</Text>
+        {!loading && <Text className={styles.reason}>{outfit.reason}</Text>}
       </View>
       <View className={styles.sceneBar}>
         {scenes.map((s) => (
@@ -36,27 +47,36 @@ const RecommendCard: React.FC<Props> = ({ outfit, scenes, scene, onSelectScene, 
           </View>
         ))}
       </View>
-      <View className={styles.items}>
-        {outfit.items.map((it) => (
-          <View key={it.id} className={styles.item}>
-            <Image className={styles.photo} src={it.photos[0]} mode='aspectFill' />
-            <Text className={styles.name} numberOfLines={1}>
-              {it.name}
-            </Text>
+      {loading ? (
+        <View className={styles.loading}>
+          <View className={styles.spinner} />
+          <Text className={styles.loadingText}>穿搭建议生成中…</Text>
+        </View>
+      ) : (
+        <>
+          <View className={styles.items}>
+            {outfit.items.map((it) => (
+              <View key={it.id} className={styles.item}>
+                <Image className={styles.photo} src={it.photos[0]} mode='aspectFill' />
+                <Text className={styles.name} numberOfLines={1}>
+                  {it.name}
+                </Text>
+              </View>
+            ))}
           </View>
-        ))}
-      </View>
-      <View className={styles.actions}>
-        <View className={styles.shuffleBtn} onClick={onShuffle}>
-          <Text className={styles.shuffleText}>换一件</Text>
-        </View>
-        <View
-          className={`${styles.adoptBtn} ${adopted ? styles.adoptBtnDone : ''}`}
-          onClick={adopted ? undefined : onAdopt}
-        >
-          <Text className={styles.adoptText}>{adopted ? '已采纳 ✓' : '一键采纳到明日穿搭'}</Text>
-        </View>
-      </View>
+          <View className={styles.actions}>
+            <View className={styles.shuffleBtn} onClick={onShuffle}>
+              <Text className={styles.shuffleText}>换一件</Text>
+            </View>
+            <View
+              className={`${styles.adoptBtn} ${adopted ? styles.adoptBtnDone : ''}`}
+              onClick={adopted ? undefined : onAdopt}
+            >
+              <Text className={styles.adoptText}>{adopted ? '已采纳 ✓' : '一键采纳到明日穿搭'}</Text>
+            </View>
+          </View>
+        </>
+      )}
     </View>
   );
 };

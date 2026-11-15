@@ -224,6 +224,26 @@ const WardrobePage: React.FC = () => {
     Taro.showToast({ title: '已加入明日穿搭', icon: 'success' });
   }, [outfit, adoptTomorrowItems]);
 
+  // v1.4.2：穿搭建议重新生成的显性加载态——选择风格、切换城市共用同一套提示逻辑。
+  // 规则引擎本身是同步计算，这里保留约 600ms 最短展示时间，避免加载态一闪而过；
+  // 切换城市时若天气仍在请求，等天气返回后再开始计时，保证提示覆盖整个重算过程。
+  const [recLoading, setRecLoading] = useState(false);
+  useEffect(() => {
+    if (!recLoading) return;
+    if (weatherLoading) return;
+    const t = setTimeout(() => setRecLoading(false), 600);
+    return () => clearTimeout(t);
+  }, [recLoading, weatherLoading, scene, weather]);
+  const handleSelectScene = useCallback(
+    (next: SceneId) => {
+      if (next === scene) return;
+      setScene(next);
+      setOutfitIdx(0);
+      setRecLoading(true);
+    },
+    [scene]
+  );
+
   // v1.2.1：空衣橱时加载专属引导文案（性别/年龄取自当前衣橱主人，PRD 9.1.2）
   // v1.4.0（C 模块天气增强）：天气加载完成后再请求引导，传入当前天气生成天气适配建议；
   // 天气失败（weatherFailed）时降级为无天气上下文，引导照常展示
@@ -396,8 +416,10 @@ const WardrobePage: React.FC = () => {
         cityGroups={CITY_GROUPS}
         activeCity={activeCity}
         onSelectCity={(c) => {
+          if (c === activeCity) return;
           setCity(c);
           setWeatherTick((t) => t + 1);
+          setRecLoading(true); // v1.4.2：切换城市复用同一加载提示，天气返回后重算推荐
         }}
         onRetry={() => setWeatherTick((t) => t + 1)}
       />
@@ -481,8 +503,9 @@ const WardrobePage: React.FC = () => {
               outfit={outfit}
               scenes={SCENE_OPTIONS}
               scene={scene}
-              onSelectScene={setScene}
+              onSelectScene={handleSelectScene}
               adopted={outfitAdopted}
+              loading={recLoading}
               onShuffle={handleShuffle}
               onAdopt={handleAdopt}
             />
