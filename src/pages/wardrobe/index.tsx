@@ -10,8 +10,8 @@ import EmptyState from '@/components/EmptyState';
 import RecommendCard from '@/components/RecommendCard';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
 import { getWeather } from '@/services/weather';
-import { getEmptyGuide } from '@/services/emptyGuide';
-import { buildOutfits } from '@/services/recommend';
+import { getEmptyGuide, EmptyGuideResult } from '@/services/emptyGuide';
+import { buildOutfits, SCENE_OPTIONS, SceneId } from '@/services/recommend';
 import { DEFAULT_CITY } from '@/data/mockWeather';
 import { CITY_GROUPS } from '@/data/cities';
 import { COLOR_PRESETS, MATERIAL_PRESETS, themeVarsOf, getThemeById } from '@/data/presets';
@@ -53,7 +53,10 @@ const WardrobePage: React.FC = () => {
   // v1.1：侧边标签栏选中类型（随滚动联动/手风琴展开收起同步更新）
   const [activeType, setActiveType] = useState('');
   // v1.2.1：空衣橱专属引导文案（云函数按性别/年龄动态生成，失败用兜底）
-  const [emptyGuideTip, setEmptyGuideTip] = useState('');
+  // v1.4.1：附带来源（hunyuan/fallback），界面用绿/红角标区分，便于调试
+  const [emptyGuide, setEmptyGuide] = useState<EmptyGuideResult | null>(null);
+  // v1.4.1：搭配场景（仅预设选项，不支持自由输入）
+  const [scene, setScene] = useState<SceneId>('all');
 
   // 滚动联动状态（用 ref，避免高频渲染）
   const lastScrollTop = useRef(0);
@@ -202,11 +205,11 @@ const WardrobePage: React.FC = () => {
   // v0.7：手风琴分组展示条件（无筛选 + 非明日穿搭模式 + 有衣物）
   const showAccordion = !planMode && !isFiltering && currentItems.length > 0 && filtered.length > 0;
 
-  // v1.4.0（B/D 模块）：规则引擎推荐——有天气且有衣物时生成 1–3 套穿搭；
+  // v1.4.0（B/D 模块）：规则引擎推荐——有天气且有衣物时生成 1–3 套穿搭（v1.4.1 改为基于明日天气）；
   // 天气失败或衣橱为空时返回空数组不展示（降级矩阵），空衣橱走 C 模块引导
   const outfits = useMemo(
-    () => (weather && !weatherFailed ? buildOutfits(weather, currentItems) : []),
-    [weather, weatherFailed, currentItems]
+    () => (weather && !weatherFailed ? buildOutfits(weather, currentItems, scene) : []),
+    [weather, weatherFailed, currentItems, scene]
   );
   const [outfitIdx, setOutfitIdx] = useState(0);
   useEffect(() => {
@@ -229,13 +232,13 @@ const WardrobePage: React.FC = () => {
   const weatherResolved = weather !== null || weatherFailed;
   useEffect(() => {
     if (currentItems.length > 0 || isFiltering) {
-      setEmptyGuideTip('');
+      setEmptyGuide(null);
       return;
     }
     if (!weatherResolved) return; // 等天气首次加载完成（成功或失败）再取建议
     let alive = true;
-    getEmptyGuide(emptyGender, emptyAge, weather).then((tip) => {
-      if (alive) setEmptyGuideTip(tip);
+    getEmptyGuide(emptyGender, emptyAge, weather).then((res) => {
+      if (alive) setEmptyGuide(res);
     });
     return () => {
       alive = false;
@@ -425,6 +428,9 @@ const WardrobePage: React.FC = () => {
       {planMode ? (
         <>
           <View className={styles.planHeader}>
+            <View className={styles.planBack} onClick={() => setPlanMode(false)}>
+              <Text className={styles.planBackText}>‹ 返回</Text>
+            </View>
             <Text className={styles.planTitle}>🧳 明日穿搭（点击勾选）</Text>
             <Text className={styles.planCount}>已选 {tomorrowIds.length} 件</Text>
           </View>
@@ -469,10 +475,13 @@ const WardrobePage: React.FC = () => {
             onChange={setFilters}
           />
 
-          {/* v1.4.0（B/D 模块）：今日穿搭推荐卡片，换一件轮换 / 一键采纳写入明日穿搭；筛选时不展示 */}
+          {/* v1.4.0（B/D 模块）：明日穿搭推荐卡片，换一件轮换 / 一键采纳写入明日穿搭；筛选时不展示 */}
           {!isFiltering && outfit && (
             <RecommendCard
               outfit={outfit}
+              scenes={SCENE_OPTIONS}
+              scene={scene}
+              onSelectScene={setScene}
               adopted={outfitAdopted}
               onShuffle={handleShuffle}
               onAdopt={handleAdopt}
@@ -483,7 +492,12 @@ const WardrobePage: React.FC = () => {
             <EmptyState
               icon='🧥'
               title='这个衣橱还空着'
-              desc={emptyGuideTip || '拍几张照片，记录第一件衣物吧'}
+              desc={emptyGuide?.tip || '拍几张照片，记录第一件衣物吧'}
+              badge={
+                emptyGuide
+                  ? { text: emptyGuide.source === 'hunyuan' ? '云端生成' : '兜底建议', tone: emptyGuide.source === 'hunyuan' ? 'green' : 'red' }
+                  : undefined
+              }
               hint='添加自有衣物后，可按你的身材与当前天气获取更精准的个性化推荐'
               actionText='添加衣物'
               onAction={goAdd}

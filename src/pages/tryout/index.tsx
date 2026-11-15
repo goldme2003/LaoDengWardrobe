@@ -57,6 +57,10 @@ const TryoutPage: React.FC = () => {
 
   return (
     <View className={styles.page} style={themeStyle}>
+      {/* v1.4.1：补返回控件（该页为 tab 页，无原生返回；真机反馈找不到回衣柜入口） */}
+      <View className={styles.backRow} onClick={() => Taro.switchTab({ url: '/pages/wardrobe/index' })}>
+        <Text className={styles.backText}>‹ 返回衣柜</Text>
+      </View>
       {list.length === 0 ? (
         <EmptyState
           icon='🛍️'

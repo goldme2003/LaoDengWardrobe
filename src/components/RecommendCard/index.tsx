@@ -1,23 +1,40 @@
 import React from 'react';
 import { View, Text, Image } from '@tarojs/components';
-import type { RecommendOutfit } from '@/services/recommend';
+import type { RecommendOutfit, SceneId, SceneOption } from '@/services/recommend';
 import styles from './index.module.scss';
 
 interface Props {
   outfit: RecommendOutfit;
+  /** 搭配场景预设（v1.4.1：只能点选预设，不支持自由输入） */
+  scenes: SceneOption[];
+  scene: SceneId;
+  onSelectScene: (scene: SceneId) => void;
   /** 推荐衣物是否已全部加入明日穿搭（已采纳则按钮置灰） */
   adopted: boolean;
   onShuffle: () => void;
   onAdopt: () => void;
 }
 
-/** 今日穿搭推荐卡片（v1.4.0 B/D 阶段）：规则引擎生成 1–3 套，「换一件」轮换、「一键采纳」写入明日穿搭勾选 */
-const RecommendCard: React.FC<Props> = ({ outfit, adopted, onShuffle, onAdopt }) => {
+/** 明日穿搭推荐卡片（v1.4.0 B/D 阶段）：规则引擎生成 1–3 套，「换一件」轮换、「一键采纳」写入明日穿搭勾选 */
+const RecommendCard: React.FC<Props> = ({ outfit, scenes, scene, onSelectScene, adopted, onShuffle, onAdopt }) => {
   return (
     <View className={styles.card}>
       <View className={styles.head}>
-        <Text className={styles.title}>今日穿搭推荐</Text>
+        <Text className={styles.title}>明日穿搭推荐</Text>
         <Text className={styles.reason}>{outfit.reason}</Text>
+      </View>
+      <View className={styles.sceneBar}>
+        {scenes.map((s) => (
+          <View
+            key={s.id}
+            className={`${styles.sceneChip} ${scene === s.id ? styles.sceneChipActive : ''}`}
+            onClick={() => onSelectScene(s.id)}
+          >
+            <Text className={`${styles.sceneChipText} ${scene === s.id ? styles.sceneChipTextActive : ''}`}>
+              {s.label}
+            </Text>
+          </View>
+        ))}
       </View>
       <View className={styles.items}>
         {outfit.items.map((it) => (

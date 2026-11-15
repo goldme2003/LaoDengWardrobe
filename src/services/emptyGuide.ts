@@ -3,7 +3,15 @@ import { WeatherInfo } from '@/types';
 import { CLOUD_READY, EMPTY_GUIDE_FN_NAME } from '@/config/cloud';
 
 /** 空衣橱引导文案（PRD 9.1.2 / 专项计划 3.3）
- * v1.4.0（C 模块天气增强）：空衣橱时传入当前天气，云函数按性别/年龄/天气动态生成，失败时用内置兜底文案 */
+ * v1.4.0（C 模块天气增强）：空衣橱时传入当前天气，云函数按性别/年龄/天气动态生成，失败时用内置兜底文案
+ * v1.4.1：返回来源标识（hunyuan = 云函数生成 / fallback = 内置兜底），供界面调试角标区分 */
+
+export type EmptyGuideSource = 'hunyuan' | 'fallback';
+
+export interface EmptyGuideResult {
+  tip: string;
+  source: EmptyGuideSource;
+}
 
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 
@@ -43,19 +51,22 @@ const fallbackTip = (age: number, weather?: WeatherInfo | null): string => {
  * @param gender 衣橱主人性别（male/female/other）
  * @param age 衣橱主人年龄，缺省按 30 处理
  * @param weather 当前天气信息（可选；天气加载失败时传 null，走无天气上下文流程）
+ * @returns tip + source（hunyuan = 云函数生成，fallback = 内置兜底）
  */
 export const getEmptyGuide = async (
   gender?: string,
   age?: number | null,
   weather?: WeatherInfo | null
-): Promise<string> => {
+): Promise<EmptyGuideResult> => {
   const g = gender === 'male' || gender === 'female' || gender === 'other' ? gender : 'other';
   const a = typeof age === 'number' && age > 0 ? Math.round(age) : 30;
   const sig = weatherSig(weather);
 
   try {
     const cached = Taro.getStorageSync(storageKey(g, a, sig));
-    if (cached && cached.tip && Date.now() - cached.ts < CACHE_TTL) return cached.tip as string;
+    if (cached && cached.tip && Date.now() - cached.ts < CACHE_TTL) {
+      return { tip: cached.tip as string, source: cached.source === 'hunyuan' ? 'hunyuan' : 'fallback' };
+    }
   } catch (e) {
     // 缓存读取失败忽略
   }
@@ -67,16 +78,17 @@ export const getEmptyGuide = async (
         name: EMPTY_GUIDE_FN_NAME,
         data: { action: 'guide', gender: g, age: a, weather: cloudWeather }
       });
-      const result = (res.result || {}) as { code?: string; tips?: string[] };
+      const result = (res.result || {}) as { code?: string; tips?: string[]; source?: string };
       const tip = result.code === 'OK' && result.tips && result.tips[0] ? result.tips[0] : '';
       if (tip) {
-        Taro.setStorageSync(storageKey(g, a, sig), { tip, ts: Date.now() });
-        return tip;
+        const source: EmptyGuideSource = result.source === 'hunyuan' ? 'hunyuan' : 'fallback';
+        Taro.setStorageSync(storageKey(g, a, sig), { tip, source, ts: Date.now() });
+        return { tip, source };
       }
     } catch (e) {
       console.warn('[EmptyGuide] 云端生成失败，使用兜底文案：', (e as Error).message);
     }
   }
 
-  return fallbackTip(a, weather);
+  return { tip: fallbackTip(a, weather), source: 'fallback' };
 };

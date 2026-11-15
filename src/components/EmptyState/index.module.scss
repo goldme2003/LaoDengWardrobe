@@ -25,6 +25,33 @@
   margin-bottom: $spacing-sm;
 }
 
+/* v1.4.1：建议来源调试角标（绿 = 云函数生成，红 = 内置兜底） */
+.badge {
+  padding: 2rpx $spacing-sm;
+  border-radius: $radius-round;
+  margin-bottom: $spacing-sm;
+}
+
+.badgeGreen {
+  background: rgba(82, 196, 26, 0.12);
+}
+
+.badgeRed {
+  background: rgba(245, 63, 63, 0.12);
+}
+
+.badgeGreen .badgeText {
+  color: #389e0d;
+}
+
+.badgeRed .badgeText {
+  color: #cf1322;
+}
+
+.badgeText {
+  font-size: $font-size-xs;
+}
+
 /* v1.4.0：次级引导提示（添加衣物获取更精准推荐） */
 .hint {
   font-size: $font-size-sm;

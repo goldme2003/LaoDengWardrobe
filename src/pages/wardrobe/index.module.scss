@@ -251,9 +251,22 @@
 }
 
 .planTitle {
+  flex: 1;
   font-size: $font-size-md;
   font-weight: $font-weight-semibold;
   color: var(--w-text, $color-text-primary);
+  text-align: center;
+}
+
+/* v1.4.1：明日穿搭勾选模式的返回控件（原先只能滚到列表底部点「完成」） */
+.planBack {
+  padding: 4rpx 0;
+  margin-right: $spacing-sm;
+}
+
+.planBackText {
+  font-size: $font-size-sm;
+  color: var(--w-color, $color-primary);
 }
 
 .planCount {

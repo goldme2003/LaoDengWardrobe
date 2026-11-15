@@ -1,11 +1,45 @@
 @use '@/styles/variables.scss' as *;
 
 .card {
-  margin: $spacing-md $spacing-lg;
+  // v1.4.1：去掉左右外边距，与 WeatherCard / FilterBar / 列表保持同一页面边距（外层 .page 已有 $page-padding）
+  margin: 0 0 $spacing-md;
   padding: $spacing-md;
   background: var(--bg-card, #ffffff);
   border-radius: $radius-lg;
   border: 1px solid var(--border-color, rgba(0, 0, 0, 0.06));
+}
+
+.sceneBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-xs;
+  margin-bottom: $spacing-sm;
+}
+
+.sceneChip {
+  padding: 4rpx $spacing-sm;
+  border-radius: $radius-round;
+  background: var(--bg-secondary, #f5f2ee);
+  border: 1px solid transparent;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.sceneChipActive {
+  background: rgba(176, 125, 80, 0.12);
+  border-color: var(--w-color, $color-primary);
+}
+
+.sceneChipText {
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+}
+
+.sceneChipTextActive {
+  color: var(--w-color, $color-primary);
+  font-weight: $font-weight-medium;
 }
 
 .head {
