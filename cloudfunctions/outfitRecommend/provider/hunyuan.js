@@ -120,7 +120,7 @@ async function callHunyuanOutfit(params) {
   }
   const startedAt = Date.now();
   const res = await httpsPostJson('/v1/chat/completions', apiKey, {
-    model: process.env.HUNYUAN_MODEL || 'hy4',
+    model: process.env.HUNYUAN_MODEL || 'hy-vision-2.0-instruct',
     messages: [{ role: 'user', content: buildPrompt(params) }],
     temperature: 0.7
     // 不设 max_tokens：限制过小会导致输出被截断或写入 reasoning 字段

@@ -119,10 +119,10 @@ async function callHunyuanGuide(gender, age, weather) {
   }
   const startedAt = Date.now();
   const res = await httpsPostJson('/v1/chat/completions', apiKey, {
-    model: process.env.HUNYUAN_MODEL || 'hy4',
+    model: process.env.HUNYUAN_MODEL || 'hy-vision-2.0-instruct',
     messages: [{ role: 'user', content: buildPrompt(gender, age, weather) }],
     temperature: 0.7
-    // 不设 max_tokens：与 recognizeClothing 保持一致；实测限制 200 时 hy4 可能
+    // 不设 max_tokens：与 recognizeClothing 保持一致；实测限制 200 时模型可能
     // 将输出写入 reasoning 字段或被截断，导致 content 为空（BAD_MODEL_OUTPUT）
   });
   const message =

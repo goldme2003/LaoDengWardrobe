@@ -67,7 +67,7 @@ exports.main = async (event = {}) => {
     return {
       code: 'OK',
       hasHunyuanKey: !!process.env.HUNYUAN_API_KEY,
-      model: process.env.HUNYUAN_MODEL || 'hy4',
+      model: process.env.HUNYUAN_MODEL || 'hy-vision-2.0-instruct',
       endpoint: 'tokenhub.tencentmaas.com/v1/chat/completions'
     };
   }

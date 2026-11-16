@@ -21,7 +21,7 @@ async function run() {
   check('E1 ping 返回密钥状态', () => {
     assert.strictEqual(ping.code, 'OK');
     assert.strictEqual(typeof ping.hasHunyuanKey, 'boolean');
-    assert.strictEqual(ping.model, process.env.HUNYUAN_MODEL || 'hy4');
+    assert.strictEqual(ping.model, process.env.HUNYUAN_MODEL || 'hy-vision-2.0-instruct');
   });
 
   const bad = await fn.main({ action: 'unknown' });

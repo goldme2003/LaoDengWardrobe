@@ -87,7 +87,7 @@ function respond(text) {
     assert.strictEqual(options.path, '/v1/chat/completions', 'path');
     assert.strictEqual(options.method, 'POST', 'method');
     assert.strictEqual(options.headers.Authorization, 'Bearer sk-test-fake-key-for-local-test', 'Authorization');
-    assert.strictEqual(body.model, 'hy4', 'model=hy4');
+    assert.strictEqual(body.model, 'hy-vision-2.0-instruct', 'model=hy-vision-2.0-instruct');
     assert.strictEqual(body.temperature, 0.1, 'temperature');
     assert.strictEqual(body.messages.length, 1, 'messages');
     const content = body.messages[0].content;
