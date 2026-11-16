@@ -1,6 +1,6 @@
 /** 腾讯混元文本模型调用封装（PRD 9.1.2 空衣橱引导）
  * 密钥从云函数环境变量 HUNYUAN_API_KEY 读取，本地联调可放 cloudfunctions/emptyGuide/private.config.json（已 gitignore）。
- * 端点与 recognizeClothing 一致（文本任务使用模型 hy3），复用同一套密钥配置（专项计划 D-4）。 */
+ * 端点与 recognizeClothing 一致（文本任务使用模型 hy4），复用同一套密钥配置（专项计划 D-4）。 */
 const https = require('https');
 const path = require('path');
 
@@ -119,7 +119,7 @@ async function callHunyuanGuide(gender, age, weather) {
   }
   const startedAt = Date.now();
   const res = await httpsPostJson('/v1/chat/completions', apiKey, {
-    model: 'hy3',
+    model: 'hy4',
     messages: [{ role: 'user', content: buildPrompt(gender, age, weather) }],
     temperature: 0.7
     // 不设 max_tokens：与 recognizeClothing 保持一致；实测限制 200 时模型可能

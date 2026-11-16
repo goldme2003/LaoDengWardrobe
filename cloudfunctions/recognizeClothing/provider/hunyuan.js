@@ -1,7 +1,7 @@
 /** 腾讯混元视觉大模型调用封装（PRD 9.3 阶段1）
  * 密钥从云函数环境变量 HUNYUAN_API_KEY 读取（sk- 开头 OpenAI 兼容密钥），
  * 本地联调可放同目录 private.config.json（已 gitignore，方案 R3：绝不打包进前端）
- * 端点：https://tokenhub.tencentmaas.com/v1/chat/completions（OpenAI 兼容，模型 hy3）
+ * 端点：https://tokenhub.tencentmaas.com/v1/chat/completions（OpenAI 兼容，模型 hy4）
  * Provider 层抽象：如需切换供应商，仅替换本文件（方案 R6） */
 const https = require('https');
 const path = require('path');
@@ -84,7 +84,7 @@ async function callHunyuanVision(imageBase64) {
     throw new Error('MISSING_SECRET: 未配置 HUNYUAN_API_KEY（环境变量或 private.config.json）');
   }
   const res = await httpsPostJson('/v1/chat/completions', apiKey, {
-    model: 'hy3',
+    model: 'hy4',
     messages: [
       {
         role: 'user',

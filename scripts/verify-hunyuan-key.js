@@ -17,7 +17,7 @@ const net = require('net');
 const tls = require('tls');
 
 const HOST = process.env.HUNYUAN_HOST || 'tokenhub.tencentmaas.com';
-const MODEL = process.env.HUNYUAN_MODEL || 'hy3';
+const MODEL = process.env.HUNYUAN_MODEL || 'hy4';
 const KEY_FILE = path.join(__dirname, '..', 'cloudfunctions', 'recognizeClothing', 'private.config.json');
 const SKIP_VISION = process.argv.includes('--no-vision');
 
