@@ -119,7 +119,7 @@ async function callHunyuanGuide(gender, age, weather) {
   }
   const startedAt = Date.now();
   const res = await httpsPostJson('/v1/chat/completions', apiKey, {
-    model: process.env.HUNYUAN_MODEL || 'hy3',
+    model: 'hy3',
     messages: [{ role: 'user', content: buildPrompt(gender, age, weather) }],
     temperature: 0.7
     // 不设 max_tokens：与 recognizeClothing 保持一致；实测限制 200 时模型可能

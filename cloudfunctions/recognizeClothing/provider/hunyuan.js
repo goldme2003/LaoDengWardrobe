@@ -84,7 +84,7 @@ async function callHunyuanVision(imageBase64) {
     throw new Error('MISSING_SECRET: 未配置 HUNYUAN_API_KEY（环境变量或 private.config.json）');
   }
   const res = await httpsPostJson('/v1/chat/completions', apiKey, {
-    model: process.env.HUNYUAN_MODEL || 'hy-vision-2.0-instruct',
+    model: 'hy-vision-2.0-instruct',
     messages: [
       {
         role: 'user',
