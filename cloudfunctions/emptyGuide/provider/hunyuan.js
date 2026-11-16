@@ -1,6 +1,6 @@
 /** 腾讯混元文本模型调用封装（PRD 9.1.2 空衣橱引导）
  * 密钥从云函数环境变量 HUNYUAN_API_KEY 读取，本地联调可放 cloudfunctions/emptyGuide/private.config.json（已 gitignore）。
- * 端点与模型与 recognizeClothing 保持一致，复用同一套密钥配置（专项计划 D-4）。 */
+ * 端点与 recognizeClothing 一致（文本任务使用模型 hy3），复用同一套密钥配置（专项计划 D-4）。 */
 const https = require('https');
 const path = require('path');
 
@@ -105,7 +105,7 @@ function weatherText(w) {
 /** 精简提示词：单条消息承载全部上下文与输出约束，尽量降低 token 消耗 */
 function buildPrompt(gender, age, weather) {
   const wt = weatherText(weather);
-  return `穿搭顾问。${GENDER_TEXT[gender] || '不限'}，${age}岁，衣橱为空。${wt ? `天气${wt}。` : ''}给1条≤50字的入门单品建议，侧重${ageStyle(age)}。只输出JSON：{"tips":["建议"]}`;
+  return `穿搭顾问。${GENDER_TEXT[gender] || '不限'}，${age}岁，衣橱为空。${wt ? `天气${wt}。` : ''}给1条≤150字的入门单品建议，侧重${ageStyle(age)}。只输出JSON：{"tips":["建议"]}`;
 }
 
 /**
@@ -119,7 +119,7 @@ async function callHunyuanGuide(gender, age, weather) {
   }
   const startedAt = Date.now();
   const res = await httpsPostJson('/v1/chat/completions', apiKey, {
-    model: process.env.HUNYUAN_MODEL || 'hy-vision-2.0-instruct',
+    model: process.env.HUNYUAN_MODEL || 'hy3',
     messages: [{ role: 'user', content: buildPrompt(gender, age, weather) }],
     temperature: 0.7
     // 不设 max_tokens：与 recognizeClothing 保持一致；实测限制 200 时模型可能

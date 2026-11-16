@@ -1,6 +1,6 @@
 /** 腾讯混元文本模型调用封装（v1.5.0 明日穿搭推荐）
  * 密钥从云函数环境变量 HUNYUAN_API_KEY 读取，本地联调可放 cloudfunctions/outfitRecommend/private.config.json（已 gitignore）。
- * 端点与模型与 emptyGuide / recognizeClothing 保持一致，复用同一套密钥配置。 */
+ * 端点与 emptyGuide / recognizeClothing 一致（文本任务使用模型 hy3），复用同一套密钥配置。 */
 const https = require('https');
 const path = require('path');
 
@@ -120,7 +120,7 @@ async function callHunyuanOutfit(params) {
   }
   const startedAt = Date.now();
   const res = await httpsPostJson('/v1/chat/completions', apiKey, {
-    model: process.env.HUNYUAN_MODEL || 'hy-vision-2.0-instruct',
+    model: process.env.HUNYUAN_MODEL || 'hy3',
     messages: [{ role: 'user', content: buildPrompt(params) }],
     temperature: 0.7
     // 不设 max_tokens：限制过小会导致输出被截断或写入 reasoning 字段
