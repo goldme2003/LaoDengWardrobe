@@ -58,7 +58,7 @@ exports.main = async (event) => {
       hasSecret: !!process.env.TENCENT_SECRET_ID,
       hasHunyuanKey: !!process.env.HUNYUAN_API_KEY,
       hasOcrKeys: !!(process.env.TENCENT_SECRET_ID && process.env.TENCENT_SECRET_KEY),
-      model: 'hy-vision-2.0-instruct',
+      model: 'hy3',
       endpoint: 'tokenhub.tencentmaas.com/v1/chat/completions',
       budget: MONTHLY_BUDGET,
       usage: await getUsage(`${new Date().getFullYear()}-${new Date().getMonth() + 1}`)

@@ -238,7 +238,7 @@ function reset() {
     assert.strictEqual(typeof r.hasSecret, 'boolean');
     assert.strictEqual(typeof r.hasHunyuanKey, 'boolean');
     assert.strictEqual(r.budget, 50);
-    assert.strictEqual(r.model, 'hy-vision-2.0-instruct');
+    assert.strictEqual(r.model, 'hy3');
     // 已知问题 ISSUE-A1-01 已修复：ping 现同时返回 hasHunyuanKey，可探测混元密钥是否配置
     assert.strictEqual(r.hasHunyuanKey, false, '本地未设置 HUNYUAN_API_KEY');
     assert.strictEqual(r.hasSecret, true, 'mock 环境仅设置了 TENCENT_SECRET_ID');
