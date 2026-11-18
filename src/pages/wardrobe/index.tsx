@@ -8,6 +8,7 @@ import TypeSideBar from '@/components/TypeSideBar';
 import ItemCard from '@/components/ItemCard';
 import EmptyState from '@/components/EmptyState';
 import RecommendCard from '@/components/RecommendCard';
+import SeasonalCard from '@/components/SeasonalCard';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
 import { getWeather, cityFromLocation } from '@/services/weather';
 import { getEmptyGuide, EmptyGuideResult } from '@/services/emptyGuide';
@@ -23,6 +24,9 @@ const PLAN_TYPE_ORDER = ['上装', '外套', '裤装', '裙装', '连衣裙', '�
 
 /** v1.4.3：小程序启动标记（由 app.tsx useLaunch 写入），首次进入首页时自动执行穿搭推荐 */
 const APP_LAUNCH_FLAG = 'ldw_app_launched';
+
+/** v1.7.0：启动定位刷新标记（由 app.tsx useLaunch 写入），首次进入首页时自动定位并刷新城市 */
+const APP_GEO_FLAG = 'ldw_geo_refresh';
 
 /** 衣柜首页（PRD FR-06/FR-09）：天气 + 衣橱切换 + 筛选 + 手风琴分组衣物列表 */
 const WardrobePage: React.FC = () => {
@@ -83,34 +87,37 @@ const WardrobePage: React.FC = () => {
       ? tripCity || city || DEFAULT_CITY  // 出差模式优先 tripCity，空则回退当地 city
       : city || DEFAULT_CITY;
 
-  // v1.6.1：首次进入自动定位——用腾讯位置服务获取坐标 → 逆地理反查城市
-  // 仅在 store.city 为空时尝试填充；用户已手动选择后不再覆盖
-  useEffect(() => {
-    if (city) return; // 已有城市，不再定位
-    let alive = true;
-    Taro.getLocation({
-      type: 'gcj02',
-      success: async (res) => {
-        if (!alive) return;
-        try {
-          const locCity = await cityFromLocation(res.latitude, res.longitude);
-          if (locCity && alive) {
-            console.info('[Wardrobe] 自动定位城市 =', locCity);
-            setCity(locCity);
+  // v1.6.1：自动定位——腾讯位置服务坐标 → 逆地理反查城市
+  // v1.7.0：改为「每次冷启动首次进入首页时都定位刷新」，无论本地是否已有城市，
+  // 保证用户位置变化后再进入小程序时城市与天气均为最新；
+  // 用户本次会话内手动选择的城市不会被覆盖（定位只在启动时执行一次）
+  useDidShow(() => {
+    try {
+      if (!Taro.getStorageSync(APP_GEO_FLAG)) return;
+      Taro.removeStorageSync(APP_GEO_FLAG);
+      Taro.getLocation({
+        type: 'gcj02',
+        success: async (res) => {
+          try {
+            const locCity = await cityFromLocation(res.latitude, res.longitude);
+            if (!locCity) return;
+            const curCity = useWardrobeStore.getState().city;
+            if (locCity !== curCity) {
+              console.info('[Wardrobe] 启动定位刷新城市：', curCity || '(空)', '→', locCity);
+              setCity(locCity); // activeCity 变化后由下方 effect 自动重载天气
+            }
+          } catch (e) {
+            console.warn('[Wardrobe] 逆地理失败：', (e as Error).message);
           }
-        } catch (e) {
-          console.warn('[Wardrobe] 逆地理失败：', (e as Error).message);
+        },
+        fail: (err) => {
+          console.info('[Wardrobe] 用户未授权定位或定位失败，保留当前城市', err?.errMsg || '');
         }
-      },
-      fail: (err) => {
-        console.info('[Wardrobe] 用户未授权定位或定位失败，使用默认城市', err?.errMsg || '');
-      }
-    });
-    return () => {
-      alive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      });
+    } catch (e) {
+      console.warn('[Wardrobe] 读取定位刷新标记失败', e);
+    }
+  });
 
   const loadWeather = useCallback(async () => {
     setWeatherLoading(true);
@@ -125,6 +132,18 @@ const WardrobePage: React.FC = () => {
       setWeatherLoading(false);
     }
   }, [activeCity]);
+
+  // v1.7.0：城市变化（含启动自动定位刷新）后自动重载天气——
+  // 修复「定位刷新了 city 但天气仍停留在旧城市/默认城市」的问题；
+  // 首次挂载由 useDidShow 加载，此处跳过避免重复请求
+  const cityLoadInited = useRef(false);
+  useEffect(() => {
+    if (!cityLoadInited.current) {
+      cityLoadInited.current = true;
+      return;
+    }
+    loadWeather();
+  }, [loadWeather]);
 
   // 进入页面与下拉刷新时更新天气
   useDidShow(() => {
@@ -384,6 +403,13 @@ const WardrobePage: React.FC = () => {
     };
   }, [currentItems.length, isFiltering, emptyGender, emptyAge, weatherResolved, weather]);
 
+  // v1.7.0：空衣橱时推荐卡默认展示天气建议——复用 C 模块空衣橱引导
+  // （云函数按性别/年龄/明日天气生成 → hunyuan 绿标；本地兜底 → fallback 红标）
+  const emptyAdvice = useMemo(() => {
+    if (currentItems.length > 0 || !emptyGuide) return null;
+    return { text: emptyGuide.tip, source: emptyGuide.source };
+  }, [currentItems.length, emptyGuide]);
+
   // v1.1：listGroups 的 ref 同步（滚动/定位回调中读取，避免闭包过期）
   const listGroupsRef = useRef(listGroups);
   useEffect(() => {
@@ -563,15 +589,17 @@ const WardrobePage: React.FC = () => {
       {/* weatherTick 变化触发重新加载 */}
       <LoadTrigger tick={weatherTick} onLoad={loadWeather} />
 
-      {/* v1.4.3：推荐卡片移至天气卡片下方（筛选/明日穿搭勾选模式下不展示） */}
-      {!planMode && !isFiltering && outfit && (
+      {/* v1.4.3：推荐卡片移至天气卡片下方（筛选/明日穿搭勾选模式下不展示）
+          v1.7.0：卡片默认展示——空衣橱时进入建议模式，显示按天气生成的着装建议（不再整卡隐藏） */}
+      {!planMode && !isFiltering && (
         <RecommendCard
           outfit={outfit}
+          advice={outfit ? null : emptyAdvice}
           scenes={SCENE_OPTIONS}
           scene={scene}
           onSelectScene={handleSelectScene}
           adopted={outfitAdopted}
-          loading={recLoading || aiLoading}
+          loading={outfit ? recLoading || aiLoading : !emptyAdvice}
           source={aiOutfit ? aiSource : 'fallback'}
           tripMode={mode === 'trip'}
           onShuffle={handleShuffle}
@@ -579,10 +607,16 @@ const WardrobePage: React.FC = () => {
         />
       )}
 
+      {/* v1.7.0：当季推荐卡——按当季与衣橱主人性别/年龄段展示时尚着装照片跑马灯（暂定 5 张） */}
+      {!planMode && !isFiltering && (
+        <SeasonalCard gender={currentWardrobe?.gender} age={currentWardrobe?.age ?? null} />
+      )}
+
       {/* v1.4.3：移除独立「切换衣橱」行，入口移至天气卡片右上角 */}
 
-      {/* v0.6 用户意见 6：明日穿搭入口（按分类勾选明天穿的衣物） */}
-      {!planMode && currentItems.length > 0 && (
+      {/* v0.6 用户意见 6：明日穿搭入口（按分类勾选明天穿的衣物）
+          v1.7.0：空衣橱时也默认展示（勾选页内提供添加衣物引导） */}
+      {!planMode && (
         <View className={styles.planEntry} onClick={() => setPlanMode(true)}>
           <Text className={styles.planEntryIcon}>🌤️</Text>
           <View className={styles.planEntryInfo}>
@@ -604,6 +638,16 @@ const WardrobePage: React.FC = () => {
             <Text className={styles.planTitle}>🧳 明日穿搭（点击勾选）</Text>
             <Text className={styles.planCount}>已选 {tomorrowIds.length} 件</Text>
           </View>
+          {/* v1.7.0：空衣橱进入勾选页时给出引导，避免整页空白 */}
+          {planGroups.length === 0 && (
+            <EmptyState
+              icon='🧳'
+              title='衣柜还没有衣物'
+              desc='先添加几件衣物，再来安排明日穿搭吧'
+              actionText='添加衣物'
+              onAction={goAdd}
+            />
+          )}
           {planGroups.map((g) => (
             <View key={g.type} className={styles.planGroup}>
               <Text className={styles.planGroupTitle}>{g.type}</Text>
@@ -646,15 +690,12 @@ const WardrobePage: React.FC = () => {
           />
 
           {currentItems.length === 0 && !isFiltering ? (
+            // v1.7.0：按天气生成的着装建议已上移至「明日穿搭推荐」卡（含来源角标），
+            // 空态卡只保留添加衣物引导，避免同一文案重复展示
             <EmptyState
               icon='🧥'
               title='这个衣橱还空着'
-              desc={emptyGuide?.tip || '拍几张照片，记录第一件衣物吧'}
-              badge={
-                emptyGuide
-                  ? { text: emptyGuide.source === 'hunyuan' ? '云端生成' : '兜底建议', tone: emptyGuide.source === 'hunyuan' ? 'green' : 'red' }
-                  : undefined
-              }
+              desc='拍几张照片，记录第一件衣物吧'
               hint='添加自有衣物后，可按你的身材与当前天气获取更精准的个性化推荐'
               actionText='添加衣物'
               onAction={goAdd}

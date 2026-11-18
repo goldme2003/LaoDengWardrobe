@@ -7,12 +7,17 @@ import './app.scss';
 /** v1.4.3：小程序启动标记，首页读取后自动执行一次穿搭推荐（storage key，与首页保持一致） */
 const APP_LAUNCH_FLAG = 'ldw_app_launched';
 
+/** v1.7.0：启动定位刷新标记，首页读取后自动定位并刷新城市（storage key，与首页保持一致） */
+const APP_GEO_FLAG = 'ldw_geo_refresh';
+
 function App(props) {
   // v1.4.3：冷启动标记（首页 useDidShow 消费并刷新推荐，tab 间切换不重复触发）
   useLaunch(() => {
     try {
       Taro.setStorageSync(APP_LAUNCH_FLAG, '1');
-      console.info('[App] 小程序启动，已标记首页自动推荐');
+      // v1.7.0：冷启动同时标记「待定位刷新城市」，首页消费后保证每次进入都刷新到正确城市
+      Taro.setStorageSync(APP_GEO_FLAG, '1');
+      console.info('[App] 小程序启动，已标记首页自动推荐与城市定位刷新');
     } catch (e) {
       console.warn('[App] 启动标记写入失败', e);
     }

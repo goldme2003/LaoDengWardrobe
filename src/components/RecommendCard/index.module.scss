@@ -114,6 +114,20 @@
   line-height: 1.5;
 }
 
+/* v1.7.0：空衣橱建议模式——建议文案下方的添加衣物引导行 */
+.adviceHint {
+  margin-top: $spacing-sm;
+  padding: $spacing-xs $spacing-sm;
+  border-radius: $radius-md;
+  background: var(--bg-secondary, #f5f2ee);
+}
+
+.adviceHintText {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  line-height: 1.5;
+}
+
 .items {
   display: flex;
   gap: $spacing-sm;
