@@ -15,11 +15,14 @@ interface Props {
   loading: boolean;
   /** v1.5.0：推荐来源（hunyuan = 混元生成，fallback = 本地/云端兜底） */
   source?: 'hunyuan' | 'fallback';
+  /** v1.6.1：出差模式下隐藏场景选择、标题改为"出差穿搭推荐" */
+  tripMode?: boolean;
   onShuffle: () => void;
   onAdopt: () => void;
 }
 
-/** 明日穿搭推荐卡片（v1.4.0 B/D 阶段）：规则引擎生成 1–3 套，「换一件」轮换、「一键采纳」写入明日穿搭勾选 */
+/** 明日穿搭推荐卡片（v1.4.0 B/D 阶段）：规则引擎生成 1–3 套，「换一件」轮换、「一键采纳」写入明日穿搭勾选
+ * v1.6.1：tripMode 下标题改为"出差穿搭推荐"并隐藏场景选择条 */
 const RecommendCard: React.FC<Props> = ({
   outfit,
   scenes,
@@ -28,6 +31,7 @@ const RecommendCard: React.FC<Props> = ({
   adopted,
   loading,
   source,
+  tripMode,
   onShuffle,
   onAdopt
 }) => {
@@ -35,7 +39,7 @@ const RecommendCard: React.FC<Props> = ({
     <View className={styles.card}>
       <View className={styles.head}>
         <View className={styles.titleRow}>
-          <Text className={styles.title}>明日穿搭推荐</Text>
+          <Text className={styles.title}>{tripMode ? '出差穿搭推荐' : '明日穿搭推荐'}</Text>
           {/* v1.5.1：移除右上角「适用场景」角标，场景仅由下方标签组展示 */}
           {/* v1.5.0：来源区分——绿色混元生成 / 红色兜底 */}
           {!!source && (
@@ -46,19 +50,21 @@ const RecommendCard: React.FC<Props> = ({
         </View>
         {!loading && <Text className={styles.reason}>{outfit.reason}</Text>}
       </View>
-      <View className={styles.sceneBar}>
-        {scenes.map((s) => (
-          <View
-            key={s.id}
-            className={`${styles.sceneChip} ${scene === s.id ? styles.sceneChipActive : ''}`}
-            onClick={() => onSelectScene(s.id)}
-          >
-            <Text className={`${styles.sceneChipText} ${scene === s.id ? styles.sceneChipTextActive : ''}`}>
-              {s.label}
-            </Text>
-          </View>
-        ))}
-      </View>
+      {!tripMode && (
+        <View className={styles.sceneBar}>
+          {scenes.map((s) => (
+            <View
+              key={s.id}
+              className={`${styles.sceneChip} ${scene === s.id ? styles.sceneChipActive : ''}`}
+              onClick={() => onSelectScene(s.id)}
+            >
+              <Text className={`${styles.sceneChipText} ${scene === s.id ? styles.sceneChipTextActive : ''}`}>
+                {s.label}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
       {loading ? (
         <View className={styles.loading}>
           <View className={styles.spinner} />

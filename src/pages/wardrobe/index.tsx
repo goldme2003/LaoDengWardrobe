@@ -9,12 +9,11 @@ import ItemCard from '@/components/ItemCard';
 import EmptyState from '@/components/EmptyState';
 import RecommendCard from '@/components/RecommendCard';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
-import { getWeather } from '@/services/weather';
+import { getWeather, cityFromLocation } from '@/services/weather';
 import { getEmptyGuide, EmptyGuideResult } from '@/services/emptyGuide';
 import { buildOutfits, SCENE_OPTIONS, SceneId, RecommendOutfit } from '@/services/recommend';
 import { requestOutfitRecommend, composeAiReason } from '@/services/outfitRecommend';
 import { DEFAULT_CITY } from '@/data/mockWeather';
-import { CITY_GROUPS } from '@/data/cities';
 import { COLOR_PRESETS, MATERIAL_PRESETS, themeVarsOf, getThemeById } from '@/data/presets';
 import { ClothingItem, WeatherInfo } from '@/types';
 import styles from './index.module.scss';
@@ -61,6 +60,9 @@ const WardrobePage: React.FC = () => {
   const [emptyGuide, setEmptyGuide] = useState<EmptyGuideResult | null>(null);
   // v1.4.1：搭配场景（仅预设选项，不支持自由输入）
   const [scene, setScene] = useState<SceneId>('all');
+  // v1.6.1：出差模式
+  const [mode, setMode] = useState<'local' | 'trip'>('local');
+  const [tripCity, setTripCity] = useState<string>('');
 
   // 滚动联动状态（用 ref，避免高频渲染）
   const lastScrollTop = useRef(0);
@@ -76,7 +78,39 @@ const WardrobePage: React.FC = () => {
     }
   }, []);
 
-  const activeCity = city || DEFAULT_CITY;
+  const activeCity =
+    mode === 'trip'
+      ? tripCity || city || DEFAULT_CITY  // 出差模式优先 tripCity，空则回退当地 city
+      : city || DEFAULT_CITY;
+
+  // v1.6.1：首次进入自动定位——用腾讯位置服务获取坐标 → 逆地理反查城市
+  // 仅在 store.city 为空时尝试填充；用户已手动选择后不再覆盖
+  useEffect(() => {
+    if (city) return; // 已有城市，不再定位
+    let alive = true;
+    Taro.getLocation({
+      type: 'gcj02',
+      success: async (res) => {
+        if (!alive) return;
+        try {
+          const locCity = await cityFromLocation(res.latitude, res.longitude);
+          if (locCity && alive) {
+            console.info('[Wardrobe] 自动定位城市 =', locCity);
+            setCity(locCity);
+          }
+        } catch (e) {
+          console.warn('[Wardrobe] 逆地理失败：', (e as Error).message);
+        }
+      },
+      fail: (err) => {
+        console.info('[Wardrobe] 用户未授权定位或定位失败，使用默认城市', err?.errMsg || '');
+      }
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loadWeather = useCallback(async () => {
     setWeatherLoading(true);
@@ -507,13 +541,22 @@ const WardrobePage: React.FC = () => {
         weather={weather}
         loading={weatherLoading}
         failed={weatherFailed}
-        cityGroups={CITY_GROUPS}
+        mode={mode}
+        onSwitchMode={(m) => {
+          setMode(m);
+          setWeatherTick((t) => t + 1);
+          setRecLoading(true);
+        }}
         activeCity={activeCity}
         onSelectCity={(c) => {
           if (c === activeCity) return;
-          setCity(c);
+          if (mode === 'trip') {
+            setTripCity(c);
+          } else {
+            setCity(c);
+          }
           setWeatherTick((t) => t + 1);
-          setRecLoading(true); // v1.4.2：切换城市复用同一加载提示，天气返回后重算推荐
+          setRecLoading(true);
         }}
         onRetry={() => setWeatherTick((t) => t + 1)}
       />
@@ -530,6 +573,7 @@ const WardrobePage: React.FC = () => {
           adopted={outfitAdopted}
           loading={recLoading || aiLoading}
           source={aiOutfit ? aiSource : 'fallback'}
+          tripMode={mode === 'trip'}
           onShuffle={handleShuffle}
           onAdopt={handleAdopt}
         />
