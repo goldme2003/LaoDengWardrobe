@@ -10,7 +10,8 @@ import {
   DiaryEntry,
   CustomDimension,
   CustomOption,
-  NewItemInput
+  NewItemInput,
+  CitySource
 } from '@/types';
 import { genId, pad3 } from '@/utils/format';
 import {
@@ -38,6 +39,8 @@ interface LdwData {
   counters: Record<string, number>;
   /** 天气城市（空 = 未选择） */
   city: string;
+  /** v1.8.0（F-17）：城市来源——located = 启动自动定位，manual = 手动选择，空串 = 旧数据/未定位 */
+  citySource: CitySource;
   /** 个人身体数据（v0.6：按衣橱归属，key = 衣橱id；切换衣橱联动） */
   bodyProfiles: Record<string, BodyProfile>;
   /** 喜爱品牌（v0.5，品牌下拉中前置展示） */
@@ -69,6 +72,7 @@ const initialData = (): LdwData => {
     customOptions: [],
     counters: {},
     city: '',
+    citySource: '',
     bodyProfiles: {},
     favoriteBrands: [],
     tryoutItems: [],
@@ -106,6 +110,8 @@ const loadData = (): LdwData => {
       // v1.1：旧数据缺字段兜底，避免异常数据导致页面崩溃
       stored.customOptions = stored.customOptions || [];
       stored.counters = stored.counters || {};
+      // v1.8.0（F-17）：旧数据无城市来源字段，置空（不展示定位图标，待本次定位/手动选城后更新）
+      stored.citySource = stored.citySource || '';
       stored.favoriteBrands = stored.favoriteBrands || [];
       stored.tryoutItems = stored.tryoutItems || [];
       stored.diaryEntries = stored.diaryEntries || [];
@@ -192,8 +198,8 @@ export interface WardrobeStore extends LdwData {
   setWardrobeFilterPreset: (preset: 'favorite') => void;
   /** 消费首页筛选预设（首页应用后清空） */
   consumeWardrobeFilterPreset: () => void;
-  /** 设置天气城市 */
-  setCity: (city: string) => void;
+  /** 设置天气城市（v1.8.0 F-17：附带来源 located/manual，缺省视为手动选择） */
+  setCity: (city: string, source?: CitySource) => void;
 }
 
 export const useWardrobeStore = create<WardrobeStore>((set, get) => {
@@ -207,6 +213,7 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       customOptions: s.customOptions,
       counters: s.counters,
       city: s.city,
+      citySource: s.citySource,
       bodyProfiles: s.bodyProfiles,
       favoriteBrands: s.favoriteBrands,
       tryoutItems: s.tryoutItems,
@@ -567,8 +574,8 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       }
     },
 
-    setCity: (city) => {
-      commit({ city });
+    setCity: (city, source) => {
+      commit({ city, citySource: source || 'manual' });
     }
   };
 });

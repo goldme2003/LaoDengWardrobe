@@ -17,6 +17,8 @@ interface Props {
   /** 模式切换（当展示切换 tab 时由卡片内部调用外部 onSwitchMode） */
   onSwitchMode: (m: WeatherMode) => void;
   activeCity: string;
+  /** v1.8.0（F-17）：当前城市是否来自自动定位（当地模式下在城市名旁显示 📍） */
+  located?: boolean;
   onSelectCity: (city: string) => void;
   onRetry: () => void;
 }
@@ -31,6 +33,7 @@ const WeatherCard: React.FC<Props> = ({
   mode,
   onSwitchMode,
   activeCity,
+  located,
   onSelectCity,
   onRetry
 }) => {
@@ -82,6 +85,8 @@ const WeatherCard: React.FC<Props> = ({
       {/* 第一行：城市 + 状态/重试 + 右上角城市选择按钮 */}
       <View className={styles.header}>
         <Text className={styles.city}>{weather ? weather.city : '天气'}</Text>
+        {/* v1.8.0（F-17）：城市来自启动自动定位时显示定位图标，区别于手动选择/出差城市 */}
+        {located && <Text className={styles.locateIcon}>📍</Text>}
         {weather?.mock && !loading && (
           <Text className={styles.mockBadge}>模拟{weather.notice ? `·${weather.notice}` : ''}</Text>
         )}

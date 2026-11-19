@@ -34,6 +34,8 @@ const WardrobePage: React.FC = () => {
   const currentWardrobeId = useWardrobeStore((s) => s.currentWardrobeId);
   const items = useWardrobeStore((s) => s.items);
   const city = useWardrobeStore((s) => s.city);
+  // v1.8.0（F-17）：城市来源（located = 启动自动定位 / manual = 手动选择），用于天气卡定位图标
+  const citySource = useWardrobeStore((s) => s.citySource);
   const customOptions = useWardrobeStore((s) => s.customOptions);
   const setCurrentWardrobe = useWardrobeStore((s) => s.setCurrentWardrobe);
   const toggleFavorite = useWardrobeStore((s) => s.toggleFavorite);
@@ -51,6 +53,9 @@ const WardrobePage: React.FC = () => {
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherFailed, setWeatherFailed] = useState(false);
   const [weatherTick, setWeatherTick] = useState(0);
+  // v1.8.0（F-18）：最近一次天气请求对应的城市——城市切换后、新天气返回前视为「过期」，
+  // 期间旧城市的推荐不展示，避免推荐与天气卡城市不一致
+  const [weatherCity, setWeatherCity] = useState('');
   // v0.6：明日穿搭勾选模式
   const [planMode, setPlanMode] = useState(false);
   // v0.7：手风琴分组收起状态（key = 类型名，true = 收起；不在表中 = 展开，默认全部展开）
@@ -104,7 +109,7 @@ const WardrobePage: React.FC = () => {
             const curCity = useWardrobeStore.getState().city;
             if (locCity !== curCity) {
               console.info('[Wardrobe] 启动定位刷新城市：', curCity || '(空)', '→', locCity);
-              setCity(locCity); // activeCity 变化后由下方 effect 自动重载天气
+              setCity(locCity, 'located'); // activeCity 变化后由下方 effect 自动重载天气，并标记来源为定位
             }
           } catch (e) {
             console.warn('[Wardrobe] 逆地理失败：', (e as Error).message);
@@ -122,6 +127,7 @@ const WardrobePage: React.FC = () => {
   const loadWeather = useCallback(async () => {
     setWeatherLoading(true);
     setWeatherFailed(false);
+    setWeatherCity(activeCity);
     try {
       const info = await getWeather(activeCity);
       setWeather(info);
@@ -264,9 +270,12 @@ const WardrobePage: React.FC = () => {
 
   // v1.4.0（B/D 模块）：规则引擎推荐——有天气且有衣物时生成 1–3 套穿搭（v1.4.1 改为基于明日天气）；
   // 天气失败或衣橱为空时返回空数组不展示（降级矩阵），空衣橱走 C 模块引导
+  // v1.8.0（F-18）：城市切换后天气重载完成前（weatherCity !== activeCity）视为过期，不基于旧城市天气出推荐
+  const weatherStale = weatherCity !== activeCity;
   const outfits = useMemo(
-    () => (weather && !weatherFailed ? buildOutfits(weather, currentItems, scene) : []),
-    [weather, weatherFailed, currentItems, scene]
+    () =>
+      weather && !weatherFailed && !weatherStale ? buildOutfits(weather, currentItems, scene) : [],
+    [weather, weatherFailed, weatherStale, currentItems, scene]
   );
   const [outfitIdx, setOutfitIdx] = useState(0);
   useEffect(() => {
@@ -275,13 +284,15 @@ const WardrobePage: React.FC = () => {
   const localOutfit = outfits.length > 0 ? outfits[outfitIdx % outfits.length] : null;
   // v1.5.0：明日推荐改由云函数 outfitRecommend 调用混元按场景选搭；
   // 云函数不可用/失败时回退本地规则引擎，并通过卡片角标区分来源
+  // v1.8.0（F-18）：城市切换（当地/出差）后联动重新生成——weatherStale 期间先清空旧推荐，
+  // 新城市天气返回后按新天气重新请求，保证推荐与当前城市一致
   const [aiOutfit, setAiOutfit] = useState<RecommendOutfit | null>(null);
   const [aiSource, setAiSource] = useState<'hunyuan' | 'fallback'>('fallback');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiNonce, setAiNonce] = useState(0);
   const aiExcludeRef = useRef<string[]>([]);
   const aiReqRef = useRef(0);
-  const recommendReady = !!weather && !weatherFailed && currentItems.length > 0;
+  const recommendReady = !!weather && !weatherFailed && !weatherStale && currentItems.length > 0;
   useEffect(() => {
     if (!recommendReady || !weather) {
       setAiOutfit(null);
@@ -326,7 +337,7 @@ const WardrobePage: React.FC = () => {
     return () => {
       alive = false;
     };
-  }, [recommendReady, weather, weatherFailed, currentItems, scene, currentWardrobe?.gender, currentWardrobe?.age, aiNonce]);
+  }, [recommendReady, weather, weatherFailed, weatherStale, activeCity, currentItems, scene, currentWardrobe?.gender, currentWardrobe?.age, aiNonce]);
   const outfit = aiOutfit || localOutfit;
   const outfitAdopted = !!outfit && outfit.items.every((it) => tomorrowIds.includes(it.id));
   const handleShuffle = useCallback(() => {
@@ -393,7 +404,7 @@ const WardrobePage: React.FC = () => {
       setEmptyGuide(null);
       return;
     }
-    if (!weatherResolved) return; // 等天气首次加载完成（成功或失败）再取建议
+    if (!weatherResolved || weatherStale) return; // 等天气首次加载完成（成功或失败）再取建议；v1.8.0（F-18）：城市切换重载期间不基于旧城市天气取建议
     let alive = true;
     getEmptyGuide(emptyGender, emptyAge, weather).then((res) => {
       if (alive) setEmptyGuide(res);
@@ -401,7 +412,7 @@ const WardrobePage: React.FC = () => {
     return () => {
       alive = false;
     };
-  }, [currentItems.length, isFiltering, emptyGender, emptyAge, weatherResolved, weather]);
+  }, [currentItems.length, isFiltering, emptyGender, emptyAge, weatherResolved, weatherStale, weather]);
 
   // v1.7.0：空衣橱时推荐卡默认展示天气建议——复用 C 模块空衣橱引导
   // （云函数按性别/年龄/明日天气生成 → hunyuan 绿标；本地兜底 → fallback 红标）
@@ -574,12 +585,13 @@ const WardrobePage: React.FC = () => {
           setRecLoading(true);
         }}
         activeCity={activeCity}
+        located={mode === 'local' && citySource === 'located'}
         onSelectCity={(c) => {
           if (c === activeCity) return;
           if (mode === 'trip') {
             setTripCity(c);
           } else {
-            setCity(c);
+            setCity(c, 'manual'); // v1.8.0（F-17）：手动选城标记来源，定位图标随之消失
           }
           setWeatherTick((t) => t + 1);
           setRecLoading(true);

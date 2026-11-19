@@ -149,6 +149,9 @@ export interface WeatherDay {
   high: number;
 }
 
+/** v1.8.0（F-17）：天气城市来源——空串 = 旧数据/未定位，located = 启动自动定位，manual = 手动选择 */
+export type CitySource = '' | 'located' | 'manual';
+
 /** 天气信息（MVP 为模拟数据，数据源见 PRD Q-1） */
 export interface WeatherInfo {
   city: string;

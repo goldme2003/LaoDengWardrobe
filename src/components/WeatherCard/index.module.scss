@@ -55,6 +55,13 @@
   flex-shrink: 0;
 }
 
+// v1.8.0（F-17）：自动定位城市标识图标（城市名右侧 📍）
+.locateIcon {
+  font-size: $font-size-xs;
+  margin-right: $spacing-sm;
+  flex-shrink: 0;
+}
+
 .stateText {
   font-size: $font-size-xs;
   color: $color-text-tertiary;
