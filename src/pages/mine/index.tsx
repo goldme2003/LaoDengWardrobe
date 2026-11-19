@@ -3,6 +3,7 @@ import { View, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
 import { APP_VERSION, GENDER_OPTIONS, BODY_FIELD_DEFS, themeVarsOf } from '@/data/presets';
+import { tierOf } from '@/services/entitlement';
 import { BodyProfile } from '@/types';
 import styles from './index.module.scss';
 
@@ -39,6 +40,10 @@ const MinePage: React.FC = () => {
   const goWardrobes = () => Taro.navigateTo({ url: '/pages/wardrobes/index' });
   // v0.7.0 用户意见 5：个人信息修改改为独立页面（原弹层编辑移入该页）
   const goProfile = () => Taro.navigateTo({ url: '/pages/profile/index' });
+  // v1.9.0（F-19）：会员中心
+  const memberTier = useWardrobeStore((s) => s.memberTier);
+  const memberLabel = tierOf(memberTier).label;
+  const goMember = () => Taro.navigateTo({ url: '/pages/member/index' });
 
   const genderLabel = GENDER_OPTIONS.find((g) => g.value === currentWardrobe?.gender)?.label || '-';
   // v0.7.0：身体数据摘要（已填项拼接，如「身高 170 · 胸围 92 · 肩宽 45」；全部未填显示「未填写」）
@@ -118,6 +123,22 @@ const MinePage: React.FC = () => {
         <Text className={styles.cardTip}>
           身体数据为缝纫/尺码参考（均为选填），身高可直接输入，支持记录上衣、裤装、鞋码等常用衣物尺寸。
         </Text>
+      </View>
+
+      {/* v1.9.0（F-19）：会员中心入口 */}
+      <View className={styles.card} onClick={goMember}>
+        <View className={styles.wardrobeEntry}>
+          <View className={styles.entryDot} style={{ background: '#b07d50' }} />
+          <View className={styles.entryInfo}>
+            <Text className={styles.entryTitle}>会员中心 · {memberLabel}</Text>
+            <Text className={styles.entryDesc}>
+              {memberTier === 'free'
+                ? '升级 VIP/SVIP 解锁更多衣橱、出差推荐与综合穿搭'
+                : '查看权益矩阵与当前档位权益'}
+            </Text>
+          </View>
+          <Text className={styles.entryArrow}>›</Text>
+        </View>
       </View>
 
       {/* 衣橱设置（v0.7.0：风格主题移至衣橱管理页，此处保留管理入口） */}

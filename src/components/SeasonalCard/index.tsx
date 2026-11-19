@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { View, Text, Image, Swiper, SwiperItem } from '@tarojs/components';
+import Taro from '@tarojs/taro';
 import type { Gender } from '@/types';
 import autumnM1 from '@/assets/seasonal/autumn-m-1.jpg';
 import autumnM2 from '@/assets/seasonal/autumn-m-2.jpg';
@@ -18,6 +19,12 @@ interface Props {
   gender?: Gender;
   /** 衣橱主人年龄（展示文案按年龄段描述；null 按青年处理） */
   age?: number | null;
+  /** v1.9.0（F-19）：今日可看张数（会员权益，普通 2 / VIP 5 / SVIP 10） */
+  quota: number;
+  /** v1.9.0（F-19）：今日已看张数 */
+  viewed: number;
+  /** v1.9.0（F-19）：本轮实际展示 n 张，由首页登记用量 */
+  onShow: (n: number) => void;
 }
 
 /** 季节（按当前月份划分）：3–5 春 / 6–8 夏 / 9–11 秋 / 12–2 冬。
@@ -50,9 +57,11 @@ const AUTUMN_IMAGES: Record<'male' | 'female', string[]> = {
 };
 
 /** 当季推荐卡（v1.7.0）：衣橱页跑马灯展示与当季、主人性别/年龄段相仿的时尚着装照片。
- * 纯展示组件，图片为打包的本地资源，不依赖衣物数据与网络。 */
-const SeasonalCard: React.FC<Props> = ({ gender, age }) => {
-  const slides = useMemo(() => {
+ * v1.9.0（F-19）：接入会员每日额度（普通 2 / VIP 5 / SVIP 10 张）——
+ * 每日只放行额度内张数，额度内图片循环展示；起始位按日期轮换，保证每天看到的内容有变化。
+ * 额度用尽后停止刷新新图（已展示图片保留在页面），图库扩充前 SVIP 先看满现有 5 张。 */
+const SeasonalCard: React.FC<Props> = ({ gender, age, quota, viewed, onShow }) => {
+  const allSlides = useMemo(() => {
     const imgs = AUTUMN_IMAGES[gender === 'female' ? 'female' : 'male'];
     return STYLE_LABELS.map((label, i) => ({ label, src: imgs[i] }));
   }, [gender]);
@@ -62,6 +71,30 @@ const SeasonalCard: React.FC<Props> = ({ gender, age }) => {
   const ageGroup = ageGroupOf(age);
   const genderLabel = gender === 'female' ? '女士' : '男士';
 
+  // 每日放行张数 = min(当日剩余额度, 图库张数)；起始位按「年内第几天」轮换，内容每日不同
+  const remaining = Math.max(0, Math.min(quota, 5) - Math.max(0, viewed));
+  const startIdx = useMemo(() => {
+    const dayOfYear = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 86400000);
+    return dayOfYear % allSlides.length;
+  }, [allSlides.length]);
+
+  const slides = useMemo(() => {
+    if (remaining <= 0) return [];
+    const out = [];
+    for (let i = 0; i < remaining; i++) {
+      out.push(allSlides[(startIdx + i) % allSlides.length]);
+    }
+    return out;
+  }, [allSlides, startIdx, remaining]);
+
+  // 首次挂载登记今日展示张数（额度随天滚动重置，由 store 侧保证）
+  useEffect(() => {
+    if (slides.length > 0) onShow(viewed + slides.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const exhausted = viewed >= Math.min(quota, 5);
+
   return (
     <View className={styles.card}>
       <View className={styles.head}>
@@ -70,26 +103,42 @@ const SeasonalCard: React.FC<Props> = ({ gender, age }) => {
           为{ageGroup}{genderLabel}挑选的当季穿搭灵感
         </Text>
       </View>
-      {/* 跑马灯：自动轮播 + 循环 + 指示点 */}
-      <Swiper
-        className={styles.swiper}
-        autoplay
-        circular
-        interval={3200}
-        duration={450}
-        indicatorDots
-        indicatorColor='rgba(255, 255, 255, 0.4)'
-        indicatorActiveColor='#ffffff'
-      >
-        {slides.map((s) => (
-          <SwiperItem key={s.label} className={styles.slide}>
-            <Image className={styles.photo} src={s.src} mode='aspectFill' />
-            <View className={styles.caption}>
-              <Text className={styles.captionText}>{s.label}</Text>
-            </View>
-          </SwiperItem>
-        ))}
-      </Swiper>
+      {slides.length > 0 ? (
+        /* 跑马灯：额度内自动轮播循环 + 指示点；额度用尽后保留已展示图片、停止刷新 */
+        <Swiper
+          className={styles.swiper}
+          autoplay={slides.length > 1 && !exhausted}
+          circular={slides.length > 1 && !exhausted}
+          interval={3200}
+          duration={450}
+          indicatorDots={slides.length > 1}
+          indicatorColor='rgba(255, 255, 255, 0.4)'
+          indicatorActiveColor='#ffffff'
+        >
+          {slides.map((s) => (
+            <SwiperItem key={s.label} className={styles.slide}>
+              <Image className={styles.photo} src={s.src} mode='aspectFill' />
+              <View className={styles.caption}>
+                <Text className={styles.captionText}>{s.label}</Text>
+              </View>
+            </SwiperItem>
+          ))}
+        </Swiper>
+      ) : (
+        <View className={styles.exhaustedBox}>
+          <Text className={styles.exhaustedText}>今日当季推荐已看完，明天再来看新内容吧</Text>
+        </View>
+      )}
+      {quota < 5 && (
+        <View className={styles.quotaRow}>
+          <Text className={styles.quotaText}>
+            今日已看 {Math.min(viewed, Math.min(quota, 5))}/{Math.min(quota, 5)} 张 · 会员每日可看更多
+          </Text>
+          <Text className={styles.quotaLink} onClick={() => Taro.navigateTo({ url: '/pages/member/index' })}>
+            去升级 ›
+          </Text>
+        </View>
+      )}
     </View>
   );
 };

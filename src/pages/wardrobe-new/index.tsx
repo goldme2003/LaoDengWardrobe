@@ -11,6 +11,7 @@ import {
   themeVarsOf
 } from '@/data/presets';
 import { Gender, ThemeId } from '@/types';
+import { tierOf } from '@/services/entitlement';
 import styles from './index.module.scss';
 
 const UNFILLED = '未填写';
@@ -20,6 +21,9 @@ const WardrobeNewPage: React.FC = () => {
   const wardrobes = useWardrobeStore((s) => s.wardrobes);
   const currentWardrobeId = useWardrobeStore((s) => s.currentWardrobeId);
   const addWardrobe = useWardrobeStore((s) => s.addWardrobe);
+  // v1.9.0（F-19）：会员档位决定衣橱数量上限（普通 1 / VIP 2 / SVIP 5）
+  const memberTier = useWardrobeStore((s) => s.memberTier);
+  const tierCfg = tierOf(memberTier);
 
   const [name, setName] = useState('');
   const [themeId, setThemeId] = useState<ThemeId>(THEME_SETS[0].id);
@@ -39,6 +43,18 @@ const WardrobeNewPage: React.FC = () => {
   const themeStyle = themeVarsOf(currentWardrobe) as unknown as React.CSSProperties;
 
   const handleAdd = () => {
+    // v1.9.0（F-19）：衣橱数量达会员档位上限时引导升级
+    if (wardrobes.length >= tierCfg.wardrobes) {
+      Taro.showModal({
+        title: '衣橱数量已达上限',
+        content: `当前版本最多创建 ${tierCfg.wardrobes} 个衣橱（${tierCfg.label}）。升级会员最多可创建 5 个。`,
+        confirmText: '去升级',
+        success: (r) => {
+          if (r.confirm) Taro.navigateTo({ url: '/pages/member/index' });
+        }
+      });
+      return;
+    }
     const trimmed = name.trim();
     if (!trimmed) {
       Taro.showToast({ title: '请输入用户名称', icon: 'none' });
@@ -125,9 +141,11 @@ const WardrobeNewPage: React.FC = () => {
         </View>
 
         <View className={styles.addBtn} onClick={handleAdd}>
-          <Text className={styles.addBtnText}>创建衣橱</Text>
+          <Text className={styles.addBtnText}>创建衣橱（{wardrobes.length}/{tierCfg.wardrobes}）</Text>
         </View>
         <Text className={styles.tip}>
+          {tierCfg.label}最多创建 {tierCfg.wardrobes} 个衣橱
+          {tierCfg.wardrobes < 5 ? '，升级会员可创建更多；' : '；'}
           衣橱名称创建后不可修改；性别/年龄/风格主题可在「我的」页修改；删除衣橱将连带删除其下全部衣物。
         </Text>
       </View>

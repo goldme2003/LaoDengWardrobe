@@ -51,7 +51,9 @@ function normalize(event) {
     .map((id) => str(id, 64))
     .filter(Boolean)
     .slice(0, 8);
-  return { scene, gender, age, weather, items, excludeIds };
+  // v1.9.0（F-19）：会员推荐档位——plus = 中间档（默认），full = 综合全衣橱推荐
+  const level = event.level === 'full' ? 'full' : 'plus';
+  return { scene, gender, age, weather, items, excludeIds, level };
 }
 
 function weatherSig(w) {
@@ -134,7 +136,9 @@ exports.main = async (event = {}) => {
   try {
     const result = await callHunyuanOutfit(params);
     const validIds = new Set(params.items.map((it) => it.id));
-    const itemIds = [...new Set(result.itemIds)].filter((id) => validIds.has(id)).slice(0, 4);
+    // full 档（SVIP 综合全衣橱）允许最多 5 件
+    const maxItems = params.level === 'full' ? 5 : 4;
+    const itemIds = [...new Set(result.itemIds)].filter((id) => validIds.has(id)).slice(0, maxItems);
     if (!itemIds.length) throw new Error('INVALID_ITEM_IDS');
     const scene = isScene(result.scene) ? result.scene : params.scene === 'all' ? fallbackOutfit(params.scene, params.items).scene : params.scene;
     const advice = (result.advice || '').slice(0, MAX_LEN);

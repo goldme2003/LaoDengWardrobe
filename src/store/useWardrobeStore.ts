@@ -15,6 +15,12 @@ import {
 } from '@/types';
 import { genId, pad3 } from '@/utils/format';
 import {
+  MemberTier,
+  MemberUsage,
+  initialUsage,
+  rolledUsage
+} from '@/services/entitlement';
+import {
   CUSTOM_MAX_LEN,
   WARDROBE_NAME_MAX_LEN,
   TYPE_PRESETS,
@@ -53,6 +59,10 @@ interface LdwData {
   tomorrowOutfits: Record<string, string[]>;
   /** 首页待应用筛选预设（v0.6：「我的」页点击喜爱衣物跳转后由首页消费） */
   wardrobeFilterPreset: 'favorite' | null;
+  /** v1.9.0（F-19）：会员档位（free / vip / svip），本地记录，云端校验待云同步落地后接入 */
+  memberTier: MemberTier;
+  /** v1.9.0（F-19）：会员权益用量（当季图组日额度、出差/批量导入/时尚推荐月额度） */
+  memberUsage: MemberUsage;
 }
 
 const initialData = (): LdwData => {
@@ -78,7 +88,9 @@ const initialData = (): LdwData => {
     tryoutItems: [],
     diaryEntries: [],
     tomorrowOutfits: {},
-    wardrobeFilterPreset: null
+    wardrobeFilterPreset: null,
+    memberTier: 'free',
+    memberUsage: initialUsage()
   };
 };
 
@@ -117,6 +129,9 @@ const loadData = (): LdwData => {
       stored.diaryEntries = stored.diaryEntries || [];
       stored.tomorrowOutfits = stored.tomorrowOutfits || {};
       stored.wardrobeFilterPreset = null;
+      // v1.9.0（F-19）：旧数据无会员字段，默认普通版；用量按天/月窗口滚动重置
+      stored.memberTier = stored.memberTier || 'free';
+      stored.memberUsage = rolledUsage(stored.memberUsage);
       console.info('[Store] 读取本地数据成功, 衣橱数 =', stored.wardrobes.length, '衣物数 =', stored.items.length);
       return stored;
     }
@@ -200,6 +215,12 @@ export interface WardrobeStore extends LdwData {
   consumeWardrobeFilterPreset: () => void;
   /** 设置天气城市（v1.8.0 F-17：附带来源 located/manual，缺省视为手动选择） */
   setCity: (city: string, source?: CitySource) => void;
+  /** v1.9.0（F-19）：设置会员档位（正式开通走云端校验；开发环境提供切换便于验证各档位） */
+  setMemberTier: (tier: MemberTier) => void;
+  /** v1.9.0（F-19）：登记今日当季推荐图组已看张数 */
+  recordSeasonalView: (count: number) => void;
+  /** v1.9.0（F-19）：登记本月出差推荐使用一次 */
+  recordTripUse: () => void;
 }
 
 export const useWardrobeStore = create<WardrobeStore>((set, get) => {
@@ -219,6 +240,8 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       tryoutItems: s.tryoutItems,
       diaryEntries: s.diaryEntries,
       tomorrowOutfits: s.tomorrowOutfits,
+      memberTier: s.memberTier,
+      memberUsage: s.memberUsage,
       wardrobeFilterPreset: null
     });
   };
@@ -576,6 +599,22 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
 
     setCity: (city, source) => {
       commit({ city, citySource: source || 'manual' });
+    },
+
+    setMemberTier: (tier) => {
+      console.info('[Store] 会员档位切换, tier =', tier);
+      commit({ memberTier: tier, memberUsage: rolledUsage(get().memberUsage) });
+    },
+
+    recordSeasonalView: (count) => {
+      const usage = rolledUsage(get().memberUsage);
+      const next = Math.max(usage.seasonalViewed, count);
+      commit({ memberUsage: { ...usage, seasonalViewed: next } });
+    },
+
+    recordTripUse: () => {
+      const usage = rolledUsage(get().memberUsage);
+      commit({ memberUsage: { ...usage, tripUsed: usage.tripUsed + 1 } });
     }
   };
 });

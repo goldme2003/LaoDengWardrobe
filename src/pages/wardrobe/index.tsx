@@ -16,6 +16,7 @@ import { buildOutfits, SCENE_OPTIONS, SceneId, RecommendOutfit } from '@/service
 import { requestOutfitRecommend, composeAiReason } from '@/services/outfitRecommend';
 import { DEFAULT_CITY } from '@/data/mockWeather';
 import { COLOR_PRESETS, MATERIAL_PRESETS, themeVarsOf, getThemeById } from '@/data/presets';
+import { tierOf, tripQuota } from '@/services/entitlement';
 import { ClothingItem, WeatherInfo } from '@/types';
 import styles from './index.module.scss';
 
@@ -47,6 +48,11 @@ const WardrobePage: React.FC = () => {
   // v0.6：「我的」页跳转携带的筛选预设
   const wardrobeFilterPreset = useWardrobeStore((s) => s.wardrobeFilterPreset);
   const consumeWardrobeFilterPreset = useWardrobeStore((s) => s.consumeWardrobeFilterPreset);
+  // v1.9.0（F-19）：会员档位与权益用量
+  const memberTier = useWardrobeStore((s) => s.memberTier);
+  const memberUsage = useWardrobeStore((s) => s.memberUsage);
+  const recordSeasonalView = useWardrobeStore((s) => s.recordSeasonalView);
+  const recordTripUse = useWardrobeStore((s) => s.recordTripUse);
 
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [weather, setWeather] = useState<WeatherInfo | null>(null);
@@ -205,6 +211,46 @@ const WardrobePage: React.FC = () => {
 
   const themeStyle = themeVarsOf(currentWardrobe) as unknown as React.CSSProperties;
 
+  // v1.9.0（F-19）：当前会员权益配置（衣橱数/推荐档位/当季图组/出差次数等）
+  const tierCfg = useMemo(() => tierOf(memberTier), [memberTier]);
+  const goMember = useCallback(() => Taro.navigateTo({ url: '/pages/member/index' }), []);
+
+  // v1.9.0（F-19）：出差模式门控——普通版无出差推荐；VIP 5 次/月（用尽提示升级）；SVIP 无限次
+  const handleSwitchMode = useCallback(
+    (m: 'local' | 'trip') => {
+      if (m === 'trip') {
+        const q = tripQuota(memberTier);
+        if (q.kind === 'blocked') {
+          Taro.showModal({
+            title: '出差推荐为会员权益',
+            content: '普通版不含出差推荐。升级 VIP/SVIP 后，可按目的地天气挑选携带穿搭。',
+            confirmText: '去升级',
+            success: (r) => {
+              if (r.confirm) goMember();
+            }
+          });
+          return;
+        }
+        if (q.kind === 'counted' && memberUsage.tripUsed >= q.limit) {
+          Taro.showModal({
+            title: '本月出差次数已用完',
+            content: `VIP 每月可使用 ${q.limit} 次出差推荐，本月额度已用完；升级 SVIP 可无限次使用。`,
+            confirmText: '去升级',
+            success: (r) => {
+              if (r.confirm) goMember();
+            }
+          });
+          return;
+        }
+        if (q.kind === 'counted') recordTripUse();
+      }
+      setMode(m);
+      setWeatherTick((t) => t + 1);
+      setRecLoading(true);
+    },
+    [memberTier, memberUsage.tripUsed, recordTripUse, goMember]
+  );
+
   // v0.7.3：tabBar 选中色/文字色随当前衣橱主题联动（微信端经 setTabBarStyle 动态设置；
   // H5 端不支持时静默失败可接受。注意：tabBar 图标为固定 PNG，无法逐主题重着色，属已知限制）
   useEffect(() => {
@@ -271,12 +317,16 @@ const WardrobePage: React.FC = () => {
   // v1.4.0（B/D 模块）：规则引擎推荐——有天气且有衣物时生成 1–3 套穿搭（v1.4.1 改为基于明日天气）；
   // 天气失败或衣橱为空时返回空数组不展示（降级矩阵），空衣橱走 C 模块引导
   // v1.8.0（F-18）：城市切换后天气重载完成前（weatherCity !== activeCity）视为过期，不基于旧城市天气出推荐
+  // v1.9.0（F-19）：推荐档位——精简（普通版）1 套且最多 3 件 / 中间档（VIP）2 套 / 综合（SVIP）3 套
   const weatherStale = weatherCity !== activeCity;
-  const outfits = useMemo(
-    () =>
-      weather && !weatherFailed && !weatherStale ? buildOutfits(weather, currentItems, scene) : [],
-    [weather, weatherFailed, weatherStale, currentItems, scene]
-  );
+  const outfits = useMemo(() => {
+    const base =
+      weather && !weatherFailed && !weatherStale ? buildOutfits(weather, currentItems, scene) : [];
+    if (tierCfg.weatherLevel === 'basic') {
+      return base.slice(0, 1).map((o) => ({ ...o, items: o.items.slice(0, 3) }));
+    }
+    return tierCfg.weatherLevel === 'plus' ? base.slice(0, 2) : base;
+  }, [weather, weatherFailed, weatherStale, currentItems, scene, tierCfg.weatherLevel]);
   const [outfitIdx, setOutfitIdx] = useState(0);
   useEffect(() => {
     setOutfitIdx(0);
@@ -294,8 +344,10 @@ const WardrobePage: React.FC = () => {
   const aiExcludeRef = useRef<string[]>([]);
   const aiReqRef = useRef(0);
   const recommendReady = !!weather && !weatherFailed && !weatherStale && currentItems.length > 0;
+  // v1.9.0（F-19）：普通版=精简推荐（仅本地规则引擎，不调用混元）；VIP=中间档；SVIP=综合全衣橱
+  const aiLevel: 'plus' | 'full' = tierCfg.weatherLevel === 'full' ? 'full' : 'plus';
   useEffect(() => {
-    if (!recommendReady || !weather) {
+    if (!recommendReady || !weather || tierCfg.weatherLevel === 'basic') {
       setAiOutfit(null);
       setAiLoading(false);
       return;
@@ -314,7 +366,8 @@ const WardrobePage: React.FC = () => {
       items: currentItems,
       gender: currentWardrobe?.gender,
       age: currentWardrobe?.age ?? null,
-      excludeIds
+      excludeIds,
+      level: aiLevel
     })
       .then((res) => {
         if (!alive || reqId !== aiReqRef.current || !res) return;
@@ -338,7 +391,7 @@ const WardrobePage: React.FC = () => {
     return () => {
       alive = false;
     };
-  }, [recommendReady, weather, weatherFailed, weatherStale, activeCity, currentItems, scene, currentWardrobe?.gender, currentWardrobe?.age, aiNonce]);
+  }, [recommendReady, weather, weatherFailed, weatherStale, activeCity, currentItems, scene, currentWardrobe?.gender, currentWardrobe?.age, aiNonce, aiLevel, tierCfg.weatherLevel]);
   const outfit = aiOutfit || localOutfit;
   const outfitAdopted = !!outfit && outfit.items.every((it) => tomorrowIds.includes(it.id));
   const handleShuffle = useCallback(() => {
@@ -580,11 +633,7 @@ const WardrobePage: React.FC = () => {
         loading={weatherLoading}
         failed={weatherFailed}
         mode={mode}
-        onSwitchMode={(m) => {
-          setMode(m);
-          setWeatherTick((t) => t + 1);
-          setRecLoading(true);
-        }}
+        onSwitchMode={handleSwitchMode}
         activeCity={activeCity}
         located={mode === 'local' && citySource === 'located'}
         onSelectCity={(c) => {
@@ -620,9 +669,16 @@ const WardrobePage: React.FC = () => {
         />
       )}
 
-      {/* v1.7.0：当季推荐卡——按当季与衣橱主人性别/年龄段展示时尚着装照片跑马灯（暂定 5 张） */}
+      {/* v1.7.0：当季推荐卡——按当季与衣橱主人性别/年龄段展示时尚着装照片跑马灯（暂定 5 张）
+          v1.9.0（F-19）：接入会员每日额度（普通 2 / VIP 5 / SVIP 10 张），额度用尽停止刷新、已展示图片保留 */}
       {!planMode && !isFiltering && (
-        <SeasonalCard gender={currentWardrobe?.gender} age={currentWardrobe?.age ?? null} />
+        <SeasonalCard
+          gender={currentWardrobe?.gender}
+          age={currentWardrobe?.age ?? null}
+          quota={tierCfg.seasonalPerDay}
+          viewed={memberUsage.seasonalViewed}
+          onShow={recordSeasonalView}
+        />
       )}
 
       {/* v1.4.3：移除独立「切换衣橱」行，入口移至天气卡片右上角 */}

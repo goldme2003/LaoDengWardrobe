@@ -7,6 +7,7 @@ export default defineAppConfig({
     'pages/tryout-edit/index',
     'pages/diary/index',
     'pages/mine/index',
+    'pages/member/index',
     'pages/profile/index',
     'pages/add/index',
     'pages/detail/index'

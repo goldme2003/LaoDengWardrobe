@@ -59,3 +59,36 @@
   font-size: $font-size-xs;
   color: #ffffff;
 }
+
+/* v1.9.0（F-19）：额度用尽占位与额度提示行 */
+.exhaustedBox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 240rpx;
+  border-radius: $radius-md;
+  background: var(--bg-secondary, #f5f2ee);
+}
+
+.exhaustedText {
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+}
+
+.quotaRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: $spacing-sm;
+}
+
+.quotaText {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+.quotaLink {
+  font-size: $font-size-xs;
+  color: var(--primary, #b07d50);
+  font-weight: $font-weight-medium;
+}

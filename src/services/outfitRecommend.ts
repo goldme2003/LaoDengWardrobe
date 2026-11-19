@@ -24,6 +24,8 @@ interface Params {
   gender?: string;
   age?: number | null;
   excludeIds?: string[];
+  /** v1.9.0（F-19）：会员档位（plus = 中间档，full = 综合全衣橱推荐；缺省按 plus 处理） */
+  level?: 'plus' | 'full';
 }
 
 /** 调用混元穿搭云函数；不可用/失败时返回 null，由首页回退到本地规则引擎 */
@@ -41,6 +43,7 @@ export const requestOutfitRecommend = async (params: Params): Promise<AiOutfitRe
         scene: params.scene,
         gender: params.gender,
         age: params.age ?? undefined,
+        level: params.level === 'full' ? 'full' : 'plus',
         weather: day
           ? { cond: day.cond, low: day.low, high: day.high }
           : undefined,

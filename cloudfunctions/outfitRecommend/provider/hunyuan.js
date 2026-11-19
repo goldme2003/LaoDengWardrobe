@@ -94,7 +94,7 @@ function weatherText(w) {
 }
 
 /** 压缩衣物清单：每行「id|名称|类型|内外穿|颜色|材质|适用场合」，控制 token */
-function buildPrompt({ gender, age, weather, scene, items, excludeIds }) {
+function buildPrompt({ gender, age, weather, scene, items, excludeIds, level }) {
   const list = items
     .map(
       (it) =>
@@ -106,7 +106,12 @@ function buildPrompt({ gender, age, weather, scene, items, excludeIds }) {
       ? `场景不限，请从「${SCENES.join('、')}」中选择最适合当前衣物与天气的一个`
       : `场景：${scene}`;
   const exclude = excludeIds && excludeIds.length ? `不要与上次完全相同（上次 id：${excludeIds.join(',')}）。` : '';
-  return `你是穿搭顾问。主人${GENDER_TEXT[gender] || '不限'}，${age}岁。天气：${weatherText(weather)}。${sceneText}。从衣物清单中选 1–4 件组成一套协调穿搭，尽量覆盖上装+下装+鞋履，只能使用清单内 id。${exclude}只输出JSON：{"itemIds":["id"],"scene":"场景","advice":"不超过30字的搭配建议"}。衣物清单：\n${list}`;
+  // v1.9.0（F-19）：会员推荐档位——full = 综合全衣橱（更多件数 + 按全衣橱互补给建议）
+  const levelText =
+    level === 'full'
+      ? '请综合主人的全部衣物做整体搭配（最多 5 件，可含配饰），建议结合衣橱整体结构给出互补性提示（如缺件可备注）。'
+      : '选 1–4 件组成一套协调穿搭，尽量覆盖上装+下装+鞋履。';
+  return `你是穿搭顾问。主人${GENDER_TEXT[gender] || '不限'}，${age}岁。天气：${weatherText(weather)}。${sceneText}。${levelText}只能使用清单内 id。${exclude}只输出JSON：{"itemIds":["id"],"scene":"场景","advice":"不超过30字的搭配建议"}。衣物清单：\n${list}`;
 }
 
 /**

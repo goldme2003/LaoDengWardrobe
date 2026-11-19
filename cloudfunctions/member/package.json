@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "openapi": []
+  },
+  "name": "member",
+  "version": "1.0.0",
+  "description": "会员中心（档位查询 / 开通订单登记，支付未开通前返回 PAY_UNAVAILABLE）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

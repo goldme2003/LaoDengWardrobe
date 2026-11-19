@@ -1,0 +1,212 @@
+@use '@/styles/variables.scss' as *;
+
+/* v1.9.0（F-19）：会员中心页——身份卡 / 价格卡 / 权益矩阵 / 开发档位切换 */
+.page {
+  min-height: 100vh;
+  padding: $spacing-md;
+  box-sizing: border-box;
+  background: #f7f4ef;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  padding: $spacing-lg $spacing-md;
+  margin-bottom: $spacing-md;
+  border-radius: $radius-lg;
+  background: linear-gradient(135deg, #2b2118 0%, #4a3524 60%, #6b4f33 100%);
+}
+
+.heroBadge {
+  align-self: flex-start;
+  padding: 4rpx 20rpx;
+  border-radius: $radius-round;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: $font-size-xs;
+  color: #f2d8ae;
+}
+
+.heroTitle {
+  margin-top: $spacing-sm;
+  font-size: 36rpx;
+  font-weight: $font-weight-medium;
+  color: #ffffff;
+}
+
+.heroSub {
+  margin-top: 8rpx;
+  font-size: $font-size-xs;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.priceRow {
+  display: flex;
+  gap: $spacing-sm;
+  margin-bottom: $spacing-xs;
+}
+
+.priceCard {
+  flex: 1;
+  padding: $spacing-md;
+  border-radius: $radius-lg;
+  background: #ffffff;
+  border: 2rpx solid rgba(0, 0, 0, 0.06);
+}
+
+.priceCardActive {
+  border-color: #b07d50;
+}
+
+.priceHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.priceName {
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+  color: $color-text-primary;
+}
+
+.priceTag {
+  padding: 2rpx 12rpx;
+  border-radius: $radius-round;
+  background: rgba(176, 125, 80, 0.12);
+  font-size: $font-size-xs;
+  color: #b07d50;
+}
+
+.priceLine {
+  display: flex;
+  align-items: baseline;
+  margin-top: $spacing-xs;
+}
+
+.priceNum {
+  font-size: 44rpx;
+  font-weight: $font-weight-medium;
+  color: #b07d50;
+}
+
+.priceUnit {
+  margin-left: 8rpx;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+.buyBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: $spacing-sm;
+  padding: 14rpx 0;
+  border-radius: $radius-round;
+  background: #b07d50;
+}
+
+.buyBtnOwned {
+  background: rgba(176, 125, 80, 0.16);
+}
+
+.buyBtnText {
+  font-size: $font-size-sm;
+  color: #ffffff;
+}
+
+.buyBtnOwned .buyBtnText {
+  color: #8a6240;
+}
+
+.payTip {
+  display: block;
+  margin-bottom: $spacing-md;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+.table {
+  padding: $spacing-xs $spacing-sm;
+  margin-bottom: $spacing-md;
+  border-radius: $radius-lg;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.tr {
+  display: flex;
+  align-items: center;
+  padding: 18rpx 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.tdLabel {
+  flex: 1.6;
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+}
+
+.td {
+  flex: 1;
+  text-align: center;
+  font-size: $font-size-xs;
+  color: $color-text-primary;
+}
+
+.tdMine {
+  color: #b07d50;
+  font-weight: $font-weight-medium;
+}
+
+.devBox {
+  padding: $spacing-md;
+  margin-bottom: $spacing-md;
+  border-radius: $radius-lg;
+  background: #ffffff;
+  border: 1px dashed rgba(176, 125, 80, 0.5);
+}
+
+.devTitle {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+.devRow {
+  display: flex;
+  gap: $spacing-sm;
+  margin-top: $spacing-sm;
+}
+
+.devBtn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12rpx 0;
+  border-radius: $radius-round;
+  background: var(--bg-secondary, #f5f2ee);
+}
+
+.devBtnActive {
+  background: #b07d50;
+}
+
+.devBtnText {
+  font-size: $font-size-xs;
+  color: $color-text-primary;
+}
+
+.devBtnActive .devBtnText {
+  color: #ffffff;
+}
+
+.footTip {
+  display: block;
+  font-size: $font-size-xs;
+  line-height: 1.6;
+  color: $color-text-tertiary;
+}

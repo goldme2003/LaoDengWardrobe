@@ -15,6 +15,8 @@ export const WEATHER_FN_NAME = 'weatherProxy';
 export const EMPTY_GUIDE_FN_NAME = 'emptyGuide';
 /** v1.5.0：明日穿搭推荐（混元按场景选搭 + 兜底） */
 export const OUTFIT_RECOMMEND_FN_NAME = 'outfitRecommend';
+/** v1.9.0（F-19）：会员中心（getMember / createOrder，支付未开通前仅登记订单） */
+export const MEMBER_FN_NAME = 'member';
 
 /** 月熔断预算（元，与云函数 RECOGNIZE_BUDGET_YUAN 保持一致）与预警阈值 */
 export const RECOGNIZE_BUDGET_YUAN = 50;
