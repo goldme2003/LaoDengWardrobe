@@ -71,29 +71,30 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, quota, viewed, onShow }) =
   const ageGroup = ageGroupOf(age);
   const genderLabel = gender === 'female' ? '女士' : '男士';
 
-  // 每日放行张数 = min(当日剩余额度, 图库张数)；起始位按「年内第几天」轮换，内容每日不同
-  const remaining = Math.max(0, Math.min(quota, 5) - Math.max(0, viewed));
+  // 每日放行张数 = min(当日额度, 图库张数)；起始位按「年内第几天」轮换，内容每日不同。
+  // v1.10.0：额度用尽后不再清空列表——已展示的图片保留在跑马灯中（停止自动轮播），
+  // 不再显示「已看完」空卡片
+  const shown = Math.max(0, Math.min(quota, 5));
+  const exhausted = viewed >= shown;
   const startIdx = useMemo(() => {
     const dayOfYear = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 86400000);
     return dayOfYear % allSlides.length;
   }, [allSlides.length]);
 
   const slides = useMemo(() => {
-    if (remaining <= 0) return [];
+    if (shown <= 0) return [];
     const out = [];
-    for (let i = 0; i < remaining; i++) {
+    for (let i = 0; i < shown; i++) {
       out.push(allSlides[(startIdx + i) % allSlides.length]);
     }
     return out;
-  }, [allSlides, startIdx, remaining]);
+  }, [allSlides, startIdx, shown]);
 
-  // 首次挂载登记今日展示张数（额度随天滚动重置，由 store 侧保证）
+  // 首次挂载登记今日展示张数（额度随天滚动重置，由 store 侧保证；已用尽时不重复登记）
   useEffect(() => {
-    if (slides.length > 0) onShow(viewed + slides.length);
+    if (!exhausted && slides.length > 0) onShow(slides.length);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const exhausted = viewed >= Math.min(quota, 5);
 
   return (
     <View className={styles.card}>
@@ -103,8 +104,8 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, quota, viewed, onShow }) =
           为{ageGroup}{genderLabel}挑选的当季穿搭灵感
         </Text>
       </View>
-      {slides.length > 0 ? (
-        /* 跑马灯：额度内自动轮播循环 + 指示点；额度用尽后保留已展示图片、停止刷新 */
+      {slides.length > 0 && (
+        /* 跑马灯：额度内自动轮播循环；额度用尽后保留已展示图片、停止自动轮播（v1.10.0 不再显示空态卡） */
         <Swiper
           className={styles.swiper}
           autoplay={slides.length > 1 && !exhausted}
@@ -124,10 +125,6 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, quota, viewed, onShow }) =
             </SwiperItem>
           ))}
         </Swiper>
-      ) : (
-        <View className={styles.exhaustedBox}>
-          <Text className={styles.exhaustedText}>今日当季推荐已看完，明天再来看新内容吧</Text>
-        </View>
       )}
       {quota < 5 && (
         <View className={styles.quotaRow}>

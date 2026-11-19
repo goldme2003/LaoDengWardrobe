@@ -107,11 +107,16 @@ function buildPrompt({ gender, age, weather, scene, items, excludeIds, level }) 
       : `场景：${scene}`;
   const exclude = excludeIds && excludeIds.length ? `不要与上次完全相同（上次 id：${excludeIds.join(',')}）。` : '';
   // v1.9.0（F-19）：会员推荐档位——full = 综合全衣橱（更多件数 + 按全衣橱互补给建议）
+  // v1.10.0：advice 文案按档位差异化——plus 更详细；full 最详细且结合衣橱整体与主人信息
   const levelText =
     level === 'full'
-      ? '请综合主人的全部衣物做整体搭配（最多 5 件，可含配饰），建议结合衣橱整体结构给出互补性提示（如缺件可备注）。'
-      : '选 1–4 件组成一套协调穿搭，尽量覆盖上装+下装+鞋履。';
-  return `你是穿搭顾问。主人${GENDER_TEXT[gender] || '不限'}，${age}岁。天气：${weatherText(weather)}。${sceneText}。${levelText}只能使用清单内 id。${exclude}只输出JSON：{"itemIds":["id"],"scene":"场景","advice":"不超过30字的搭配建议"}。衣物清单：\n${list}`;
+      ? '请综合主人的全部衣物做整体搭配（最多 5 件，可含配饰），建议结合衣橱整体结构给出互补性提示（如缺件可备注）。advice 为 100~150 字的深度搭配建议：结合主人性别年龄与明日天气，说明整套穿搭思路、单品之间的颜色/材质/版型配合关系、适用场合与可替换项。'
+      : '选 1–4 件组成一套协调穿搭，尽量覆盖上装+下装+鞋履。advice 为 60~80 字的详细搭配建议：说明天气适配逻辑、颜色与材质搭配理由、穿着注意事项。';
+  const adviceRule =
+    level === 'full'
+      ? '{"itemIds":["id"],"scene":"场景","advice":"100~150字深度搭配建议"}'
+      : '{"itemIds":["id"],"scene":"场景","advice":"60~80字详细搭配建议"}';
+  return `你是穿搭顾问。主人${GENDER_TEXT[gender] || '不限'}，${age}岁。天气：${weatherText(weather)}。${sceneText}。${levelText}只能使用清单内 id。${exclude}只输出JSON：${adviceRule}。衣物清单：\n${list}`;
 }
 
 /**

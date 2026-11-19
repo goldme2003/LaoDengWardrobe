@@ -11,12 +11,13 @@ import {
 } from '@/services/entitlement';
 import styles from './index.module.scss';
 
-/** 权益矩阵行（与 PRD 10.6 三档矩阵一致） */
+/** 权益矩阵行（与 PRD 10.6 三档矩阵一致；v1.10.0 文案修正 + 新增明日推荐次数） */
 const BENEFIT_ROWS: { label: string; values: Record<MemberTier, string> }[] = [
   { label: '衣橱数量', values: { free: '1 个', vip: '2 个', svip: '5 个' } },
   {
     label: '服装批量导入 / 分类',
-    values: { free: '即将上线', vip: '5 次/月', svip: '15 次/月' }
+    // v1.10.0：普通版为「无」（该功能为会员权益，非「即将上线」）
+    values: { free: '无', vip: '5 次/月', svip: '15 次/月' }
   },
   { label: '当季推荐图组', values: { free: '2 张/天', vip: '5 张/天', svip: '10 张/天' } },
   {
@@ -27,10 +28,15 @@ const BENEFIT_ROWS: { label: string; values: Record<MemberTier, string> }[] = [
       svip: weatherLevelLabel.full
     }
   },
+  {
+    // v1.10.0：明日推荐次数——生成后当天缓存，套数用尽不再生成（左右滑动查看）
+    label: '明日推荐次数',
+    values: { free: '1 套/天', vip: '2 套/天', svip: '5 套/天' }
+  },
   { label: '出差推荐', values: { free: '无', vip: '5 次/月', svip: '无限次' } },
   {
     label: '时尚穿搭推荐',
-    values: { free: '即将上线', vip: '5 次/月', svip: '无限次' }
+    values: { free: '无', vip: '5 次/月', svip: '无限次' }
   },
   { label: '云同步', values: { free: '本地存储', vip: '云端', svip: '云端' } }
 ];
@@ -72,27 +78,49 @@ const MemberPage: React.FC = () => {
         </Text>
       </View>
 
-      {/* 价格卡（免费档不展示购买按钮） */}
+      {/* 价格卡（免费档不展示购买按钮）
+          v1.10.0：已开通 SVIP 后 VIP / SVIP 开通按钮均不可用；当前档位卡片高亮标记「当前等级」；
+          SVIP 卡升级为黑金尊享外观 */}
       <View className={styles.priceRow}>
         {TIER_ORDER.filter((t) => t !== 'free').map((t) => {
           const cfg = TIERS[t];
           const active = memberTier === t;
+          // v1.10.0：SVIP 为最高档——开通后所有付费档按钮均不可用（VIP 档显示「已含于 SVIP」）
+          const locked = memberTier === 'svip';
+          const disabled = active || locked;
+          const btnText = active ? '当前等级' : locked ? '已含于 SVIP' : '立即开通';
           return (
-            <View key={t} className={`${styles.priceCard} ${active ? styles.priceCardActive : ''}`}>
+            <View
+              key={t}
+              className={[
+                styles.priceCard,
+                t === 'svip' ? styles.priceCardSvip : '',
+                active ? (t === 'svip' ? styles.priceCardSvipActive : styles.priceCardActive) : ''
+              ].join(' ')}
+            >
               <View className={styles.priceHead}>
-                <Text className={styles.priceName}>{cfg.label}</Text>
-                {t === 'svip' && <Text className={styles.priceTag}>全权益</Text>}
+                <Text className={`${styles.priceName} ${t === 'svip' ? styles.priceNameSvip : ''}`}>
+                  {t === 'svip' ? '👑 ' : ''}
+                  {cfg.label}
+                </Text>
+                {t === 'svip' && <Text className={`${styles.priceTag} ${styles.priceTagSvip}`}>全权益</Text>}
               </View>
               <View className={styles.priceLine}>
-                <Text className={styles.priceNum}>¥{cfg.price}</Text>
+                <Text className={`${styles.priceNum} ${t === 'svip' ? styles.priceNumSvip : ''}`}>¥{cfg.price}</Text>
                 <Text className={styles.priceUnit}>/ 一次性买断</Text>
               </View>
               <View
-                className={`${styles.buyBtn} ${active ? styles.buyBtnOwned : ''}`}
-                onClick={active ? undefined : () => handleBuy(t)}
+                className={[
+                  styles.buyBtn,
+                  t === 'svip' ? styles.buyBtnSvip : '',
+                  active ? (t === 'svip' ? styles.buyBtnSvipOwned : styles.buyBtnOwned) : '',
+                  locked && !active ? styles.buyBtnDisabled : ''
+                ].join(' ')}
+                onClick={disabled ? undefined : () => handleBuy(t)}
               >
-                <Text className={styles.buyBtnText}>{active ? '当前档位' : '立即开通'}</Text>
+                <Text className={styles.buyBtnText}>{btnText}</Text>
               </View>
+              {active && <Text className={styles.mineTag}>当前等级</Text>}
             </View>
           );
         })}
@@ -140,7 +168,7 @@ const MemberPage: React.FC = () => {
       </View>
 
       <Text className={styles.footTip}>
-        会员权益说明：批量导入 / 分类与时尚穿搭推荐为即将上线的功能，权益额度自功能上线后开始计数；会员有效期一次性买断、长期有效。
+        会员权益说明：服装批量导入 / 分类与时尚穿搭推荐为待上线功能，权益额度自功能上线后开始计数；明日推荐套数每日生成后当天缓存、次日重新生成；会员为一次性买断、长期有效。
       </Text>
     </View>
   );

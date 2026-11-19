@@ -84,6 +84,19 @@
   margin-bottom: $spacing-xs;
 }
 
+/* v1.10.0：标题右侧今日生成进度 + 来源角标 */
+.titleRight {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  flex-shrink: 0;
+}
+
+.progressText {
+  font-size: 20rpx;
+  color: $color-text-tertiary;
+}
+
 .title {
   font-size: $font-size-md;
   font-weight: $font-weight-medium;
@@ -129,6 +142,11 @@
   flex-wrap: wrap;
   gap: $spacing-sm;
   margin-bottom: $spacing-md;
+}
+
+/* v1.10.0：多套方案 Swiper 容器（图片 140rpx + 名称两行 + 指示点高度） */
+.outfitSwiper {
+  height: 300rpx;
 }
 
 .item {
@@ -180,6 +198,11 @@
 .shuffleText {
   font-size: $font-size-md;
   color: $color-text-secondary;
+}
+
+/* v1.10.0：今日套数用尽后「换一件」置灰 */
+.shuffleBtnDisabled {
+  opacity: 0.45;
 }
 
 .adoptBtn {

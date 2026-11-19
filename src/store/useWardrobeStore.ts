@@ -17,8 +17,11 @@ import { genId, pad3 } from '@/utils/format';
 import {
   MemberTier,
   MemberUsage,
+  DailyOutfitCache,
+  DailyOutfitEntry,
   initialUsage,
-  rolledUsage
+  rolledUsage,
+  todayKey
 } from '@/services/entitlement';
 import {
   CUSTOM_MAX_LEN,
@@ -63,6 +66,8 @@ interface LdwData {
   memberTier: MemberTier;
   /** v1.9.0（F-19）：会员权益用量（当季图组日额度、出差/批量导入/时尚推荐月额度） */
   memberUsage: MemberUsage;
+  /** v1.10.0：明日穿搭推荐当天缓存（key = 衣橱id；day 过期由读取侧与写入侧重置） */
+  dailyOutfits: Record<string, DailyOutfitCache>;
 }
 
 const initialData = (): LdwData => {
@@ -90,7 +95,8 @@ const initialData = (): LdwData => {
     tomorrowOutfits: {},
     wardrobeFilterPreset: null,
     memberTier: 'free',
-    memberUsage: initialUsage()
+    memberUsage: initialUsage(),
+    dailyOutfits: {}
   };
 };
 
@@ -132,6 +138,13 @@ const loadData = (): LdwData => {
       // v1.9.0（F-19）：旧数据无会员字段，默认普通版；用量按天/月窗口滚动重置
       stored.memberTier = stored.memberTier || 'free';
       stored.memberUsage = rolledUsage(stored.memberUsage);
+      // v1.10.0：明日推荐当天缓存——跨天后清空（次日重新生成）
+      stored.dailyOutfits = stored.dailyOutfits || {};
+      Object.keys(stored.dailyOutfits).forEach((wid) => {
+        if (stored.dailyOutfits[wid].day !== todayKey()) {
+          stored.dailyOutfits[wid] = { day: todayKey(), list: [] };
+        }
+      });
       console.info('[Store] 读取本地数据成功, 衣橱数 =', stored.wardrobes.length, '衣物数 =', stored.items.length);
       return stored;
     }
@@ -221,6 +234,8 @@ export interface WardrobeStore extends LdwData {
   recordSeasonalView: (count: number) => void;
   /** v1.9.0（F-19）：登记本月出差推荐使用一次 */
   recordTripUse: () => void;
+  /** v1.10.0：追加一套今日明日推荐缓存（跨天自动重置；数量上限由调用方按会员档位把关） */
+  appendDailyOutfit: (wardrobeId: string, entry: Omit<DailyOutfitEntry, 'id'>) => void;
 }
 
 export const useWardrobeStore = create<WardrobeStore>((set, get) => {
@@ -242,6 +257,7 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       tomorrowOutfits: s.tomorrowOutfits,
       memberTier: s.memberTier,
       memberUsage: s.memberUsage,
+      dailyOutfits: s.dailyOutfits,
       wardrobeFilterPreset: null
     });
   };
@@ -615,6 +631,21 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
     recordTripUse: () => {
       const usage = rolledUsage(get().memberUsage);
       commit({ memberUsage: { ...usage, tripUsed: usage.tripUsed + 1 } });
+    },
+
+    appendDailyOutfit: (wardrobeId, entry) => {
+      const s = get();
+      const day = todayKey();
+      const cache = s.dailyOutfits[wardrobeId];
+      // 跨天或首次：重置当天缓存；同天：追加（调用方保证不超会员档位套数上限）
+      const list = cache && cache.day === day ? cache.list : [];
+      console.info('[Store] 缓存明日推荐, 衣橱 =', wardrobeId, '第', list.length + 1, '套');
+      commit({
+        dailyOutfits: {
+          ...s.dailyOutfits,
+          [wardrobeId]: { day, list: [...list, { ...entry, id: genId() }] }
+        }
+      });
     }
   };
 });

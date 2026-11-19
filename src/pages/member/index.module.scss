@@ -46,6 +46,7 @@
 }
 
 .priceCard {
+  position: relative;
   flex: 1;
   padding: $spacing-md;
   border-radius: $radius-lg;
@@ -55,6 +56,62 @@
 
 .priceCardActive {
   border-color: #b07d50;
+}
+
+/* v1.10.0：SVIP 黑金尊享外观（更高级的质感与描边） */
+.priceCardSvip {
+  position: relative;
+  border-color: rgba(216, 181, 106, 0.55);
+  background: linear-gradient(155deg, #241d13 0%, #3a2d1a 55%, #55401f 100%);
+  box-shadow: 0 6rpx 20rpx rgba(36, 29, 19, 0.28);
+}
+
+.priceCardSvipActive {
+  border-color: #e7c883;
+  box-shadow: 0 6rpx 26rpx rgba(216, 181, 106, 0.45);
+}
+
+.priceNameSvip {
+  color: #f2d8ae;
+}
+
+.priceTagSvip {
+  background: rgba(242, 216, 174, 0.18);
+  color: #f2d8ae;
+}
+
+.priceNumSvip {
+  color: #e7c883;
+}
+
+/* v1.10.0：SVIP 金色按钮 */
+.buyBtnSvip {
+  background: linear-gradient(135deg, #d8b56a 0%, #b07d50 100%);
+}
+
+.buyBtnSvipOwned {
+  background: rgba(242, 216, 174, 0.16);
+
+  .buyBtnText {
+    color: #f2d8ae;
+  }
+}
+
+/* v1.10.0：开通 SVIP 后其余档位按钮禁用态 */
+.buyBtnDisabled {
+  opacity: 0.5;
+}
+
+/* v1.10.0：当前档位角标（突出用户现有等级） */
+.mineTag {
+  position: absolute;
+  top: -14rpx;
+  right: 16rpx;
+  padding: 2rpx 14rpx;
+  border-radius: $radius-round;
+  background: #b07d50;
+  font-size: 20rpx;
+  color: #ffffff;
 }
 
 .priceHead {

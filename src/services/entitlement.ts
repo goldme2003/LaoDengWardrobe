@@ -28,6 +28,8 @@ export interface TierConfig {
   fashionPerMonth: number | null;
   /** 云同步：local = 本地存储，cloud = 云端（待开发，仅登记权益） */
   cloudSync: 'local' | 'cloud';
+  /** v1.10.0：明日穿搭推荐每日可生成套数（生成后当天缓存，次日重新生成；套数用尽只展示缓存） */
+  dailyOutfits: number;
 }
 
 export const TIERS: Record<MemberTier, TierConfig> = {
@@ -41,7 +43,8 @@ export const TIERS: Record<MemberTier, TierConfig> = {
     weatherLevel: 'basic',
     tripPerMonth: 0,
     fashionPerMonth: 0,
-    cloudSync: 'local'
+    cloudSync: 'local',
+    dailyOutfits: 1
   },
   vip: {
     id: 'vip',
@@ -53,7 +56,8 @@ export const TIERS: Record<MemberTier, TierConfig> = {
     weatherLevel: 'plus',
     tripPerMonth: 5,
     fashionPerMonth: 5,
-    cloudSync: 'cloud'
+    cloudSync: 'cloud',
+    dailyOutfits: 2
   },
   svip: {
     id: 'svip',
@@ -65,7 +69,8 @@ export const TIERS: Record<MemberTier, TierConfig> = {
     weatherLevel: 'full',
     tripPerMonth: null,
     fashionPerMonth: null,
-    cloudSync: 'cloud'
+    cloudSync: 'cloud',
+    dailyOutfits: 5
   }
 };
 
@@ -74,10 +79,12 @@ export const TIER_ORDER: MemberTier[] = ['free', 'vip', 'svip'];
 export const tierOf = (tier: MemberTier | undefined | ''): TierConfig =>
   TIERS[tier || 'free'] || TIERS.free;
 
+/** v1.10.0：推荐档位文案修正——VIP 档不再称「中间档」；
+ * 普通版 = 按性别/年龄/明日天气的精简推荐；VIP = AI 详细推荐；SVIP = 综合全衣橱深度推荐 */
 export const weatherLevelLabel: Record<WeatherLevel, string> = {
   basic: '精简推荐',
-  plus: '中间档',
-  full: '综合已有衣物'
+  plus: 'AI 详细推荐',
+  full: '综合衣橱深度推荐'
 };
 
 /** 会员权益计数（按天/按月窗口滚动重置） */
@@ -140,4 +147,31 @@ export const tripQuota = (
   if (v === null) return { kind: 'unlimited', limit: Infinity };
   if (v <= 0) return { kind: 'blocked', limit: 0 };
   return { kind: 'counted', limit: v };
+};
+
+/** v1.10.0：明日穿搭推荐单套缓存条目（当天有效，次日清空重新生成） */
+export interface DailyOutfitEntry {
+  id: string;
+  scene: string;
+  sceneLabel: string;
+  /** 推荐理由（含档位差异化建议文案，生成时固化，当天内不再变化） */
+  reason: string;
+  itemIds: string[];
+  source: 'hunyuan' | 'fallback';
+}
+
+/** v1.10.0：明日推荐当天缓存（key = 衣橱id），day 与当日不符视为过期（空列表） */
+export interface DailyOutfitCache {
+  day: string;
+  list: DailyOutfitEntry[];
+}
+
+/** 读取某衣橱今日有效的明日推荐缓存（day 过期返回空数组） */
+export const dailyOutfitsOf = (
+  cache: Record<string, DailyOutfitCache> | undefined,
+  wardrobeId: string
+): DailyOutfitEntry[] => {
+  const entry = cache && cache[wardrobeId];
+  if (!entry || entry.day !== todayKey()) return [];
+  return entry.list || [];
 };

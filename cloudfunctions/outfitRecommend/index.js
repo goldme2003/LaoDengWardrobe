@@ -12,7 +12,8 @@ const { callHunyuanOutfit } = require('./provider/hunyuan');
 
 const SCENES = ['日常', '通勤', '运动', '正式', '居家', '旅行'];
 const MAX_ITEMS = 40;
-const MAX_LEN = 60;
+// v1.10.0：VIP/SVIP 档位 advice 更详细（60~80 / 100~150 字），放宽截断上限
+const MAX_LEN = 200;
 const TTL = 10 * 60 * 1000;
 const FALLBACK_TTL = 2 * 60 * 1000;
 const cache = new Map();

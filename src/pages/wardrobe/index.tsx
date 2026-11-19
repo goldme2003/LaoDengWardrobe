@@ -7,7 +7,7 @@ import AccordionList, { AccordionGroup } from '@/components/AccordionList';
 import TypeSideBar from '@/components/TypeSideBar';
 import ItemCard from '@/components/ItemCard';
 import EmptyState from '@/components/EmptyState';
-import RecommendCard from '@/components/RecommendCard';
+import RecommendCard, { OutfitVM } from '@/components/RecommendCard';
 import SeasonalCard from '@/components/SeasonalCard';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
 import { getWeather, cityFromLocation } from '@/services/weather';
@@ -16,7 +16,7 @@ import { buildOutfits, SCENE_OPTIONS, SceneId, RecommendOutfit } from '@/service
 import { requestOutfitRecommend, composeAiReason } from '@/services/outfitRecommend';
 import { DEFAULT_CITY } from '@/data/mockWeather';
 import { COLOR_PRESETS, MATERIAL_PRESETS, themeVarsOf, getThemeById } from '@/data/presets';
-import { tierOf, tripQuota } from '@/services/entitlement';
+import { tierOf, tripQuota, dailyOutfitsOf } from '@/services/entitlement';
 import { ClothingItem, WeatherInfo } from '@/types';
 import styles from './index.module.scss';
 
@@ -53,6 +53,9 @@ const WardrobePage: React.FC = () => {
   const memberUsage = useWardrobeStore((s) => s.memberUsage);
   const recordSeasonalView = useWardrobeStore((s) => s.recordSeasonalView);
   const recordTripUse = useWardrobeStore((s) => s.recordTripUse);
+  // v1.10.0：明日推荐当天缓存（按衣橱隔离，跨天自动重置）
+  const dailyOutfitsMap = useWardrobeStore((s) => s.dailyOutfits);
+  const appendDailyOutfit = useWardrobeStore((s) => s.appendDailyOutfit);
 
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [weather, setWeather] = useState<WeatherInfo | null>(null);
@@ -102,29 +105,35 @@ const WardrobePage: React.FC = () => {
   // v1.7.0：改为「每次冷启动首次进入首页时都定位刷新」，无论本地是否已有城市，
   // 保证用户位置变化后再进入小程序时城市与天气均为最新；
   // 用户本次会话内手动选择的城市不会被覆盖（定位只在启动时执行一次）
+  // v1.10.0：抽取为 refreshLocation，供冷启动与下拉刷新共用（问题1：下拉刷新后回到定位城市）
+  const refreshLocation = useCallback(() => {
+    Taro.getLocation({
+      type: 'gcj02',
+      success: async (res) => {
+        try {
+          const locCity = await cityFromLocation(res.latitude, res.longitude);
+          if (!locCity) return;
+          const cur = useWardrobeStore.getState();
+          // 城市变化，或此前为手动选城时，刷新为定位来源（恢复 📍 定位图标）
+          if (locCity !== cur.city || cur.citySource !== 'located') {
+            console.info('[Wardrobe] 定位刷新城市：', cur.city || '(空)', '→', locCity);
+            setCity(locCity, 'located');
+          }
+        } catch (e) {
+          console.warn('[Wardrobe] 逆地理失败：', (e as Error).message);
+        }
+      },
+      fail: (err) => {
+        console.info('[Wardrobe] 用户未授权定位或定位失败，保留当前城市', err?.errMsg || '');
+      }
+    });
+  }, [setCity]);
+
   useDidShow(() => {
     try {
       if (!Taro.getStorageSync(APP_GEO_FLAG)) return;
       Taro.removeStorageSync(APP_GEO_FLAG);
-      Taro.getLocation({
-        type: 'gcj02',
-        success: async (res) => {
-          try {
-            const locCity = await cityFromLocation(res.latitude, res.longitude);
-            if (!locCity) return;
-            const curCity = useWardrobeStore.getState().city;
-            if (locCity !== curCity) {
-              console.info('[Wardrobe] 启动定位刷新城市：', curCity || '(空)', '→', locCity);
-              setCity(locCity, 'located'); // activeCity 变化后由下方 effect 自动重载天气，并标记来源为定位
-            }
-          } catch (e) {
-            console.warn('[Wardrobe] 逆地理失败：', (e as Error).message);
-          }
-        },
-        fail: (err) => {
-          console.info('[Wardrobe] 用户未授权定位或定位失败，保留当前城市', err?.errMsg || '');
-        }
-      });
+      refreshLocation();
     } catch (e) {
       console.warn('[Wardrobe] 读取定位刷新标记失败', e);
     }
@@ -161,9 +170,12 @@ const WardrobePage: React.FC = () => {
   useDidShow(() => {
     loadWeather();
   });
+  // v1.10.0（问题1）：下拉刷新时重新定位——回到定位城市（📍 图标）并刷新天气；
+  // 推荐基于当天缓存不重复生成，见下方「明日推荐当天缓存」
   usePullDownRefresh(() => {
+    refreshLocation();
     loadWeather();
-    setTimeout(() => Taro.stopPullDownRefresh(), 600);
+    setTimeout(() => Taro.stopPullDownRefresh(), 800);
   });
 
   const customOf = (dimension: 'color' | 'material') =>
@@ -246,7 +258,6 @@ const WardrobePage: React.FC = () => {
       }
       setMode(m);
       setWeatherTick((t) => t + 1);
-      setRecLoading(true);
     },
     [memberTier, memberUsage.tripUsed, recordTripUse, goMember]
   );
@@ -314,133 +325,264 @@ const WardrobePage: React.FC = () => {
   // v0.7：手风琴分组展示条件（无筛选 + 非明日穿搭模式 + 有衣物）
   const showAccordion = !planMode && !isFiltering && currentItems.length > 0 && filtered.length > 0;
 
-  // v1.4.0（B/D 模块）：规则引擎推荐——有天气且有衣物时生成 1–3 套穿搭（v1.4.1 改为基于明日天气）；
-  // 天气失败或衣橱为空时返回空数组不展示（降级矩阵），空衣橱走 C 模块引导
+  // v1.4.0（B/D 模块）：规则引擎推荐（普通版精简推荐与云函数失败的本地兜底来源）；
+  // v1.10.0：本地引擎不再直接驱动卡片，统一写入「明日推荐当天缓存」后展示
   // v1.8.0（F-18）：城市切换后天气重载完成前（weatherCity !== activeCity）视为过期，不基于旧城市天气出推荐
-  // v1.9.0（F-19）：推荐档位——精简（普通版）1 套且最多 3 件 / 中间档（VIP）2 套 / 综合（SVIP）3 套
   const weatherStale = weatherCity !== activeCity;
-  const outfits = useMemo(() => {
-    const base =
-      weather && !weatherFailed && !weatherStale ? buildOutfits(weather, currentItems, scene) : [];
-    if (tierCfg.weatherLevel === 'basic') {
-      return base.slice(0, 1).map((o) => ({ ...o, items: o.items.slice(0, 3) }));
-    }
-    return tierCfg.weatherLevel === 'plus' ? base.slice(0, 2) : base;
-  }, [weather, weatherFailed, weatherStale, currentItems, scene, tierCfg.weatherLevel]);
-  const [outfitIdx, setOutfitIdx] = useState(0);
-  useEffect(() => {
-    setOutfitIdx(0);
-  }, [outfits]);
-  const localOutfit = outfits.length > 0 ? outfits[outfitIdx % outfits.length] : null;
-  // v1.5.0：明日推荐改由云函数 outfitRecommend 调用混元按场景选搭
-  // v1.8.1：兜底策略调整——云函数未返回或失败期间，不再转圈等待，直接展示本地规则引擎搭配
-  //（无网络 / 云函数出错均走此兜底，卡片不再显示「兜底推荐」角标）；云函数正常返回后无缝替换为生成方案
-  // v1.8.0（F-18）：城市切换（当地/出差）后联动重新生成——weatherStale 期间先清空旧推荐，
-  // 新城市天气返回后按新天气重新请求，保证推荐与当前城市一致
-  const [aiOutfit, setAiOutfit] = useState<RecommendOutfit | null>(null);
-  const [aiSource, setAiSource] = useState<'hunyuan' | 'fallback'>('fallback');
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiNonce, setAiNonce] = useState(0);
-  const aiExcludeRef = useRef<string[]>([]);
-  const aiReqRef = useRef(0);
-  const recommendReady = !!weather && !weatherFailed && !weatherStale && currentItems.length > 0;
-  // v1.9.0（F-19）：普通版=精简推荐（仅本地规则引擎，不调用混元）；VIP=中间档；SVIP=综合全衣橱
+
+  // ===== v1.10.0（问题3/4）：明日推荐按档位每日生成 1/2/5 套，当天缓存、次日重置，左右滑动展示 =====
+  const cachedEntries = useMemo(
+    () => dailyOutfitsOf(dailyOutfitsMap, currentWardrobeId),
+    [dailyOutfitsMap, currentWardrobeId]
+  );
+  const outfitQuota = tierCfg.dailyOutfits; // 普通 1 / VIP 2 / SVIP 5
+  const quotaReached = cachedEntries.length >= outfitQuota;
+
+  const itemMap = useMemo(() => new Map(currentItems.map((it) => [it.id, it])), [currentItems]);
+  const cachedVMs = useMemo<OutfitVM[]>(
+    () =>
+      cachedEntries
+        .map((e) => ({
+          id: e.id,
+          scene: e.scene as SceneId,
+          sceneLabel: e.sceneLabel,
+          reason: e.reason,
+          source: e.source,
+          items: e.itemIds.map((id) => itemMap.get(id)).filter(Boolean) as ClothingItem[]
+        }))
+        .filter((vm) => vm.items.length > 0),
+    [cachedEntries, itemMap]
+  );
+
+  // v1.10.0（问题3）：普通版建议只依据衣橱主人性别、年龄与明日天气，文案简短
+  const basicReason = useCallback(
+    (o: RecommendOutfit) => {
+      const who =
+        currentWardrobe?.gender === 'female'
+          ? '女士'
+          : currentWardrobe?.gender === 'male'
+            ? '男士'
+            : '主人';
+      return `${who}${currentWardrobe?.age ? `（${currentWardrobe.age}岁）` : ''}：${o.reason}`;
+    },
+    [currentWardrobe?.gender, currentWardrobe?.age]
+  );
+
+  const appendLocalOutfit = useCallback(
+    (o: RecommendOutfit) => {
+      appendDailyOutfit(currentWardrobeId, {
+        scene: o.scene,
+        sceneLabel: o.sceneLabel,
+        reason: basicReason(o),
+        itemIds: o.items.map((it) => it.id),
+        source: 'fallback'
+      });
+    },
+    [appendDailyOutfit, currentWardrobeId, basicReason]
+  );
+
+  // 生成一套并写入今日缓存：普通版走本地规则引擎（不调云函数）；
+  // VIP/SVIP 调混元（plus = AI 详细建议 / full = 综合全衣橱深度建议），云函数不可用或失败时本地兜底，仍计入当日缓存
+  const [genLoading, setGenLoading] = useState(false);
+  const genReqRef = useRef(0);
   const aiLevel: 'plus' | 'full' = tierCfg.weatherLevel === 'full' ? 'full' : 'plus';
+  const gender = currentWardrobe?.gender;
+  const age = currentWardrobe?.age ?? null;
+
+  const generateOutfit = useCallback(
+    async (excludeIds: string[] = [], sceneOverride?: SceneId) => {
+      if (!weather || weatherFailed || weatherStale || currentItems.length === 0) return;
+      const reqId = ++genReqRef.current;
+      setGenLoading(true);
+      const sceneUsed = sceneOverride || scene;
+      try {
+        if (tierCfg.weatherLevel === 'basic') {
+          const base = buildOutfits(weather, currentItems, sceneUsed);
+          const pick = base[0];
+          if (pick && reqId === genReqRef.current) appendLocalOutfit(pick);
+          return;
+        }
+        const res = await requestOutfitRecommend({
+          scene: sceneUsed,
+          weather,
+          items: currentItems,
+          gender,
+          age,
+          excludeIds,
+          level: aiLevel
+        });
+        if (res && reqId === genReqRef.current) {
+          const picked = res.itemIds.map((id) => itemMap.get(id)).filter(Boolean) as ClothingItem[];
+          if (picked.length) {
+            const sceneLabel = (SCENE_OPTIONS.find((s) => s.id === res.scene) || SCENE_OPTIONS[0]).label;
+            appendDailyOutfit(currentWardrobeId, {
+              scene: res.scene,
+              sceneLabel,
+              reason: composeAiReason(weather, sceneLabel, picked, res.advice),
+              itemIds: picked.map((it) => it.id),
+              source: res.source
+            });
+            console.info(`[Wardrobe] 明日推荐已缓存, 来源 = ${res.source}, 场景 = ${sceneLabel}`);
+            return;
+          }
+        }
+        throw new Error('OUTFIT_EMPTY');
+      } catch (e) {
+        // 云函数未返回 / 出错：本地规则引擎兜底（v1.8.1 口径，不显示「兜底推荐」角标）
+        const base = buildOutfits(weather, currentItems, sceneUsed);
+        if (base[0] && reqId === genReqRef.current) appendLocalOutfit(base[0]);
+        else console.warn('[Wardrobe] 明日推荐生成失败：', (e as Error).message);
+      } finally {
+        if (reqId === genReqRef.current) setGenLoading(false);
+      }
+    },
+    [weather, weatherFailed, weatherStale, currentItems, scene, tierCfg.weatherLevel, gender, age, aiLevel, itemMap, appendLocalOutfit, appendDailyOutfit, currentWardrobeId]
+  );
+  const generateRef = useRef(generateOutfit);
   useEffect(() => {
-    if (!recommendReady || !weather || tierCfg.weatherLevel === 'basic') {
-      setAiOutfit(null);
-      setAiLoading(false);
+    generateRef.current = generateOutfit;
+  }, [generateOutfit]);
+
+  // 首套自动生成：今日缓存为空且具备生成条件时执行；刷新 / 重复进入页面命中当天缓存不再生成
+  const recommendReady = !!weather && !weatherFailed && !weatherStale && currentItems.length > 0;
+  useEffect(() => {
+    if (!recommendReady || genLoading || cachedEntries.length > 0) return;
+    generateOutfit();
+  }, [recommendReady, genLoading, cachedEntries.length, generateOutfit]);
+
+  // 当前滑动到的套（采纳 / 换一件作用于该套）
+  const [outfitIdx, setOutfitIdx] = useState(0);
+
+  // ===== 出差模式：保持实时生成（不占用每日明日推荐套数） =====
+  const [tripOutfit, setTripOutfit] = useState<(RecommendOutfit & { source: 'hunyuan' | 'fallback' }) | null>(null);
+  const [tripLoading, setTripLoading] = useState(false);
+  const [tripNonce, setTripNonce] = useState(0);
+  const tripExcludeRef = useRef<string[]>([]);
+  const tripReqRef = useRef(0);
+  useEffect(() => {
+    if (mode !== 'trip' || !recommendReady || !weather) {
+      setTripOutfit(null);
+      setTripLoading(false);
       return;
     }
-    const reqId = ++aiReqRef.current;
+    const reqId = ++tripReqRef.current;
     let alive = true;
-    setAiLoading(true);
-    setAiOutfit(null);
-    setAiSource('fallback');
+    setTripLoading(true);
+    setTripOutfit(null);
     // 「换一件」排除上一次组合：只对本次请求生效，用后即清空
-    const excludeIds = aiExcludeRef.current;
-    aiExcludeRef.current = [];
-    requestOutfitRecommend({
-      scene,
-      weather,
-      items: currentItems,
-      gender: currentWardrobe?.gender,
-      age: currentWardrobe?.age ?? null,
-      excludeIds,
-      level: aiLevel
-    })
+    const excludeIds = tripExcludeRef.current;
+    tripExcludeRef.current = [];
+    requestOutfitRecommend({ scene, weather, items: currentItems, gender, age, excludeIds, level: aiLevel })
       .then((res) => {
-        if (!alive || reqId !== aiReqRef.current || !res) return;
-        const itemMap = new Map(currentItems.map((it) => [it.id, it]));
+        if (!alive || reqId !== tripReqRef.current || !res) return;
         const picked = res.itemIds.map((id) => itemMap.get(id)).filter(Boolean) as ClothingItem[];
         if (!picked.length) return;
         const sceneLabel = (SCENE_OPTIONS.find((s) => s.id === res.scene) || SCENE_OPTIONS[0]).label;
-        setAiSource(res.source);
-        setAiOutfit({
+        setTripOutfit({
           items: picked,
           scene: res.scene,
           sceneLabel,
-          reason: composeAiReason(weather, sceneLabel, picked, res.advice)
+          reason: composeAiReason(weather, sceneLabel, picked, res.advice),
+          source: res.source
         });
-        console.info(`[Wardrobe] 明日推荐来源 = ${res.source}, 场景 = ${sceneLabel}`);
       })
-      .catch((e) => console.warn('[Wardrobe] 明日推荐生成失败：', (e as Error).message))
+      .catch((e) => console.warn('[Wardrobe] 出差推荐生成失败：', (e as Error).message))
       .finally(() => {
-        if (alive && reqId === aiReqRef.current) setAiLoading(false);
+        if (alive && reqId === tripReqRef.current) setTripLoading(false);
       });
     return () => {
       alive = false;
     };
-  }, [recommendReady, weather, weatherFailed, weatherStale, activeCity, currentItems, scene, currentWardrobe?.gender, currentWardrobe?.age, aiNonce, aiLevel, tierCfg.weatherLevel]);
-  const outfit = aiOutfit || localOutfit;
-  const outfitAdopted = !!outfit && outfit.items.every((it) => tomorrowIds.includes(it.id));
+  }, [mode, recommendReady, weather, currentItems, scene, gender, age, tripNonce, aiLevel, itemMap]);
+
+  // 本地规则引擎第一套：出差模式云函数失败时的兜底展示
+  const localOutfit = useMemo(
+    () =>
+      weather && !weatherFailed && !weatherStale
+        ? buildOutfits(weather, currentItems, scene)[0] || null
+        : null,
+    [weather, weatherFailed, weatherStale, currentItems, scene]
+  );
+
+  // 卡片展示模型：当地模式 = 今日缓存（1/2/5 套，Swiper 左右滑动）；出差模式 = 实时生成 1 套（失败退本地）
+  const cardOutfits = useMemo<OutfitVM[]>(() => {
+    if (mode === 'trip') {
+      if (tripOutfit) {
+        return [
+          {
+            id: 'trip',
+            scene: tripOutfit.scene,
+            sceneLabel: tripOutfit.sceneLabel,
+            reason: tripOutfit.reason,
+            items: tripOutfit.items,
+            source: tripOutfit.source
+          }
+        ];
+      }
+      return localOutfit
+        ? [
+            {
+              id: 'local-trip',
+              scene: localOutfit.scene,
+              sceneLabel: localOutfit.sceneLabel,
+              reason: localOutfit.reason,
+              items: localOutfit.items,
+              source: 'fallback'
+            }
+          ]
+        : [];
+    }
+    return cachedVMs;
+  }, [mode, tripOutfit, localOutfit, cachedVMs]);
+
+  const currentOutfit = cardOutfits[Math.min(outfitIdx, Math.max(cardOutfits.length - 1, 0))];
+  const outfitAdopted = !!currentOutfit && currentOutfit.items.every((it) => tomorrowIds.includes(it.id));
+
   const handleShuffle = useCallback(() => {
-    if (aiLoading) return;
-    // AI 结果：带上当前组合排除，重新请求混元；本地兜底：轮换规则引擎结果
-    if (aiOutfit) {
-      aiExcludeRef.current = aiOutfit.items.map((it) => it.id);
-      setAiNonce((n) => n + 1);
+    // 出差模式：排除当前组合重新请求混元
+    if (mode === 'trip') {
+      if (tripOutfit) tripExcludeRef.current = tripOutfit.items.map((it) => it.id);
+      setTripNonce((n) => n + 1);
       return;
     }
-    setOutfitIdx((i) => (i + 1) % Math.max(outfits.length, 1));
-  }, [aiLoading, aiOutfit, outfits.length]);
-  const handleAdopt = useCallback(() => {
-    if (!outfit) return;
-    adoptTomorrowItems(outfit.items.map((it) => it.id));
-    Taro.showToast({ title: '已加入明日穿搭', icon: 'success' });
-  }, [outfit, adoptTomorrowItems]);
+    if (genLoading) return;
+    // v1.10.0：每日套数用尽后不再生成，统一展示今日缓存
+    if (quotaReached) {
+      Taro.showToast({ title: `今日 ${outfitQuota} 套已生成完毕，明天再来看新搭配`, icon: 'none' });
+      return;
+    }
+    const cur = cardOutfits[outfitIdx] || cardOutfits[cardOutfits.length - 1];
+    generateRef.current(cur ? cur.items.map((it) => it.id) : []);
+  }, [mode, tripOutfit, genLoading, quotaReached, outfitQuota, cardOutfits, outfitIdx]);
 
-  // v1.4.2：穿搭建议重新生成的显性加载态——选择风格、切换城市共用同一套提示逻辑。
-  // 规则引擎本身是同步计算，这里保留约 600ms 最短展示时间，避免加载态一闪而过；
-  // 切换城市时若天气仍在请求，等天气返回后再开始计时，保证提示覆盖整个重算过程。
-  const [recLoading, setRecLoading] = useState(false);
-  useEffect(() => {
-    if (!recLoading) return;
-    if (weatherLoading) return;
-    const t = setTimeout(() => setRecLoading(false), 600);
-    return () => clearTimeout(t);
-  }, [recLoading, weatherLoading, scene, weather]);
+  const handleAdopt = useCallback(() => {
+    if (!currentOutfit) return;
+    adoptTomorrowItems(currentOutfit.items.map((it) => it.id));
+    Taro.showToast({ title: '已加入明日穿搭', icon: 'success' });
+  }, [currentOutfit, adoptTomorrowItems]);
+
+  // v1.10.0：场景切换——今日套数未用尽时按新场景生成一套（计入当日套数）；
+  // 已用尽则仅切换标签，继续展示当日缓存（不再重复生成）
   const handleSelectScene = useCallback(
     (next: SceneId) => {
       if (next === scene) return;
       setScene(next);
-      setOutfitIdx(0);
-      setAiOutfit(null);
-      aiExcludeRef.current = [];
-      setRecLoading(true);
+      if (mode === 'trip') return; // 出差模式 effect 依赖 scene 自动重生成
+      if (recommendReady && cachedEntries.length < outfitQuota) {
+        setTimeout(() => generateRef.current([], next), 0);
+      }
     },
-    [scene]
+    [scene, mode, recommendReady, cachedEntries.length, outfitQuota]
   );
 
-  // v1.4.3：小程序启动后首次进入首页，自动执行一次穿搭推荐
-  // （推荐为天气 + 衣物 + 场景的同步规则计算；此处重置轮换位并展示生成态，天气返回后立即得到结果）
+  // v1.4.3：小程序启动后首次进入首页，自动执行穿搭推荐
+  // v1.10.0：首套由「今日缓存为空自动生成」effect 负责，这里仅消费启动标记
   useDidShow(() => {
     try {
       if (Taro.getStorageSync(APP_LAUNCH_FLAG)) {
         Taro.removeStorageSync(APP_LAUNCH_FLAG);
         setOutfitIdx(0);
-        setRecLoading(true);
-        console.info('[Wardrobe] 启动自动执行穿搭推荐');
+        console.info('[Wardrobe] 启动自动执行穿搭推荐（命中当天缓存则直接展示）');
       }
     } catch (e) {
       console.warn('[Wardrobe] 读取启动标记失败', e);
@@ -644,7 +786,6 @@ const WardrobePage: React.FC = () => {
             setCity(c, 'manual'); // v1.8.0（F-17）：手动选城标记来源，定位图标随之消失
           }
           setWeatherTick((t) => t + 1);
-          setRecLoading(true);
         }}
         onRetry={() => setWeatherTick((t) => t + 1)}
       />
@@ -652,18 +793,22 @@ const WardrobePage: React.FC = () => {
       <LoadTrigger tick={weatherTick} onLoad={loadWeather} />
 
       {/* v1.4.3：推荐卡片移至天气卡片下方（筛选/明日穿搭勾选模式下不展示）
-          v1.7.0：卡片默认展示——空衣橱时进入建议模式，显示按天气生成的着装建议（不再整卡隐藏） */}
+          v1.7.0：卡片默认展示——空衣橱时进入建议模式，显示按天气生成的着装建议（不再整卡隐藏）
+          v1.10.0：当地模式展示今日缓存的 1/2/5 套（左右滑动），套数用尽不再生成 */}
       {!planMode && !isFiltering && (
         <RecommendCard
-          outfit={outfit}
-          advice={outfit ? null : emptyAdvice}
+          outfits={cardOutfits}
+          advice={cardOutfits.length === 0 ? emptyAdvice : null}
           scenes={SCENE_OPTIONS}
           scene={scene}
           onSelectScene={handleSelectScene}
           adopted={outfitAdopted}
-          loading={outfit ? recLoading : !emptyAdvice}
-          source={aiOutfit ? aiSource : 'fallback'}
+          loading={false}
+          canShuffle={mode === 'trip' || !quotaReached}
+          used={mode === 'trip' ? 0 : cachedEntries.length}
+          total={mode === 'trip' ? 0 : outfitQuota}
           tripMode={mode === 'trip'}
+          onSwiperIndex={setOutfitIdx}
           onShuffle={handleShuffle}
           onAdopt={handleAdopt}
         />
