@@ -84,9 +84,9 @@ const WeatherCard: React.FC<Props> = ({
 
       {/* 第一行：城市 + 状态/重试 + 右上角城市选择按钮 */}
       <View className={styles.header}>
-        <Text className={styles.city}>{weather ? weather.city : '天气'}</Text>
-        {/* v1.8.0（F-17）：城市来自启动自动定位时显示定位图标，区别于手动选择/出差城市 */}
+        {/* v1.8.1（F-17 修复）：定位图标放城市名前——仅自动定位城市显示（参考支付宝闪购定位样式），手动选城不显示 */}
         {located && <Text className={styles.locateIcon}>📍</Text>}
+        <Text className={styles.city}>{weather ? weather.city : '天气'}</Text>
         {weather?.mock && !loading && (
           <Text className={styles.mockBadge}>模拟{weather.notice ? `·${weather.notice}` : ''}</Text>
         )}

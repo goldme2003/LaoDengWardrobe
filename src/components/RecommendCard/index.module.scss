@@ -103,11 +103,6 @@
   background: rgba(31, 138, 91, 0.12);
 }
 
-.sourceRed {
-  color: #c0392b;
-  background: rgba(192, 57, 43, 0.12);
-}
-
 .reason {
   font-size: $font-size-sm;
   color: $color-text-tertiary;
@@ -130,6 +125,8 @@
 
 .items {
   display: flex;
+  // v1.8.1：允许换行——AI 推荐可返回 5–6 件，单行固定 140rpx 宽会溢出裁切导致「方案显示不完整」
+  flex-wrap: wrap;
   gap: $spacing-sm;
   margin-bottom: $spacing-md;
 }
@@ -153,6 +150,11 @@
   max-width: 140rpx;
   font-size: $font-size-xs;
   color: $color-text-secondary;
+  // v1.8.1：名称放宽到两行，避免长名称被截断导致方案信息不完整
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .actions {

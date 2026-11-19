@@ -47,7 +47,8 @@ const RecommendCard: React.FC<Props> = ({
   onAdopt
 }) => {
   const isAdvice = !outfit && !!advice;
-  // 来源角标：搭配模式用 source，建议模式用 advice.source（绿=云端生成 / 红=兜底）
+  // 来源角标：搭配模式用 source，建议模式用 advice.source
+  // v1.8.1：仅云端生成时显示「混元生成」角标；兜底方案（无网络 / 云函数未返回或出错）不再显示「兜底推荐」字样
   const tagSource = outfit ? source : isAdvice ? advice!.source : undefined;
   // 无搭配也无建议时（如天气尚在加载）统一展示生成中，保证卡片默认可见
   const showLoading = loading || (!outfit && !advice);
@@ -58,11 +59,9 @@ const RecommendCard: React.FC<Props> = ({
         <View className={styles.titleRow}>
           <Text className={styles.title}>{tripMode ? '出差穿搭推荐' : '明日穿搭推荐'}</Text>
           {/* v1.5.1：移除右上角「适用场景」角标，场景仅由下方标签组展示 */}
-          {/* v1.5.0：来源区分——绿色混元生成 / 红色兜底 */}
-          {!!tagSource && (
-            <Text className={`${styles.sourceTag} ${tagSource === 'hunyuan' ? styles.sourceGreen : styles.sourceRed}`}>
-              {tagSource === 'hunyuan' ? '混元生成' : '兜底推荐'}
-            </Text>
+          {/* v1.8.1：仅显示绿色「混元生成」角标；兜底时无任何来源角标，正常展示推荐内容 */}
+          {tagSource === 'hunyuan' && (
+            <Text className={`${styles.sourceTag} ${styles.sourceGreen}`}>混元生成</Text>
           )}
         </View>
         {!showLoading && !!outfit && <Text className={styles.reason}>{outfit.reason}</Text>}
@@ -93,7 +92,7 @@ const RecommendCard: React.FC<Props> = ({
             {outfit.items.map((it) => (
               <View key={it.id} className={styles.item}>
                 <Image className={styles.photo} src={it.photos[0]} mode='aspectFill' />
-                <Text className={styles.name} numberOfLines={1}>
+                <Text className={styles.name} numberOfLines={2}>
                   {it.name}
                 </Text>
               </View>

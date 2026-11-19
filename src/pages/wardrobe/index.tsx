@@ -282,8 +282,9 @@ const WardrobePage: React.FC = () => {
     setOutfitIdx(0);
   }, [outfits]);
   const localOutfit = outfits.length > 0 ? outfits[outfitIdx % outfits.length] : null;
-  // v1.5.0：明日推荐改由云函数 outfitRecommend 调用混元按场景选搭；
-  // 云函数不可用/失败时回退本地规则引擎，并通过卡片角标区分来源
+  // v1.5.0：明日推荐改由云函数 outfitRecommend 调用混元按场景选搭
+  // v1.8.1：兜底策略调整——云函数未返回或失败期间，不再转圈等待，直接展示本地规则引擎搭配
+  //（无网络 / 云函数出错均走此兜底，卡片不再显示「兜底推荐」角标）；云函数正常返回后无缝替换为生成方案
   // v1.8.0（F-18）：城市切换（当地/出差）后联动重新生成——weatherStale 期间先清空旧推荐，
   // 新城市天气返回后按新天气重新请求，保证推荐与当前城市一致
   const [aiOutfit, setAiOutfit] = useState<RecommendOutfit | null>(null);
@@ -611,7 +612,7 @@ const WardrobePage: React.FC = () => {
           scene={scene}
           onSelectScene={handleSelectScene}
           adopted={outfitAdopted}
-          loading={outfit ? recLoading || aiLoading : !emptyAdvice}
+          loading={outfit ? recLoading : !emptyAdvice}
           source={aiOutfit ? aiSource : 'fallback'}
           tripMode={mode === 'trip'}
           onShuffle={handleShuffle}
