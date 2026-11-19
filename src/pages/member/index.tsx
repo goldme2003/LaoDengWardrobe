@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
-import { callMember } from '@/services/member';
 import {
   TIERS,
   TIER_ORDER,
@@ -37,43 +36,26 @@ const BENEFIT_ROWS: { label: string; values: Record<MemberTier, string> }[] = [
 ];
 
 /** 会员中心页（v1.9.0，F-19）：三档权益对比 + 一次性买断价格 + 开通入口。
- * 支付未开通：开通按钮走云函数 member.createOrder 登记订单，云端返回
- * PAY_UNAVAILABLE 后提示「支付暂未开通」。
- * 开发环境（NODE_ENV=development）提供档位切换，便于验证各档位权益与门控。 */
+ * v1.9.1：测试模式——微信支付尚未接入，开通/切换按钮直接本地生效，方便验证各档位权益与门控；
+ * 正式发布时恢复走云函数 member.createOrder + 微信支付，并移除档位切换按钮。 */
 const MemberPage: React.FC = () => {
   const memberTier = useWardrobeStore((s) => s.memberTier);
   const setMemberTier = useWardrobeStore((s) => s.setMemberTier);
   const currentWardrobe = useWardrobeStore((s) => s.wardrobes).find(
     (w) => w.id === useWardrobeStore((s) => s.currentWardrobeId)
   );
-  const [buying, setBuying] = useState<MemberTier | null>(null);
 
   const current = tierOf(memberTier);
   const themeStyle = {
     background: 'var(--bg-page, #f7f4ef)'
   } as React.CSSProperties;
 
-  const handleBuy = async (tier: MemberTier) => {
-    if (buying) return;
-    setBuying(tier);
-    try {
-      const res = await callMember('createOrder', tier);
-      if (res && res.code === 'OK') {
-        setMemberTier(tier);
-        Taro.showToast({ title: '开通成功', icon: 'success' });
-        return;
-      }
-      Taro.showToast({
-        title: (res && res.message) || '支付暂未开通，敬请期待',
-        icon: 'none',
-        duration: 2200
-      });
-    } finally {
-      setBuying(null);
-    }
+  // v1.9.1：测试模式——微信支付尚未接入（正式发布时接入 member 云函数 createOrder + 支付），
+  // 点击「立即开通」直接本地切换档位，方便验证各档位权益与门控
+  const handleBuy = (tier: MemberTier) => {
+    setMemberTier(tier);
+    Taro.showToast({ title: `已切换为 ${TIERS[tier].label}（测试）`, icon: 'none' });
   };
-
-  const isDev = process.env.NODE_ENV === 'development';
 
   return (
     <View className={styles.page} style={themeStyle}>
@@ -109,16 +91,14 @@ const MemberPage: React.FC = () => {
                 className={`${styles.buyBtn} ${active ? styles.buyBtnOwned : ''}`}
                 onClick={active ? undefined : () => handleBuy(t)}
               >
-                <Text className={styles.buyBtnText}>
-                  {active ? '当前档位' : buying === t ? '处理中…' : '立即开通'}
-                </Text>
+                <Text className={styles.buyBtnText}>{active ? '当前档位' : '立即开通'}</Text>
               </View>
             </View>
           );
         })}
       </View>
       <Text className={styles.payTip}>
-        微信支付暂未开通：点击开通将登记开通意向，支付能力上线后按订单引导完成付款。
+        测试模式：点击「立即开通」直接切换档位体验对应权益；正式发布时接入微信支付（一次性买断）。
       </Text>
 
       {/* 三档权益矩阵 */}
@@ -143,23 +123,21 @@ const MemberPage: React.FC = () => {
         ))}
       </View>
 
-      {/* 开发环境档位切换（便于验证各档位门控，正式构建不出现） */}
-      {isDev && (
-        <View className={styles.devBox}>
-          <Text className={styles.devTitle}>开发工具：切换档位（仅开发环境）</Text>
-          <View className={styles.devRow}>
-            {TIER_ORDER.map((t) => (
-              <View
-                key={t}
-                className={`${styles.devBtn} ${memberTier === t ? styles.devBtnActive : ''}`}
-                onClick={() => setMemberTier(t)}
-              >
-                <Text className={styles.devBtnText}>{TIERS[t].label}</Text>
-              </View>
-            ))}
-          </View>
+      {/* 测试档位切换（v1.9.1：各环境可见，便于验证各档位门控；正式发布接入支付时移除） */}
+      <View className={styles.devBox}>
+        <Text className={styles.devTitle}>测试：切换会员档位（正式发布时移除）</Text>
+        <View className={styles.devRow}>
+          {TIER_ORDER.map((t) => (
+            <View
+              key={t}
+              className={`${styles.devBtn} ${memberTier === t ? styles.devBtnActive : ''}`}
+              onClick={() => setMemberTier(t)}
+            >
+              <Text className={styles.devBtnText}>{TIERS[t].label}</Text>
+            </View>
+          ))}
         </View>
-      )}
+      </View>
 
       <Text className={styles.footTip}>
         会员权益说明：批量导入 / 分类与时尚穿搭推荐为即将上线的功能，权益额度自功能上线后开始计数；会员有效期一次性买断、长期有效。
