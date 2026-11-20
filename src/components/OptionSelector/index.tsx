@@ -163,9 +163,9 @@ const OptionSelector: React.FC<Props> = ({
         </Picker>
       )}
 
-      {/* 色卡 / 勾选多选（columns：网格布局，每行固定个数，v1.11.0 颜色 4 个/行） */}
+      {/* 色卡 / 勾选多选（columns：网格布局，每行固定个数，v1.11.0 颜色 4 个/行；minmax(0,1fr) 防长文本撑破容器） */}
       {(mode === 'chips' || mode === 'multi') && (
-        <View className={classnames(styles.chips, columns ? styles.chipsGrid : '')} style={columns ? { gridTemplateColumns: `repeat(${columns}, 1fr)` } : undefined}>
+        <View className={classnames(styles.chips, columns ? styles.chipsGrid : '')} style={columns ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` } : undefined}>
           {allOptions.map((opt) => renderChip(opt, (customValues || []).includes(opt)))}
         </View>
       )}

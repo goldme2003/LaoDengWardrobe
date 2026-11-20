@@ -696,17 +696,11 @@ const AddItemPage: React.FC = () => {
           required
           mode='multi'
           options={['春', '夏', '秋', '冬']}
-          customValues={customOf('season')}
-          usedValues={usedOf('season')}
-          allowCustom
-          customMaxLength={6}
           value={seasons}
           onChange={(v) => {
             markTouched('seasons');
             setSeasons(v as string[]);
           }}
-          onAddCustom={(v) => addCustomOption('season', v)}
-          onRemoveCustom={(v) => removeCustomOption('season', v)}
         />
 
         {/* v1.11.0：仅服装类型/颜色/穿着季节默认展开，其余选项收进「衣物详细信息」折叠区 */}

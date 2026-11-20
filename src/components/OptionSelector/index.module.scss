@@ -87,17 +87,36 @@
 }
 
 // v1.11.0：网格布局（每行固定个数，如颜色 4 个/行）
+// v1.11.1 修复：minmax(0,1fr) 固定轨道宽度，长文本（自定义颜色名）不再把轨道撑出卡片边界
 .chipsGrid {
   display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   column-gap: $spacing-sm;
 }
 
 // v1.11.0：网格模式下选项占满整格并居中
+// v1.11.1 修复：min-width:0 允许网格项收缩，超长文本省略号截断，不超出边界
 .chipBlock {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   justify-content: center;
   margin-right: 0;
   box-sizing: border-box;
+}
+
+// v1.11.1 修复：网格模式下文本超长省略号截断（自定义颜色名最长 6 字 + 色点，1fr 内可容纳；
+// 超出时截断而非撑破轨道）
+.chipBlock .chipLabel {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.chipBlock .chipText {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chip {
