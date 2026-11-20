@@ -91,11 +91,50 @@
   background: $color-bg-hover;
   display: flex;
   align-items: center;
-  justify-content: center;
 
   &:active {
-    opacity: 0.85;
+    opacity: 0.7;
   }
+}
+
+// v1.11.0：批量添加按钮的 VIP 徽标（会员专属功能标识）
+.vipBadge {
+  margin-left: $spacing-xs;
+  padding: 2rpx 12rpx;
+  border-radius: $radius-round;
+  background: rgba(201, 169, 110, 0.18);
+  border: 1rpx solid #c9a96e;
+}
+
+.vipBadgeText {
+  font-size: 20rpx;
+  font-weight: 600;
+  color: #b08d4f;
+}
+
+// v1.11.0：「衣物详细信息」折叠区头部
+.detailHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-md 0 $spacing-sm;
+  margin-top: $spacing-sm;
+  border-top: 1rpx solid $color-border;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.detailTitle {
+  font-size: $font-size-sm;
+  font-weight: 600;
+  color: $color-text-primary;
+}
+
+.detailArrow {
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
 }
 
 .actionBtnText {

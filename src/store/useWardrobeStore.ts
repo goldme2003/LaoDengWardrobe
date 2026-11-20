@@ -234,6 +234,8 @@ export interface WardrobeStore extends LdwData {
   recordSeasonalView: (count: number) => void;
   /** v1.9.0（F-19）：登记本月出差推荐使用一次 */
   recordTripUse: () => void;
+  /** v1.11.0：登记本月批量添加（批量导入）使用一次（单次批量任务 = 1 次） */
+  recordBatchImportUse: () => void;
   /** v1.10.0：追加一套今日明日推荐缓存（跨天自动重置；数量上限由调用方按会员档位把关） */
   appendDailyOutfit: (wardrobeId: string, entry: Omit<DailyOutfitEntry, 'id'>) => void;
 }
@@ -631,6 +633,12 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
     recordTripUse: () => {
       const usage = rolledUsage(get().memberUsage);
       commit({ memberUsage: { ...usage, tripUsed: usage.tripUsed + 1 } });
+    },
+
+    recordBatchImportUse: () => {
+      const usage = rolledUsage(get().memberUsage);
+      console.info('[Store] 批量添加计次, 本月已用 =', usage.batchImportUsed + 1);
+      commit({ memberUsage: { ...usage, batchImportUsed: usage.batchImportUsed + 1 } });
     },
 
     appendDailyOutfit: (wardrobeId, entry) => {

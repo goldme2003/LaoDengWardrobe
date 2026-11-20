@@ -86,6 +86,20 @@
   margin-bottom: $spacing-xs;
 }
 
+// v1.11.0：网格布局（每行固定个数，如颜色 4 个/行）
+.chipsGrid {
+  display: grid;
+  column-gap: $spacing-sm;
+}
+
+// v1.11.0：网格模式下选项占满整格并居中
+.chipBlock {
+  width: 100%;
+  justify-content: center;
+  margin-right: 0;
+  box-sizing: border-box;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;

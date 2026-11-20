@@ -16,7 +16,7 @@ export interface TierConfig {
   price: number | null;
   /** 衣橱数量上限 */
   wardrobes: number;
-  /** 服装批量导入/分类（次/月），0 = 无（功能待开发，仅登记权益） */
+  /** 服装批量导入/批量添加（次/月），0 = 无（v1.11.0 已上线：单次批量任务 = 1 次，写 memberUsage.batchImportUsed） */
   batchImportPerMonth: number;
   /** 当季推荐图组（张/天） */
   seasonalPerDay: number;
@@ -148,6 +148,18 @@ export const tripQuota = (
   if (v <= 0) return { kind: 'blocked', limit: 0 };
   return { kind: 'counted', limit: v };
 };
+
+/** v1.11.0：批量添加（批量导入）额度状态——blocked = 无权益（普通版），counted = 按月限次 */
+export const batchImportQuota = (
+  tier: MemberTier
+): { kind: 'blocked' | 'counted'; limit: number } => {
+  const v = tierOf(tier).batchImportPerMonth;
+  if (v <= 0) return { kind: 'blocked', limit: 0 };
+  return { kind: 'counted', limit: v };
+};
+
+/** v1.11.0（重点变更）：衣物属性自动识别为 VIP 及以上专属能力，普通版不自动识别 */
+export const canAutoRecognize = (tier: MemberTier): boolean => tier === 'vip' || tier === 'svip';
 
 /** v1.10.0：明日穿搭推荐单套缓存条目（当天有效，次日清空重新生成） */
 export interface DailyOutfitEntry {

@@ -1,7 +1,7 @@
 import { CustomDimension, Gender, ThemeId, BodyProfile } from '@/types';
 
 /** 当前版本号（在「我的」页展示） */
-export const APP_VERSION = 'v1.10.0';
+export const APP_VERSION = 'v1.11.0';
 
 /** 性别选项（v0.5） */
 export const GENDER_OPTIONS: { value: Gender; label: string }[] = [
@@ -12,7 +12,7 @@ export const GENDER_OPTIONS: { value: Gender; label: string }[] = [
 export const AGE_MIN = 1;
 export const AGE_MAX = 120;
 
-/** 服装类型预设按性别过滤（v0.5：男性不展示裙装/连衣裙） */
+/** 服装类型预设按性别过滤（v0.5：男性不展示裙装/连衣裙；v1.11.0：预设扩至 15 种常见类型） */
 export const getTypePresetsByGender = (gender?: Gender): string[] =>
   gender === 'male'
     ? TYPE_PRESETS.filter((t) => t !== '裙装' && t !== '连衣裙')
@@ -36,41 +36,56 @@ export const suggestSize = (gender?: Gender, height?: number): string => {
   return '';
 };
 
-/** 服装类型预设（PRD 6.1） */
+/** 服装类型预设（PRD 6.1；v1.11.0 扩至 15 种常见类型，支持手动填写自定义；男性经 getTypePresetsByGender 过滤裙装类） */
 export const TYPE_PRESETS = [
   '上装',
+  '卫衣',
+  '衬衫',
+  '毛衣',
+  '马甲',
+  '外套',
+  '冲锋衣',
+  '羽绒服',
   '裤装',
   '裙装',
   '连衣裙',
-  '外套',
-  '内衣',
   '家居服',
+  '内衣',
   '鞋履',
-  '配饰',
-  '其他'
+  '配饰'
 ];
 
 /** 内外穿（固定枚举；v1.0.0 用户要求：外穿展示优先于内穿） */
 export const LAYER_OPTIONS = ['外穿', '内穿'];
 
-/** 颜色预设（含展示用色值） */
+/** 颜色预设（v1.11.0：精简为 8 种常见色，添加衣物页每行 4 个展示；其余颜色经手动填写作为自定义颜色） */
 export const COLOR_PRESETS: { name: string; hex: string }[] = [
   { name: '黑色', hex: '#2B2B2B' },
   { name: '白色', hex: '#FFFFFF' },
   { name: '灰色', hex: '#9E9E9E' },
   { name: '红色', hex: '#D94141' },
-  { name: '橙色', hex: '#F08C00' },
-  { name: '黄色', hex: '#F5C542' },
-  { name: '绿色', hex: '#4C9E5E' },
   { name: '蓝色', hex: '#3B6FB5' },
+  { name: '绿色', hex: '#4C9E5E' },
+  { name: '黄色', hex: '#F5C542' },
+  { name: '粉色', hex: '#EF9BB1' }
+];
+
+/** 历史版本预设色（v1.10.0 及以前），旧数据仍可正常展示色点与筛选 */
+const LEGACY_COLOR_PRESETS: { name: string; hex: string }[] = [
+  { name: '橙色', hex: '#F08C00' },
   { name: '紫色', hex: '#7E5BB5' },
-  { name: '粉色', hex: '#EF9BB1' },
   { name: '棕色', hex: '#8B5E3C' },
   { name: '米色', hex: '#E8DCC8' },
   { name: '牛仔蓝', hex: '#5B7C99' }
 ];
 
-export const COLOR_HEX_MAP: Record<string, string> = COLOR_PRESETS.reduce(
+/** 全量颜色（8 种预设 + 历史预设，用于筛选选项与色值映射，保证旧数据兼容） */
+export const ALL_COLOR_PRESETS: { name: string; hex: string }[] = [
+  ...COLOR_PRESETS,
+  ...LEGACY_COLOR_PRESETS
+];
+
+export const COLOR_HEX_MAP: Record<string, string> = ALL_COLOR_PRESETS.reduce(
   (map, c) => ({ ...map, [c.name]: c.hex }),
   {} as Record<string, string>
 );

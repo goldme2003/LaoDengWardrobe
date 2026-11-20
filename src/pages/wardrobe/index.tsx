@@ -15,7 +15,7 @@ import { getEmptyGuide, EmptyGuideResult } from '@/services/emptyGuide';
 import { buildOutfits, SCENE_OPTIONS, SceneId, RecommendOutfit } from '@/services/recommend';
 import { requestOutfitRecommend, composeAiReason } from '@/services/outfitRecommend';
 import { DEFAULT_CITY } from '@/data/mockWeather';
-import { COLOR_PRESETS, MATERIAL_PRESETS, themeVarsOf, getThemeById } from '@/data/presets';
+import { ALL_COLOR_PRESETS, MATERIAL_PRESETS, themeVarsOf, getThemeById } from '@/data/presets';
 import { tierOf, tripQuota, dailyOutfitsOf } from '@/services/entitlement';
 import { ClothingItem, WeatherInfo } from '@/types';
 import styles from './index.module.scss';
@@ -187,10 +187,11 @@ const WardrobePage: React.FC = () => {
     [wardrobes, currentWardrobeId]
   );
 
-  const colorOptions = useMemo(() => [...COLOR_PRESETS.map((c) => c.name), ...customOf('color')], [customOptions]);
+  // v1.11.0：筛选选项含历史预设色（8 种新预设 + 旧预设），保证旧数据可按颜色筛选
+  const colorOptions = useMemo(() => [...ALL_COLOR_PRESETS.map((c) => c.name), ...customOf('color')], [customOptions]);
   const materialOptions = useMemo(() => [...MATERIAL_PRESETS, ...customOf('material')], [customOptions]);
 
-  const colorHexMap = useMemo(() => COLOR_PRESETS.reduce((m, c) => ({ ...m, [c.name]: c.hex }), {}), []);
+  const colorHexMap = useMemo(() => ALL_COLOR_PRESETS.reduce((m, c) => ({ ...m, [c.name]: c.hex }), {}), []);
 
   const currentItems = useMemo(
     () =>
