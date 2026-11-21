@@ -23,6 +23,7 @@ import {
   rolledUsage,
   todayKey
 } from '@/services/entitlement';
+import { SCENE_OPTIONS } from '@/services/recommend';
 import {
   CUSTOM_MAX_LEN,
   WARDROBE_NAME_MAX_LEN,
@@ -38,6 +39,9 @@ import {
 } from '@/data/presets';
 
 const STORAGE_KEY = 'ldw_data_v1';
+
+/** v1.12.0：预设场景名（自定义场景与预设去重用） */
+const SCENE_PRESET_NAMES = SCENE_OPTIONS.map((s) => s.id as string);
 
 interface LdwData {
   wardrobes: Wardrobe[];
@@ -68,6 +72,8 @@ interface LdwData {
   memberUsage: MemberUsage;
   /** v1.10.0：明日穿搭推荐当天缓存（key = 衣橱id；day 过期由读取侧与写入侧重置） */
   dailyOutfits: Record<string, DailyOutfitCache>;
+  /** v1.12.0：自定义搭配场景（推荐卡片「+ 新增场景」手输入库，如 相亲/约会/婚礼），全局共享 */
+  customScenes: string[];
 }
 
 const initialData = (): LdwData => {
@@ -96,7 +102,8 @@ const initialData = (): LdwData => {
     wardrobeFilterPreset: null,
     memberTier: 'free',
     memberUsage: initialUsage(),
-    dailyOutfits: {}
+    dailyOutfits: {},
+    customScenes: []
   };
 };
 
@@ -145,6 +152,8 @@ const loadData = (): LdwData => {
           stored.dailyOutfits[wid] = { day: todayKey(), list: [] };
         }
       });
+      // v1.12.0：旧数据无自定义场景字段
+      stored.customScenes = Array.isArray(stored.customScenes) ? stored.customScenes : [];
       console.info('[Store] 读取本地数据成功, 衣橱数 =', stored.wardrobes.length, '衣物数 =', stored.items.length);
       return stored;
     }
@@ -238,6 +247,10 @@ export interface WardrobeStore extends LdwData {
   recordBatchImportUse: () => void;
   /** v1.10.0：追加一套今日明日推荐缓存（跨天自动重置；数量上限由调用方按会员档位把关） */
   appendDailyOutfit: (wardrobeId: string, entry: Omit<DailyOutfitEntry, 'id'>) => void;
+  /** v1.12.0：新增自定义搭配场景（≤6 字，去重），失败返回错误文案 */
+  addCustomScene: (value: string) => string | null;
+  /** v1.12.0：删除自定义搭配场景（已被今日推荐缓存引用时不可删除） */
+  removeCustomScene: (value: string) => void;
 }
 
 export const useWardrobeStore = create<WardrobeStore>((set, get) => {
@@ -260,6 +273,7 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       memberTier: s.memberTier,
       memberUsage: s.memberUsage,
       dailyOutfits: s.dailyOutfits,
+      customScenes: s.customScenes,
       wardrobeFilterPreset: null
     });
   };
@@ -654,6 +668,36 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
           [wardrobeId]: { day, list: [...list, { ...entry, id: genId() }] }
         }
       });
+    },
+
+    addCustomScene: (value) => {
+      const trimmed = value.trim();
+      if (!trimmed) return '场景名称不能为空';
+      if (trimmed.length > 6) return '场景名称最多 6 个字';
+      const s = get();
+      if (
+        s.customScenes.includes(trimmed) ||
+        SCENE_PRESET_NAMES.includes(trimmed)
+      ) {
+        return '该场景已存在';
+      }
+      if (s.customScenes.length >= 8) return '自定义场景最多 8 个';
+      console.info('[Store] 新增自定义场景, name =', trimmed);
+      commit({ customScenes: [...s.customScenes, trimmed] });
+      return null;
+    },
+
+    removeCustomScene: (value) => {
+      const s = get();
+      const used = Object.values(s.dailyOutfits).some((c) =>
+        (c.list || []).some((e) => e.scene === value)
+      );
+      if (used) {
+        console.warn('[Store] 自定义场景已被今日推荐引用，不可删除');
+        return;
+      }
+      console.info('[Store] 删除自定义场景, name =', value);
+      commit({ customScenes: s.customScenes.filter((v) => v !== value) });
     }
   };
 });

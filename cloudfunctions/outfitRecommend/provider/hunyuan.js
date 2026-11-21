@@ -104,7 +104,9 @@ function buildPrompt({ gender, age, weather, scene, items, excludeIds, level }) 
   const sceneText =
     !scene || scene === 'all'
       ? `场景不限，请从「${SCENES.join('、')}」中选择最适合当前衣物与天气的一个`
-      : `场景：${scene}`;
+      : SCENES.includes(scene)
+        ? `场景：${scene}`
+        : `场景：${scene}（用户自定义场景，请按该场景的着装礼仪与氛围搭配）`;
   const exclude = excludeIds && excludeIds.length ? `不要与上次完全相同（上次 id：${excludeIds.join(',')}）。` : '';
   // v1.9.0（F-19）：会员推荐档位——full = 综合全衣橱（更多件数 + 按全衣橱互补给建议）
   // v1.10.0：advice 文案按档位差异化——plus 更详细；full 最详细且结合衣橱整体与主人信息

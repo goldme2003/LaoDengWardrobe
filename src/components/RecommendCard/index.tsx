@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, Image, Swiper, SwiperItem } from '@tarojs/components';
+import React, { useState } from 'react';
+import { View, Text, Image, Input, Swiper, SwiperItem } from '@tarojs/components';
 import type { SceneId, SceneOption } from '@/services/recommend';
 import type { ClothingItem } from '@/types';
 import styles from './index.module.scss';
@@ -25,7 +25,7 @@ interface Props {
   outfits: OutfitVM[];
   /** v1.7.0：空衣橱时的天气推荐（outfits 为空时展示，同样区分云端/兜底来源角标） */
   advice?: RecommendAdvice | null;
-  /** 搭配场景预设（v1.4.1：只能点选预设，不支持自由输入） */
+  /** 搭配场景（v1.4.1 预设；v1.12.0 含自定义场景） */
   scenes: SceneOption[];
   scene: SceneId;
   onSelectScene: (scene: SceneId) => void;
@@ -42,6 +42,16 @@ interface Props {
   onSwiperIndex: (idx: number) => void;
   onShuffle: () => void;
   onAdopt: () => void;
+  /** v1.12.0：当前展示套索引（受控，由首页驱动——点击场景标签可跳转到对应缓存套） */
+  index: number;
+  /** v1.12.0：今日已生成过推荐的场景（对应场景按钮右上角绿点高亮） */
+  recommendedScenes?: SceneId[];
+  /** v1.12.0：自定义场景名列表（chip 显示删除 ×） */
+  customSceneNames?: string[];
+  /** v1.12.0：新增自定义场景（校验并入库，失败返回错误文案） */
+  onAddScene?: (name: string) => string | null;
+  /** v1.12.0：删除自定义场景 */
+  onDeleteScene?: (name: string) => void;
 }
 
 /** 明日穿搭推荐卡片（v1.4.0 B/D 阶段起步）
@@ -63,18 +73,20 @@ const RecommendCard: React.FC<Props> = ({
   tripMode,
   onSwiperIndex,
   onShuffle,
-  onAdopt
+  onAdopt,
+  index,
+  recommendedScenes,
+  customSceneNames,
+  onAddScene,
+  onDeleteScene
 }) => {
   const isAdvice = outfits.length === 0 && !!advice;
-  const [idx, setIdx] = useState(0);
-  // 缓存列表变化时收敛索引，避免越界停留在空滑块
-  useEffect(() => {
-    if (idx >= outfits.length) {
-      setIdx(0);
-      onSwiperIndex(0);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [outfits.length]);
+  // v1.12.0：索引改为受控（首页 outfitIdx 驱动），越界时收敛展示
+  const idx = Math.min(index, Math.max(outfits.length - 1, 0));
+  // v1.12.0：「+ 新增场景」内联输入
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [addErr, setAddErr] = useState('');
 
   const current = outfits[Math.min(idx, Math.max(outfits.length - 1, 0))];
   // 来源角标：仅云端生成时显示「混元生成」（v1.8.1：兜底方案不再显示角标）
@@ -82,9 +94,19 @@ const RecommendCard: React.FC<Props> = ({
   // 无搭配也无建议时（如天气尚在加载 / 首套生成中）统一展示生成中，保证卡片默认可见
   const showLoading = loading || (outfits.length === 0 && !advice);
 
-  const handleIdx = (i: number) => {
-    setIdx(i);
-    onSwiperIndex(i);
+  const confirmAddScene = () => {
+    if (!onAddScene) return;
+    const trimmed = draft.trim();
+    const err = onAddScene(trimmed);
+    if (err) {
+      setAddErr(err);
+      return;
+    }
+    // 新增成功后自动选中该场景（由首页决定是生成新套还是提示额度）
+    onSelectScene(trimmed);
+    setDraft('');
+    setAddErr('');
+    setAdding(false);
   };
 
   return (
@@ -116,24 +138,78 @@ const RecommendCard: React.FC<Props> = ({
         <>
           {!tripMode && (
             <View className={styles.sceneBar}>
-              {scenes.map((s) => (
-                <View
-                  key={s.id}
-                  className={`${styles.sceneChip} ${scene === s.id ? styles.sceneChipActive : ''}`}
-                  onClick={() => onSelectScene(s.id)}
-                >
-                  <Text className={`${styles.sceneChipText} ${scene === s.id ? styles.sceneChipTextActive : ''}`}>
-                    {s.label}
-                  </Text>
+              {scenes.map((s) => {
+                // v1.12.0：已推荐场景右上角绿点高亮；当前选中场景仍用主色描边
+                const recommended = (recommendedScenes || []).includes(s.id);
+                const isCustom = (customSceneNames || []).includes(s.id);
+                return (
+                  <View
+                    key={s.id}
+                    className={`${styles.sceneChip} ${scene === s.id ? styles.sceneChipActive : ''}`}
+                    onClick={() => onSelectScene(s.id)}
+                  >
+                    {recommended && <View className={styles.sceneChipDot} />}
+                    <Text className={`${styles.sceneChipText} ${scene === s.id ? styles.sceneChipTextActive : ''}`}>
+                      {s.label}
+                    </Text>
+                    {isCustom && (
+                      <Text
+                        className={styles.sceneChipDelete}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteScene && onDeleteScene(s.id);
+                        }}
+                      >
+                        ×
+                      </Text>
+                    )}
+                  </View>
+                );
+              })}
+              {/* v1.12.0：自定义场景入口（如 相亲/约会/婚礼） */}
+              {onAddScene && !adding && (
+                <View className={styles.sceneChipAdd} onClick={() => setAdding(true)}>
+                  <Text className={styles.sceneChipAddText}>＋ 场景</Text>
                 </View>
-              ))}
+              )}
             </View>
           )}
+          {/* v1.12.0：自定义场景内联输入行 */}
+          {!tripMode && adding && (
+            <View className={styles.sceneAddForm}>
+              <Input
+                className={styles.sceneAddInput}
+                value={draft}
+                maxlength={6}
+                focus
+                placeholder='输入场景，如：相亲 / 约会 / 婚礼'
+                onInput={(e) => {
+                  setDraft(e.detail.value);
+                  setAddErr('');
+                }}
+                onConfirm={confirmAddScene}
+              />
+              <View className={styles.sceneAddBtn} onClick={confirmAddScene}>
+                <Text className={styles.sceneAddBtnText}>确定</Text>
+              </View>
+              <View
+                className={styles.sceneAddCancel}
+                onClick={() => {
+                  setAdding(false);
+                  setDraft('');
+                  setAddErr('');
+                }}
+              >
+                <Text className={styles.sceneAddCancelText}>取消</Text>
+              </View>
+            </View>
+          )}
+          {!tripMode && !!addErr && <Text className={styles.sceneAddErr}>{addErr}</Text>}
           {/* v1.10.0：多套缓存方案左右滑动展示（单套时为普通整卡展示） */}
           <Swiper
             className={styles.outfitSwiper}
             current={idx}
-            onChange={(e) => handleIdx(e.detail.current)}
+            onChange={(e) => onSwiperIndex(e.detail.current)}
             indicatorDots={outfits.length > 1}
             indicatorColor='rgba(0, 0, 0, 0.15)'
             indicatorActiveColor='rgba(176, 125, 80, 0.9)'

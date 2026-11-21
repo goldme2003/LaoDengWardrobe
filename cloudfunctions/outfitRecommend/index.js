@@ -1,5 +1,5 @@
 /** 明日穿搭推荐（v1.5.0）
- * 入参：{ action: 'ping' | 'recommend', scene: 'all'|'日常'|'通勤'|'运动'|'正式'|'居家'|'旅行',
+ * 入参：{ action: 'ping' | 'recommend', scene: 'all'|'日常'|'通勤'|'运动'|'正式'|'居家'|'旅行'|自定义场景名(≤12字,v1.12.0),
  *        weather?: { cond?, low?, high? }, gender?: 'male'|'female'|'other', age?: number,
  *        items: [{ id, name, type, layer, color, material, occasions: string[] }],
  *        excludeIds?: string[] }
@@ -22,7 +22,9 @@ const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const isScene = (v) => SCENES.includes(v);
 
 function normalize(event) {
-  const scene = event.scene === 'all' || isScene(event.scene) ? event.scene : 'all';
+  // v1.12.0：放开自定义场景（如 相亲/约会/婚礼）——非预设场景保留原文（≤12 字）传给混元，
+  // 兜底选搭 fallbackOutfit 对未知场景按衣物适用场合推断
+  const scene = event.scene === 'all' || !event.scene ? 'all' : str(event.scene, 12) || 'all';
   const gender = ['male', 'female', 'other'].includes(event.gender) ? event.gender : 'other';
   const n = Number(event.age);
   const age = Number.isFinite(n) ? Math.min(99, Math.max(10, Math.round(n))) : 30;
@@ -141,7 +143,12 @@ exports.main = async (event = {}) => {
     const maxItems = params.level === 'full' ? 5 : 4;
     const itemIds = [...new Set(result.itemIds)].filter((id) => validIds.has(id)).slice(0, maxItems);
     if (!itemIds.length) throw new Error('INVALID_ITEM_IDS');
-    const scene = isScene(result.scene) ? result.scene : params.scene === 'all' ? fallbackOutfit(params.scene, params.items).scene : params.scene;
+    // v1.12.0：用户指定场景（含自定义）时缓存场景与请求保持一致，保证首页场景标签高亮/跳转正确
+    const scene = params.scene !== 'all'
+      ? params.scene
+      : isScene(result.scene)
+        ? result.scene
+        : fallbackOutfit(params.scene, params.items).scene;
     const advice = (result.advice || '').slice(0, MAX_LEN);
     const value = { itemIds, scene, advice };
     cache.set(key, { value, source: 'hunyuan', ts: Date.now(), ttl: TTL });
