@@ -112,11 +112,13 @@
   min-width: 0;
 }
 
+// v1.11.2：颜色网格文字缩小一号（32rpx → 28rpx），保证选项名完整显示
 .chipBlock .chipText {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: $font-size-md;
 }
 
 .chip {

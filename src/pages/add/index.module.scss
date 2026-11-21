@@ -150,36 +150,6 @@
   box-shadow: $shadow-card;
 }
 
-.namePreview {
-  display: flex;
-  align-items: center;
-  padding: $spacing-md;
-  background: color-mix(in srgb, var(--w-color, $color-primary) 8%, transparent);
-  border-radius: $radius-md;
-  margin-bottom: $spacing-lg;
-}
-
-.namePreviewLabel {
-  font-size: $font-size-sm;
-  color: $color-text-tertiary;
-  margin-right: $spacing-sm;
-}
-
-.namePreviewValue {
-  font-size: $font-size-md;
-  font-weight: $font-weight-medium;
-  color: var(--w-color, $color-primary);
-  @include text-ellipsis;
-}
-
-.nameInput {
-  flex: 1;
-  height: 64rpx;
-  font-size: $font-size-md;
-  font-weight: $font-weight-medium;
-  color: var(--w-color, $color-primary);
-}
-
 .brandLabel {
   font-size: $font-size-lg;
   font-weight: $font-weight-medium;

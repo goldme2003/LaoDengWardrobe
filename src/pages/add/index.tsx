@@ -25,7 +25,6 @@ import {
   PURCHASE_PLACE_PRESETS,
   MAX_PHOTOS,
   REMARK_MAX_LEN,
-  ITEM_NAME_MAX_LEN,
   COLOR_HEX_MAP,
   getTypePresetsByGender,
   suggestSize,
@@ -578,12 +577,15 @@ const AddItemPage: React.FC = () => {
           <View className={styles.actionBtn} onClick={() => addPhoto('album')}>
             <Text className={styles.actionBtnText}>从相册选择</Text>
           </View>
-          {/* v1.11.0：批量添加（VIP 会员功能），替代原「添加示例照片」入口 */}
+          {/* v1.11.0：批量添加（VIP 会员功能），替代原「添加示例照片」入口；
+              v1.11.2：已开通 VIP 及以上时不再展示 VIP 角标 */}
           <View className={styles.actionBtn} onClick={handleBatchAdd}>
-            <Text className={styles.actionBtnText}>批量添加</Text>
-            <View className={styles.vipBadge}>
-              <Text className={styles.vipBadgeText}>VIP</Text>
-            </View>
+            <Text className={styles.actionBtnText}>批量添加多件衣物</Text>
+            {!isVipPlus && (
+              <View className={styles.vipBadge}>
+                <Text className={styles.vipBadgeText}>VIP</Text>
+              </View>
+            )}
           </View>
         </View>
         <Text className={styles.remarkCount}>
@@ -629,23 +631,6 @@ const AddItemPage: React.FC = () => {
       </View>
 
       <View className={styles.formCard}>
-        <View className={styles.namePreview}>
-          <Text className={styles.namePreviewLabel}>名称</Text>
-          {editing ? (
-            <Input
-              className={styles.nameInput}
-              value={name}
-              maxlength={ITEM_NAME_MAX_LEN}
-              placeholder={`名称（≤${ITEM_NAME_MAX_LEN}字），留空则保持原名`}
-              onInput={(e) => setName(e.detail.value)}
-            />
-          ) : (
-            <Text className={styles.namePreviewValue}>
-              保存后按「类型-编号」自动生成（如：上装-007）
-            </Text>
-          )}
-        </View>
-
         <OptionSelector
           label='服装类型'
           required
