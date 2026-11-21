@@ -87,7 +87,7 @@ function respond(text) {
     assert.strictEqual(options.path, '/v1/chat/completions', 'path');
     assert.strictEqual(options.method, 'POST', 'method');
     assert.strictEqual(options.headers.Authorization, 'Bearer sk-test-fake-key-for-local-test', 'Authorization');
-    assert.strictEqual(body.model, 'hy4', 'model=hy4');
+    assert.strictEqual(body.model, 'hy-vision-2.0-instruct', 'model=hy-vision-2.0-instruct (v1.11.5)');
     assert.strictEqual(body.temperature, 0.1, 'temperature');
     assert.strictEqual(body.messages.length, 1, 'messages');
     const content = body.messages[0].content;
@@ -104,6 +104,11 @@ function respond(text) {
   await t('A5-2', 'HTTP 200 但响应非 JSON → HUNYUAN_BAD_JSON', async () => {
     mockMode = { statusCode: 200, body: '<html>gateway error</html>' };
     await assert.rejects(() => callHunyuanVision('FAKEBASE64'), (e) => /HUNYUAN_BAD_JSON/.test(e.message));
+  });
+  // v1.11.5：hy-vision-2.0-instruct 在云函数环境曾报 400/401006，确保错误信息透传 401006 供 index.js 映射明确提示
+  await t('A5-3', 'HTTP 400 + 401006 → 错误信息透传 401006', async () => {
+    mockMode = { statusCode: 400, body: '{"error":{"code":"401006","message":"model not subscribed"}}' };
+    await assert.rejects(() => callHunyuanVision('FAKEBASE64'), (e) => /401006/.test(e.message));
   });
 
   // ---- A4 密钥缺失路径 ----

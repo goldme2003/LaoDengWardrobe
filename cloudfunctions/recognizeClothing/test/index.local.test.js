@@ -119,11 +119,12 @@ function reset() {
   // ---- E3 BUDGET_EXCEEDED ----
   await t('E3', '月用量达预算 → BUDGET_EXCEEDED 且不调用模型', async () => {
     reset();
-    dbState.usageDoc = { calls: 900 };
+    // v1.11.5：COST_PER_CALL 0.06→0.012，达 50 元预算需 4200 次（50.4 元）
+    dbState.usageDoc = { calls: 4200 };
     const r = await cloudFn.main({ imageFileID: 'cloud://x.jpg' });
     assert.strictEqual(r.code, 'BUDGET_EXCEEDED');
     assert.strictEqual(r.message, '本月识别额度已用尽，下月自动恢复');
-    assert.ok(r.usage && r.usage.estCost === 54, `estCost=${r.usage && r.usage.estCost}`);
+    assert.ok(r.usage && Math.abs(r.usage.estCost - 50.4) < 1e-9, `estCost=${r.usage && r.usage.estCost}`);
   });
 
   // ---- E1 OK 成功返回结构 ----
@@ -147,7 +148,8 @@ function reset() {
     assert.ok(d.careText.includes('可机洗') && d.careText.includes('不可漂白'), `careText=${d.careText}`);
     assert.strictEqual(d.compositionText, '棉 聚酯纤维', `实际=${d.compositionText}`);
     assert.strictEqual(r.cost.calls, 6, 'calls 5→6');
-    assert.strictEqual(r.cost.estCost, 0.36);
+    // v1.11.5：COST_PER_CALL 0.06→0.012，6 次 ≈ 0.072 元（浮点用容差比较）
+    assert.ok(Math.abs(r.cost.estCost - 0.072) < 1e-9, `estCost=${r.cost.estCost}`);
     assert.strictEqual(r.cost.budget, 50);
     assert.ok(typeof r.elapsed === 'number' && r.elapsed < 30000, `elapsed=${r.elapsed}`);
     assert.strictEqual(dbState.updateCalls.length, 1, 'incrUsage(update) 调用 1 次');
@@ -238,7 +240,7 @@ function reset() {
     assert.strictEqual(typeof r.hasSecret, 'boolean');
     assert.strictEqual(typeof r.hasHunyuanKey, 'boolean');
     assert.strictEqual(r.budget, 50);
-    assert.strictEqual(r.model, 'hy4');
+    assert.strictEqual(r.model, 'hy-vision-2.0-instruct');
     // 已知问题 ISSUE-A1-01 已修复：ping 现同时返回 hasHunyuanKey，可探测混元密钥是否配置
     assert.strictEqual(r.hasHunyuanKey, false, '本地未设置 HUNYUAN_API_KEY');
     assert.strictEqual(r.hasSecret, true, 'mock 环境仅设置了 TENCENT_SECRET_ID');

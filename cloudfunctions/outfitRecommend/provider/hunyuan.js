@@ -6,7 +6,7 @@ const path = require('path');
 
 const HOST = 'tokenhub.tencentmaas.com';
 /** 单次请求硬超时：socket 空闲超时 + 总耗时上限（避免上游慢回包拖到平台 60s 强杀） */
-const TOTAL_TIMEOUT = 25000;
+const TOTAL_TIMEOUT = 12000;
 const agent = new https.Agent({ keepAlive: true, maxSockets: 4 });
 
 function loadLocalKey() {
@@ -130,7 +130,7 @@ async function callHunyuanOutfit(params) {
   }
   const startedAt = Date.now();
   const res = await httpsPostJson('/v1/chat/completions', apiKey, {
-    model: 'hy4',
+    model: 'hy4-flash',
     messages: [{ role: 'user', content: buildPrompt(params) }],
     temperature: 0.7
     // 不设 max_tokens：限制过小会导致输出被截断或写入 reasoning 字段

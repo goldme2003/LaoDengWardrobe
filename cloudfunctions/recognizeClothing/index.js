@@ -12,8 +12,8 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 
 const MONTHLY_BUDGET = Number(process.env.RECOGNIZE_BUDGET_YUAN || 50);
-/** 单次成功调用成本估算（大模型 0.05 + OCR 0.01，保守取值，与前端估算一致） */
-const COST_PER_CALL = 0.06;
+/** 单次成功调用成本估算（hy-vision-2.0-instruct 约 0.0101 元/次，留余量取 0.012；OCR 成本忽略计入余量） */
+const COST_PER_CALL = 0.012;
 
 /** 熔断计数（集合 recognize_usage，doc id = usage_YYYY-M；无则初始化） */
 async function getUsage(monthKey) {
@@ -58,7 +58,7 @@ exports.main = async (event) => {
       hasSecret: !!process.env.TENCENT_SECRET_ID,
       hasHunyuanKey: !!process.env.HUNYUAN_API_KEY,
       hasOcrKeys: !!(process.env.TENCENT_SECRET_ID && process.env.TENCENT_SECRET_KEY),
-      model: 'hy4',
+      model: 'hy-vision-2.0-instruct',
       endpoint: 'tokenhub.tencentmaas.com/v1/chat/completions',
       budget: MONTHLY_BUDGET,
       usage: await getUsage(`${new Date().getFullYear()}-${new Date().getMonth() + 1}`)
@@ -140,6 +140,10 @@ exports.main = async (event) => {
     const brief = msg.slice(0, 120);
     if (/HUNYUAN_TIMEOUT/.test(msg)) {
       return { code: 'RECOGNIZE_FAILED', message: '模型响应超时（请重试；若持续超时请确认云函数超时时间 ≥30s）', stage, detail: brief };
+    }
+    // v1.11.5：hy-vision-2.0-instruct 曾在云函数环境报 400/401006（密钥未开通该模型），单独提示便于排查
+    if (/401006/.test(msg)) {
+      return { code: 'RECOGNIZE_FAILED', message: '模型不可用（401006：密钥未开通该模型），请在 TokenHub 控制台确认模型开通范围', stage, detail: brief };
     }
     if (/HUNYUAN_HTTP_401|HUNYUAN_HTTP_403/.test(msg)) {
       return { code: 'RECOGNIZE_FAILED', message: '模型鉴权失败（API Key 无效或无该模型权限）', stage, detail: brief };
