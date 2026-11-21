@@ -147,6 +147,12 @@
   box-shadow: 0 0 0 4rpx color-mix(in srgb, var(--w-color, $color-primary) 25%, transparent);
 }
 
+// v1.11.4：网格模式收窄水平内边距（32→16rpx）——4 列网格单格仅约 143rpx，
+// 原内边距挤压文字导致 2 字颜色名即被截断；收窄后「色点 + 2 字」完整显示
+.chip.chipBlock {
+  padding: 0 $spacing-sm;
+}
+
 .dotWrap {
   position: relative;
   display: inline-flex;
