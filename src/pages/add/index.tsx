@@ -129,6 +129,11 @@ const AddItemPage: React.FC = () => {
   };
   const isUntouched = (key: AttrKey) => !touchedRef.current.has(key);
 
+  // v1.11.6：远程图片判定——仅拦截已上传云存储的 http(s) 下载地址（域名带点）。
+  // 此前 /^https?:/ 会误拦微信开发者工具的本地临时路径 http://tmp/xxx（工具内识别必现
+  // 「请先拍照或选择本地照片」/静默跳过），真机 wxfile:// 不受影响，故改为按域名区分
+  const isRemotePhoto = (p: string) => /^https?:\/\/[^/]+\.[^/]+/i.test(p);
+
   // v1.2：自动识别主图（v1.11.0 起：仅 VIP 及以上 + 新增模式 + 功能可用 + 开关开启）；
   // 800ms 防抖 + 同图结果缓存；失败/超时不自动重试（避免浪费调用），提供「重新识别」手动入口
   // 普通版（free）不自动识别：不发起请求、不展示开关与重新识别入口（PRD 9.3 v1.11.0 权益调整）
@@ -142,7 +147,7 @@ const AddItemPage: React.FC = () => {
     if (editing || fromTryoutId) return; // 编辑/备选转正式已有预填，不自动触发
     if (!isVipPlus) return; // v1.11.0：普通版不自动识别
     if (!recognizeAvailable() || !isAutoRecognizeOn()) return;
-    if (!mainPhoto || /^https?:/.test(mainPhoto)) return;
+    if (!mainPhoto || isRemotePhoto(mainPhoto)) return;
     if (checkBudget() === 'exceeded') {
       setRecognTip('本月识别额度已用尽，下月自动恢复');
       return;
@@ -257,7 +262,7 @@ const AddItemPage: React.FC = () => {
 
   // v1.2：手动重新识别（用户点按触发，受熔断限制但不受自动开关限制）
   const manualRecognize = () => {
-    if (!mainPhoto || /^https?:/.test(mainPhoto)) {
+    if (!mainPhoto || isRemotePhoto(mainPhoto)) {
       Taro.showToast({ title: '请先拍照或选择本地照片', icon: 'none' });
       return;
     }
