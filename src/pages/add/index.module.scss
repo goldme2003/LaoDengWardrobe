@@ -375,6 +375,11 @@
   color: $color-text-secondary;
 }
 
+// v1.11.3：自动识别开关改为 Switch 样式
+.recognSwitch {
+  flex: none;
+}
+
 
 .bottomBar {
   position: fixed;

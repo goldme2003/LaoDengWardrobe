@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { View, Text, Image, Input, Textarea, Picker } from '@tarojs/components';
+import { View, Text, Image, Input, Textarea, Picker, Switch } from '@tarojs/components';
 import Taro, { useRouter } from '@tarojs/taro';
 import OptionSelector from '@/components/OptionSelector';
 import BrandPicker from '@/components/BrandPicker';
@@ -116,6 +116,8 @@ const AddItemPage: React.FC = () => {
   // v1.2 识别功能（PRD 9.3）：自动识别状态与手动入口
   const [recognizing, setRecognizing] = useState(false);
   const [recognTip, setRecognTip] = useState('');
+  // v1.11.3：自动识别开关改为 Switch 样式，需响应式状态镜像存储值（isAutoRecognizeOn 为同步读存储）
+  const [autoOn, setAutoOn] = useState(() => isAutoRecognizeOn());
   const recogTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // v1.4.3：用户手动改过的字段集合——识别结果不覆盖这些字段
   const touchedRef = useRef<Set<AttrKey>>(new Set());
@@ -380,10 +382,10 @@ const AddItemPage: React.FC = () => {
       }
     }
     console.info('[Add] 批量添加开始, 张数 =', paths.length, '自动识别 =', canRecog);
-    Taro.showLoading({ title: `正在处理 1/${paths.length}，请稍候`, mask: true });
+    Taro.showLoading({ title: `正在处理 1/${paths.length} 请稍候`, mask: true });
     let recognized = 0;
     for (let i = 0; i < paths.length; i++) {
-      Taro.showLoading({ title: `正在处理 ${i + 1}/${paths.length}，请稍候`, mask: true });
+      Taro.showLoading({ title: `正在处理 ${i + 1}/${paths.length} 请稍候`, mask: true });
       // 默认值（其他属性均为默认）：类型/颜色/季节由识别结果覆盖（识别成功时）
       let type = DEFAULT_TYPE;
       let color = DEFAULT_COLOR;
@@ -609,18 +611,20 @@ const AddItemPage: React.FC = () => {
             <Text className={styles.recognTip}>
               {recognizing
                 ? '正在识别衣物属性…（可继续填写，已改字段不会被覆盖）'
-                : recognTip || '已开启自动识别（主图）'}
+                : recognTip || (autoOn ? '已开启自动识别（主图）' : '已关闭自动识别（主图）')}
             </Text>
-            <View
-              className={styles.recognAction}
-              onClick={() => {
-                const next = !isAutoRecognizeOn();
+            {/* v1.11.3：开关由文字按钮改为 Switch 样式 */}
+            <Switch
+              className={styles.recognSwitch}
+              checked={autoOn}
+              color='#b08d4f'
+              onChange={(e) => {
+                const next = e.detail.value;
+                setAutoOn(next);
                 setAutoRecognize(next);
                 setRecognTip(next ? '' : '已关闭自动识别，可点「重新识别」手动触发');
               }}
-            >
-              <Text className={styles.recognActionText}>{isAutoRecognizeOn() ? '关闭自动' : '开启自动'}</Text>
-            </View>
+            />
             {!recognizing && (
               <View className={styles.recognAction} onClick={manualRecognize}>
                 <Text className={styles.recognActionText}>重新识别</Text>
