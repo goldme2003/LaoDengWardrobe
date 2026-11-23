@@ -149,10 +149,21 @@ async function mapWithLimit(list, limit, fn) {
   return results;
 }
 
+/** v1.13.2：版本标识（启动日志与 ping 均输出，用于确认云端部署的是否为最新代码） */
+const VERSION = 'v1.13.2';
+
 async function generateStyle({ dateKey, seasonKey, gender, ageGroup, styleKey }) {
   const prompt = buildPrompt({ seasonKey, gender, ageGroup, styleKey });
   const url = await callHunyuanImage(prompt);
-  const buffer = await downloadImage(url);
+  // v1.13.2：生图已计费（单张 10s+），下载失败重试 1 次，避免偶发网络错误浪费已生成的结果
+  let buffer;
+  try {
+    buffer = await downloadImage(url);
+  } catch (e) {
+    console.warn(`[seasonalImages] ${styleKey} 下载失败（${e.message}），1s 后重试`);
+    await new Promise((r) => setTimeout(r, 1000));
+    buffer = await downloadImage(url);
+  }
   const cloudPath = `seasonal/${dateKey}/${seasonKey}-${gender}-${ageGroup.key}-${styleKey}.jpg`;
   const uploaded = await cloud.uploadFile({ cloudPath, fileContent: buffer });
   if (!uploaded || !uploaded.fileID) throw new Error('UPLOAD_FAILED');
@@ -174,13 +185,15 @@ async function generateStyle({ dateKey, seasonKey, gender, ageGroup, styleKey })
 
 exports.main = async (event = {}) => {
   const action = event.action || 'generate';
+  console.log(`[seasonalImages] ${VERSION} 启动，action=${action}`);
 
   if (action === 'ping') {
     return {
       code: 'OK',
+      version: VERSION,
       hasHunyuanKey: !!process.env.HUNYUAN_API_KEY,
       model: MODEL,
-      endpoint: 'tokenhub.tencentmaas.com/v1/api/image/lite',
+      endpoint: 'tokenhub.tencentmaas.com/v1/wand/hunyuan-image/v35-generation',
       budgetPerMonth: MONTHLY_BUDGET
     };
   }
