@@ -156,23 +156,22 @@ function parseImageResponse(raw) {
   return null;
 }
 
-/** 文生图：返回图片 URL */
-async function callHunyuanImage(prompt) {
+/** 文生图：返回图片 URL（请求结构对齐官方文档样例：
+ * model + session + messages[]，messages[n] = { role:'user', content:[{ type:'text', text }] }） */
+async function callHunyuanImage(prompt, session) {
   const apiKey = resolveKey();
   if (!apiKey) {
     throw new Error('MISSING_SECRET: 未配置 HUNYUAN_API_KEY（环境变量或 private.config.json）');
   }
   const startedAt = Date.now();
-  const raw = await requestRaw(
-    IMAGE_PATH,
-    apiKey,
-    {
-      model: MODEL,
-      size: IMAGE_SIZE,
-      messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }]
-    },
-    GEN_TIMEOUT
-  );
+  const body = {
+    model: MODEL,
+    size: IMAGE_SIZE,
+    messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }]
+  };
+  // 官方文档：session 用于一致性哈希调度（同 session 路由到同一推理实例，提高 KV-cache 命中）
+  if (session) body.session = session;
+  const raw = await requestRaw(IMAGE_PATH, apiKey, body, GEN_TIMEOUT);
   const found = parseImageResponse(raw);
   const url = normalizeImageUrl(found);
   if (!url) {

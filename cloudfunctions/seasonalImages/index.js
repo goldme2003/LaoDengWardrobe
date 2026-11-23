@@ -154,7 +154,8 @@ const VERSION = 'v1.13.2';
 
 async function generateStyle({ dateKey, seasonKey, gender, ageGroup, styleKey }) {
   const prompt = buildPrompt({ seasonKey, gender, ageGroup, styleKey });
-  const url = await callHunyuanImage(prompt);
+  // session 按日期+风格固定：同组合重复请求路由到同一推理实例（官方文档建议用法）
+  const url = await callHunyuanImage(prompt, `seasonal-${dateKey}-${styleKey}`);
   // v1.13.2：生图已计费（单张 10s+），下载失败重试 1 次，避免偶发网络错误浪费已生成的结果
   let buffer;
   try {
