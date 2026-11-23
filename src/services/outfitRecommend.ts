@@ -72,12 +72,15 @@ export const requestOutfitRecommend = async (params: Params): Promise<AiOutfitRe
       return null;
     }
     const source: OutfitSource = result.source === 'hunyuan' ? 'hunyuan' : 'fallback';
+    // v1.12.1：用户显式选择场景（含自定义）时响应场景一律采用请求场景——
+    // 修复云端兜底/未部署新版的云函数把自定义场景归为预设或 all 导致的缓存场景漂移
+    // （场景标签不亮、再点该场景误报已达上限）
     const scene: SceneId =
-      result.scene && isSceneId(result.scene)
-        ? result.scene
-        : params.scene === 'all'
-          ? '日常'
-          : params.scene;
+      params.scene !== 'all'
+        ? params.scene
+        : result.scene && isSceneId(result.scene)
+          ? result.scene
+          : '日常';
     console.info(`[OutfitAI] 推荐来源 = ${source}，场景 = ${scene}，件数 = ${itemIds.length}`);
     return { itemIds, scene, advice: result.advice || '', source };
   } catch (e) {

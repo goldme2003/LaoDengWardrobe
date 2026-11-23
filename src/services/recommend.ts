@@ -233,8 +233,11 @@ export const buildOutfits = (
     if (combo.length > 0 && !seen.has(sig)) {
       seen.add(sig);
       // v1.12.0：自定义场景直接以场景名作为该套搭配的场景与标签（理由文案同步标注）
-      const sceneOfOutfit: SceneId = customScene || inferScene(combo, effectiveScene);
-      const sceneLabel = customScene || labelOfScene(sceneOfOutfit);
+      // v1.12.1：用户显式选择场景（预设或自定义）时输出场景一律采用用户所选——
+      // 修复「衣橱无该场景匹配衣物 → 打分回退 all → inferScene 推断出其他场景」导致缓存场景漂移、
+      // 场景标签不亮、再点该场景误报已达上限（表现为自定义场景推荐失败）
+      const sceneOfOutfit: SceneId = scene !== 'all' ? scene : inferScene(combo, effectiveScene);
+      const sceneLabel = scene !== 'all' ? customScene || labelOfScene(scene) : labelOfScene(sceneOfOutfit);
       outfits.push({
         items: combo,
         scene: sceneOfOutfit,

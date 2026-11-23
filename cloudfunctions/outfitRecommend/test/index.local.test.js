@@ -38,6 +38,23 @@ async function run() {
     assert.strictEqual(empty.source, 'fallback');
   });
 
+  // v1.12.1：自定义场景兜底时返回场景必须与请求一致（修复 fallbackOutfit 推断回预设导致的场景漂移）
+  const custom = await fn.main({
+    action: 'recommend',
+    scene: '相亲',
+    weather: { cond: '晴', low: 10, high: 18 },
+    items: [
+      { id: 'i1', name: '白衬衫', type: '上装', layer: '内穿', color: '白色', material: '棉', occasions: ['通勤'] },
+      { id: 'i2', name: '西裤', type: '裤装', layer: '内穿', color: '黑色', material: '西装', occasions: ['正式'] },
+      { id: 'i3', name: '皮鞋', type: '鞋履', layer: '外穿', color: '黑色', material: '皮革', occasions: ['正式'] }
+    ]
+  });
+  check('O4 自定义场景（相亲）返回场景与请求一致', () => {
+    assert.strictEqual(custom.code, 'OK');
+    assert.strictEqual(custom.scene, '相亲');
+    assert.ok(custom.itemIds.length > 0);
+  });
+
   console.log(`\noutfitRecommend: ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 }

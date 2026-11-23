@@ -155,8 +155,11 @@ exports.main = async (event = {}) => {
     return { code: 'OK', ...value, source: 'hunyuan', weatherUsed: !!params.weather };
   } catch (e) {
     const value = fallbackOutfit(params.scene, params.items);
-    cache.set(key, { value, source: 'fallback', ts: Date.now(), ttl: FALLBACK_TTL });
+    // v1.12.1：用户指定场景（含自定义）时兜底返回场景与请求一致——
+    // fallbackOutfit 会把未知场景推断为预设场景，导致前端缓存场景漂移、场景标签不亮、回看失效
+    const fixed = params.scene !== 'all' && value.scene !== params.scene ? { ...value, scene: params.scene } : value;
+    cache.set(key, { value: fixed, source: 'fallback', ts: Date.now(), ttl: FALLBACK_TTL });
     console.error(`[outfitRecommend] 混元生成失败（耗时 ${Date.now() - startedAt}ms），使用兜底选搭：`, e.message);
-    return { code: 'OK', ...value, source: 'fallback', weatherUsed: !!params.weather };
+    return { code: 'OK', ...fixed, source: 'fallback', weatherUsed: !!params.weather };
   }
 };
