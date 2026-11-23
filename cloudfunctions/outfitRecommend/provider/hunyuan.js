@@ -85,6 +85,24 @@ function httpsPostJson(urlPath, apiKey, body) {
 const GENDER_TEXT = { male: '男', female: '女', other: '不限' };
 const SCENES = ['日常', '通勤', '运动', '正式', '居家', '旅行'];
 
+/** v1.13.0：场景着装要求（提示词内明确点明场景，避免模型泛泛而谈） */
+const SCENE_GUIDE = {
+  日常: '舒适百搭、松弛自然，适合日常出行与朋友见面',
+  通勤: '利落专业、色彩克制，兼顾通勤走动与办公场合',
+  运动: '透气速干、便于活动，鞋履以运动性能优先',
+  正式: '挺括得体、细节干净，符合商务或典礼场合礼仪',
+  居家: '柔软宽松、亲肤透气，活动自在',
+  旅行: '轻便易打理、层次可增减，鞋子好走耐穿'
+};
+
+/** 年龄段描述（与空衣橱引导、当季推荐口径一致） */
+function ageGroupText(age) {
+  if (age < 18) return '青少年';
+  if (age <= 30) return '青年';
+  if (age <= 50) return '中年';
+  return '熟龄';
+}
+
 function weatherText(w) {
   if (!w) return '天气未知';
   const parts = [];
@@ -103,10 +121,10 @@ function buildPrompt({ gender, age, weather, scene, items, excludeIds, level }) 
     .join('\n');
   const sceneText =
     !scene || scene === 'all'
-      ? `场景不限，请从「${SCENES.join('、')}」中选择最适合当前衣物与天气的一个`
+      ? `场景不限，请从「${SCENES.join('、')}」中选择最适合当前衣物与天气的一个，并说明选择理由`
       : SCENES.includes(scene)
-        ? `场景：${scene}`
-        : `场景：${scene}（用户自定义场景，请按该场景的着装礼仪与氛围搭配）`;
+        ? `场景：${scene}（要求：${SCENE_GUIDE[scene]}）`
+        : `场景：${scene}（用户自定义场景，请按该场景的着装礼仪与氛围搭配，并说明场景适配逻辑）`;
   const exclude = excludeIds && excludeIds.length ? `不要与上次完全相同（上次 id：${excludeIds.join(',')}）。` : '';
   // v1.9.0（F-19）：会员推荐档位——full = 综合全衣橱（更多件数 + 按全衣橱互补给建议）
   // v1.10.0：advice 文案按档位差异化——plus 更详细；full 最详细且结合衣橱整体与主人信息
@@ -118,7 +136,12 @@ function buildPrompt({ gender, age, weather, scene, items, excludeIds, level }) 
     level === 'full'
       ? '{"itemIds":["id"],"scene":"场景","advice":"100~150字深度搭配建议"}'
       : '{"itemIds":["id"],"scene":"场景","advice":"60~80字详细搭配建议"}';
-  return `你是穿搭顾问。主人${GENDER_TEXT[gender] || '不限'}，${age}岁。天气：${weatherText(weather)}。${sceneText}。${levelText}只能使用清单内 id。${exclude}只输出JSON：${adviceRule}。衣物清单：\n${list}`;
+  // v1.13.0：强化角色设定与场景/人物约束——以时尚穿搭达人口吻给建议，明确结合性别、年龄与场景
+  return `你是一位资深时尚穿搭达人、私人造型师，擅长根据人物特征、天气与场合做整体造型。
+搭配对象：${GENDER_TEXT[gender] || '不限'}性，${age}岁（${ageGroupText(age)}）。天气：${weatherText(weather)}。
+${sceneText}。
+搭配原则：① 配色不超过三种，明确主色与点缀色；② 尽量覆盖上装+下装+鞋履，按天气增减外套或配饰；③ 说明版型与层次的配合逻辑；④ 以时尚达人的口吻给出可执行的建议，避免品牌广告。
+${levelText}只能使用清单内 id。${exclude}只输出JSON：${adviceRule}。衣物清单：\n${list}`;
 }
 
 /**

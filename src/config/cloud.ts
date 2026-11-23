@@ -17,6 +17,8 @@ export const EMPTY_GUIDE_FN_NAME = 'emptyGuide';
 export const OUTFIT_RECOMMEND_FN_NAME = 'outfitRecommend';
 /** v1.9.0（F-19）：会员中心（getMember / createOrder，支付未开通前仅登记订单） */
 export const MEMBER_FN_NAME = 'member';
+/** v1.13.0：当季推荐图组（混元生图 + 云存储缓存，按季节/性别/年龄段/会员档位差异化） */
+export const SEASONAL_FN_NAME = 'seasonalImages';
 
 /** 月熔断预算（元，与云函数 RECOGNIZE_BUDGET_YUAN 保持一致）与预警阈值 */
 export const RECOGNIZE_BUDGET_YUAN = 50;

@@ -18,7 +18,7 @@ export interface TierConfig {
   wardrobes: number;
   /** 服装批量导入/批量添加（次/月），0 = 无（v1.11.0 已上线：单次批量任务 = 1 次，写 memberUsage.batchImportUsed） */
   batchImportPerMonth: number;
-  /** 当季推荐图组（张/天） */
+  /** 当季推荐图组（张/天）：普通 1 / VIP 3 / SVIP 5（v1.13.0 调整为云端混元生图，按档位风格组差异化） */
   seasonalPerDay: number;
   /** 天气穿搭推荐档位 */
   weatherLevel: WeatherLevel;
@@ -39,7 +39,7 @@ export const TIERS: Record<MemberTier, TierConfig> = {
     price: null,
     wardrobes: 1,
     batchImportPerMonth: 0,
-    seasonalPerDay: 2,
+    seasonalPerDay: 1,
     weatherLevel: 'basic',
     tripPerMonth: 0,
     fashionPerMonth: 0,
@@ -52,7 +52,7 @@ export const TIERS: Record<MemberTier, TierConfig> = {
     price: 18,
     wardrobes: 2,
     batchImportPerMonth: 5,
-    seasonalPerDay: 5,
+    seasonalPerDay: 3,
     weatherLevel: 'plus',
     tripPerMonth: 5,
     fashionPerMonth: 5,
@@ -65,7 +65,7 @@ export const TIERS: Record<MemberTier, TierConfig> = {
     price: 48,
     wardrobes: 5,
     batchImportPerMonth: 15,
-    seasonalPerDay: 10,
+    seasonalPerDay: 5,
     weatherLevel: 'full',
     tripPerMonth: null,
     fashionPerMonth: null,

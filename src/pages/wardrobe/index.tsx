@@ -411,6 +411,21 @@ const WardrobePage: React.FC = () => {
   // 生成一套并写入今日缓存：普通版走本地规则引擎（不调云函数）；
   // VIP/SVIP 调混元（plus = AI 详细建议 / full = 综合全衣橱深度建议），云函数不可用或失败时本地兜底，仍计入当日缓存
   const [genLoading, setGenLoading] = useState(false);
+  // v1.13.0：云端生成耗时长，按阶段提示进度，避免用户误以为页面假死
+  const [genHint, setGenHint] = useState('');
+  useEffect(() => {
+    if (!genLoading) {
+      setGenHint('');
+      return;
+    }
+    setGenHint('正在连接 AI 造型师…');
+    const t1 = setTimeout(() => setGenHint('正在结合天气、性别与年龄挑选搭配…'), 3000);
+    const t2 = setTimeout(() => setGenHint('云端响应较慢，正在准备本地推荐…'), 12000);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [genLoading]);
   // 当前滑动到的套（采纳 / 换一件作用于该套）；v1.12.0 上移声明供生成后跳转最新套使用
   const [outfitIdx, setOutfitIdx] = useState(0);
   const genReqRef = useRef(0);
@@ -608,6 +623,8 @@ const WardrobePage: React.FC = () => {
   // ③ 已用尽且该场景无推荐 → 按会员档位提示「已达上限」并引导升级（SVIP 仅提示上限）
   const handleSelectScene = useCallback(
     (next: SceneId) => {
+      // v1.13.0：生成中忽略场景切换，避免连点触发多次云端请求
+      if (genLoading) return;
       // 已有缓存的场景：跳转到第一套该场景的缓存方案（含当前已选场景的重复点击回看）
       const existIdx = cachedVMs.findIndex((vm) => vm.scene === next);
       if (existIdx >= 0) {
@@ -638,7 +655,7 @@ const WardrobePage: React.FC = () => {
       }
       setTimeout(() => generateRef.current([], next), 0);
     },
-    [scene, mode, recommendReady, quotaReached, outfitQuota, memberTier, cachedVMs, goMember]
+    [scene, mode, recommendReady, quotaReached, outfitQuota, memberTier, cachedVMs, goMember, genLoading]
   );
 
   // v1.4.3：小程序启动后首次进入首页，自动执行穿搭推荐
@@ -869,7 +886,8 @@ const WardrobePage: React.FC = () => {
           scene={scene}
           onSelectScene={handleSelectScene}
           adopted={outfitAdopted}
-          loading={false}
+          loading={mode === 'trip' ? tripLoading : genLoading}
+          loadingHint={mode === 'trip' ? '正在生成出差穿搭，请稍候…' : genHint}
           canShuffle={mode === 'trip' || !quotaReached}
           used={mode === 'trip' ? 0 : cachedEntries.length}
           total={mode === 'trip' ? 0 : outfitQuota}
@@ -891,6 +909,7 @@ const WardrobePage: React.FC = () => {
         <SeasonalCard
           gender={currentWardrobe?.gender}
           age={currentWardrobe?.age ?? null}
+          tier={memberTier}
           quota={tierCfg.seasonalPerDay}
           viewed={memberUsage.seasonalViewed}
           onShow={recordSeasonalView}

@@ -33,6 +33,8 @@ interface Props {
   adopted: boolean;
   /** 首套尚未生成时的加载态 */
   loading: boolean;
+  /** v1.13.0：加载阶段提示（连接云端 / 挑选搭配 / 本地兜底），缺省用统一文案 */
+  loadingHint?: string;
   /** 「换一件」是否可用（每日套数用尽后置灰并提示） */
   canShuffle: boolean;
   /** 今日已生成套数 / 会员每日套数（普通版 1 / VIP 2 / SVIP 5） */
@@ -67,6 +69,7 @@ const RecommendCard: React.FC<Props> = ({
   onSelectScene,
   adopted,
   loading,
+  loadingHint,
   canShuffle,
   used,
   total,
@@ -132,7 +135,7 @@ const RecommendCard: React.FC<Props> = ({
       {showLoading ? (
         <View className={styles.loading}>
           <View className={styles.spinner} />
-          <Text className={styles.loadingText}>穿搭建议生成中…</Text>
+          <Text className={styles.loadingText}>{loadingHint || '穿搭建议生成中…'}</Text>
         </View>
       ) : outfits.length > 0 ? (
         <>

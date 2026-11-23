@@ -15,6 +15,20 @@
   margin-bottom: $spacing-sm;
 }
 
+.titleRow {
+  display: flex;
+  align-items: center;
+}
+
+.aiBadge {
+  margin-left: $spacing-xs;
+  padding: 2rpx 10rpx;
+  font-size: 20rpx;
+  color: var(--primary, #b07d50);
+  border: 1px solid var(--primary, #b07d50);
+  border-radius: $radius-round;
+}
+
 .title {
   font-size: $font-size-md;
   font-weight: $font-weight-medium;
@@ -60,19 +74,51 @@
   color: #ffffff;
 }
 
-/* v1.9.0（F-19）：额度用尽占位与额度提示行 */
-.exhaustedBox {
+/* v1.13.0：AI 生成标识（生成式内容显式标识）与加载骨架 */
+.aiTag {
+  position: absolute;
+  right: $spacing-sm;
+  top: $spacing-sm;
+  padding: 2rpx 10rpx;
+  border-radius: $radius-round;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.aiTagText {
+  font-size: 20rpx;
+  color: #ffffff;
+}
+
+.skeleton {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 240rpx;
+  height: 640rpx;
   border-radius: $radius-md;
   background: var(--bg-secondary, #f5f2ee);
 }
 
-.exhaustedText {
+.skeletonText {
   font-size: $font-size-sm;
   color: $color-text-tertiary;
+}
+
+.noteRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: $spacing-xs;
+}
+
+.noteText {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+.retry {
+  font-size: $font-size-xs;
+  color: var(--primary, #b07d50);
+  font-weight: $font-weight-medium;
 }
 
 .quotaRow {
