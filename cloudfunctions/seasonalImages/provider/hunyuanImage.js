@@ -1,15 +1,18 @@
-/** 腾讯混元生图（极速版）调用封装（v1.13.0 当季推荐图组）
+/** 腾讯混元生图调用封装（v1.13.1 当季推荐图组）
  * 密钥复用云函数环境变量 HUNYUAN_API_KEY（与 emptyGuide / outfitRecommend 一致）；
- * 接口：POST https://tokenhub.tencentmaas.com/v1/api/image/lite（OpenAI 兼容，同步返回图片 URL）。
+ * 模型：Hy-Image-3.5-Preview（`hy-image-v3.5-preview`），Chat/Messages 协议，同步流式返回图片 URL。
+ * 接口：POST https://tokenhub.tencentmaas.com/v1/wand/hunyuan-image/v35-generation
  * 生成的图片由调用方下载并转存云开发存储，避免临时 URL 过期与小程序图片域名白名单限制。 */
 const https = require('https');
 const path = require('path');
 
 const HOST = 'tokenhub.tencentmaas.com';
-const IMAGE_PATH = '/v1/api/image/lite';
-const MODEL = 'hy-image-lite';
-/** 单张生图硬超时（生图比文本慢，留足 30s；云函数总超时 60s） */
-const GEN_TIMEOUT = 25000;
+const IMAGE_PATH = '/v1/wand/hunyuan-image/v35-generation';
+const MODEL = 'hy-image-v3.5-preview';
+/** 输出竖版 1024×1536（宽高均 ∈ [256,8192]，面积 ≤ 16777216），适配当季卡 4:3 竖版展示 */
+const IMAGE_SIZE = '1024x1536';
+/** 单张生图硬超时（3.5 预览版较慢，云函数总超时 60s，并发 3 分两轮完成） */
+const GEN_TIMEOUT = 35000;
 const DOWNLOAD_TIMEOUT = 20000;
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 
@@ -29,7 +32,7 @@ function resolveKey() {
   return process.env.HUNYUAN_API_KEY || loadLocalKey();
 }
 
-function requestJson(urlPath, apiKey, body, timeout) {
+function requestRaw(urlPath, apiKey, body, timeout) {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(body);
     let settled = false;
@@ -66,11 +69,7 @@ function requestJson(urlPath, apiKey, body, timeout) {
               finish(new Error(`HUNYUAN_IMAGE_HTTP_${res.statusCode}: ${buf.slice(0, 300)}`));
               return;
             }
-            try {
-              finish(null, JSON.parse(buf));
-            } catch (e) {
-              finish(new Error('HUNYUAN_IMAGE_BAD_JSON: ' + buf.slice(0, 300)));
-            }
+            finish(null, buf);
           });
         }
       );
@@ -92,6 +91,52 @@ function requestJson(urlPath, apiKey, body, timeout) {
   });
 }
 
+/** 从响应（普通 JSON 或 SSE chunk）中递归查找图片 URL */
+function findImageUrl(node, depth = 0) {
+  if (!node || depth > 8) return null;
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      const hit = findImageUrl(item, depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  if (typeof node === 'object') {
+    if (node.image && typeof node.image === 'object' && typeof node.image.url === 'string') return node.image.url;
+    if (node.image_url && typeof node.image_url.url === 'string') return node.image_url.url;
+    for (const key of Object.keys(node)) {
+      const hit = findImageUrl(node[key], depth + 1);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+/** v3.5-preview 返回流式 chunk（`data: {...}` SSE），兼容一次性 JSON 响应 */
+function parseImageResponse(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return null;
+  try {
+    const hit = findImageUrl(JSON.parse(text));
+    if (hit) return hit;
+  } catch (e) {
+    // 非单段 JSON，按 SSE 逐行解析
+  }
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith(':')) continue;
+    const payload = trimmed.startsWith('data:') ? trimmed.slice(5).trim() : trimmed;
+    if (!payload || payload === '[DONE]') continue;
+    try {
+      const hit = findImageUrl(JSON.parse(payload));
+      if (hit) return hit;
+    } catch (e) {
+      // 忽略不可解析的帧
+    }
+  }
+  return null;
+}
+
 /** 文生图：返回图片 URL */
 async function callHunyuanImage(prompt) {
   const apiKey = resolveKey();
@@ -99,17 +144,21 @@ async function callHunyuanImage(prompt) {
     throw new Error('MISSING_SECRET: 未配置 HUNYUAN_API_KEY（环境变量或 private.config.json）');
   }
   const startedAt = Date.now();
-  const res = await requestJson(
+  const raw = await requestRaw(
     IMAGE_PATH,
     apiKey,
-    { model: MODEL, prompt, rsp_img_type: 'url' },
+    {
+      model: MODEL,
+      size: IMAGE_SIZE,
+      messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }]
+    },
     GEN_TIMEOUT
   );
-  const url = res && Array.isArray(res.data) && res.data[0] && res.data[0].url;
-  if (!url || typeof url !== 'string') {
-    throw new Error('BAD_IMAGE_OUTPUT: ' + JSON.stringify(res).slice(0, 300));
+  const url = parseImageResponse(raw);
+  if (!url) {
+    throw new Error('BAD_IMAGE_OUTPUT: ' + String(raw).slice(0, 300));
   }
-  console.log(`[seasonalImages] 混元生图成功，耗时 ${Date.now() - startedAt}ms`);
+  console.log(`[seasonalImages] ${MODEL} 生图成功，耗时 ${Date.now() - startedAt}ms`);
   return url;
 }
 

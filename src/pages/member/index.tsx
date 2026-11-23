@@ -24,7 +24,7 @@ const BENEFIT_ROWS: { label: string; values: Record<MemberTier, string> }[] = [
     label: '衣物属性自动识别',
     values: { free: '无', vip: '✓', svip: '✓' }
   },
-  { label: '当季推荐图组', values: { free: '1 张/天', vip: '3 张/天', svip: '5 张/天' } },
+  { label: '当季推荐图组', values: { free: '无（本地示例）', vip: '1 张/天', svip: '2 张/天' } },
   {
     label: '天气穿搭推荐',
     values: {

@@ -62,10 +62,10 @@ interface Slide {
   ai: boolean;
 }
 
-/** 当季推荐卡（v1.7.0，v1.13.0 改为云端混元生图）
- * 云函数按「当日 + 季节 + 性别 + 年龄段 + 会员档位」生成当季流行穿搭图并缓存到云存储，
+/** 当季推荐卡（v1.7.0，v1.13.0 改为云端混元生图，v1.13.1 调整档位与模型）
+ * 云函数按「当日 + 季节 + 性别 + 年龄段 + 会员档位」调用 Hy-Image-3.5-Preview 生成当季流行穿搭图并缓存到云存储，
  * 前端优先展示云端图组（含「AI 生成」标识），云端不可用时回退本地图组；
- * 会员每日额度（普通 1 / VIP 3 / SVIP 5 张）用尽后保留已展示图片并停止自动轮播。 */
+ * 普通版不生图（展示 1 张本地示例并引导开通 VIP），VIP 1 张 / SVIP 2 张，当日额度用尽后保留已展示图片并停止自动轮播。 */
 const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onShow }) => {
   const now = new Date();
   const season = seasonOf(now.getMonth() + 1);
@@ -76,7 +76,8 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onSho
   const exhausted = viewed >= shown;
 
   const [cloud, setCloud] = useState<SeasonalImage[]>([]);
-  const [loading, setLoading] = useState(true);
+  // 普通版（额度 0）不生图，直接展示本地示例，无需加载态
+  const [loading, setLoading] = useState(quota > 0);
   const [failed, setFailed] = useState(false);
   const reportedRef = useRef(false);
 
@@ -124,8 +125,8 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onSho
     () => cloud.slice(0, shown).map((it) => ({ label: it.label, src: it.fileID, ai: true })),
     [cloud, shown]
   );
-  // 云端图组优先；不可用时用本地示例补位（额度内）
-  const slides = cloudSlides.length > 0 ? cloudSlides : localSlides.slice(0, shown);
+  // 云端图组优先；不可用或普通版（额度 0）时用本地示例补位（普通版固定展示 1 张）
+  const slides = cloudSlides.length > 0 ? cloudSlides : localSlides.slice(0, shown > 0 ? shown : 1);
 
   // 首次加载完成登记今日展示张数（额度随天滚动重置，由 store 侧保证）
   useEffect(() => {
@@ -184,13 +185,15 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onSho
           </Text>
         </View>
       )}
-      {!loading && quota < 5 && (
+      {!loading && quota < 2 && (
         <View className={styles.quotaRow}>
           <Text className={styles.quotaText}>
-            今日已看 {Math.min(viewed, shown)}/{shown} 张 · 会员每日可看更多
+            {quota <= 0
+              ? '普通版展示本地示例搭配'
+              : `今日已看 ${Math.min(viewed, shown)}/${shown} 张 · SVIP 可看 AI 高定搭配`}
           </Text>
           <Text className={styles.quotaLink} onClick={() => Taro.navigateTo({ url: '/pages/member/index' })}>
-            去升级 ›
+            {quota <= 0 ? '开通 VIP ›' : '去升级 ›'}
           </Text>
         </View>
       )}

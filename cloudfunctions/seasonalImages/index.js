@@ -1,11 +1,12 @@
-/** 当季推荐图组云函数（v1.13.0）
+/** 当季推荐图组云函数（v1.13.1）
  * 入参：{ action: 'ping' | 'generate', tier?: 'free'|'vip'|'svip', gender?: 'male'|'female'|'other', age?: number }
- * 出参：{ code: 'OK'|'BAD_PARAM'|'BUDGET_EXCEEDED'|'GENERATE_FAILED',
+ * 出参：{ code: 'OK'|'BAD_PARAM'|'TIER_NOT_ALLOWED'|'BUDGET_EXCEEDED'|'GENERATE_FAILED',
  *        images: [{ fileID, label }], season, seasonLabel, dateKey, source: 'cloud' }
  * 说明：
  *   1. 按「当日 + 季节 + 性别 + 年龄段 + 风格」缓存到集合 seasonal_images，全用户共享同一天同组合的图片，避免重复计费；
  *   2. 生成的临时 URL 一律下载后转存云开发存储，返回 cloud fileID，绕开小程序图片域名白名单；
- *   3. 会员档位决定风格组与张数（普通 1 / VIP 3 / SVIP 5），内容和数量都随档位变化；
+ *   3. 会员档位决定张数与风格组：普通版不支持生图（0 张，前端展示本地示例并引导升级）、VIP 1 张（通勤简约）、
+ *      SVIP 2 张（高定质感 + 配饰细节）；
  *   4. 月度预算熔断：环境变量 SEASONAL_BUDGET_YUAN（默认 30 元）、SEASONAL_COST_PER_IMAGE（默认 0.2 元/张），
  *      超预算返回 BUDGET_EXCEEDED，前端使用本地图组兜底。
  *   5. 需在云开发控制台创建集合：seasonal_images、seasonal_usage（权限：仅管理端可读写）。 */
@@ -41,11 +42,11 @@ const STYLE_LIB = {
   detail: { label: '配饰细节', desc: '重点呈现配饰搭配：包袋、墨镜、腰带、首饰与鞋履的呼应关系' }
 };
 
-/** 会员档位 → 风格组与张数（普通 1 / VIP 3 / SVIP 5，内容与数量双差异） */
+/** 会员档位 → 风格组与张数（普通不支持 / VIP 1 / SVIP 2，内容与数量双差异） */
 const TIER_STYLES = {
-  free: ['daily'],
-  vip: ['commute', 'street', 'smart'],
-  svip: ['couture', 'commute', 'street', 'smart', 'detail']
+  free: [],
+  vip: ['commute'],
+  svip: ['couture', 'detail']
 };
 
 /** 北京时间（云函数默认时区可能为 UTC，显式换算保证「今日」口径一致） */
@@ -193,6 +194,15 @@ exports.main = async (event = {}) => {
   const rawAge = Number(event.age);
   const age = Number.isFinite(rawAge) ? Math.min(99, Math.max(10, Math.round(rawAge))) : 30;
   const ageGroup = ageGroupOf(age);
+
+  // 普通版不支持 AI 生图：直接拒绝，避免无效调用与计费
+  if (tier === 'free') {
+    return {
+      code: 'TIER_NOT_ALLOWED',
+      images: [],
+      message: '普通版不支持 AI 当季图组，开通 VIP 后可查看'
+    };
+  }
 
   const d = beijingNow();
   const dateKey = dateKeyOf(d);
