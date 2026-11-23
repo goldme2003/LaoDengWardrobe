@@ -1,7 +1,9 @@
-/** 腾讯混元生图调用封装（v1.13.1 当季推荐图组）
+/** 腾讯混元生图调用封装（v1.13.2 当季推荐图组）
  * 密钥复用云函数环境变量 HUNYUAN_API_KEY（与 emptyGuide / outfitRecommend 一致）；
  * 模型：Hy-Image-3.5-Preview（`hy-image-v3.5-preview`），Chat/Messages 协议，同步流式返回图片 URL。
  * 接口：POST https://tokenhub.tencentmaas.com/v1/wand/hunyuan-image/v35-generation
+ * v1.13.2：上游可能返回 http:// 图片地址（官方样例即 http 的 TOB COS 桶），
+ * normalizeImageUrl 统一升级 https 后再下载，并兼容 data URI / b64_json 载荷。
  * 生成的图片由调用方下载并转存云开发存储，避免临时 URL 过期与小程序图片域名白名单限制。 */
 const https = require('https');
 const path = require('path');
@@ -91,7 +93,9 @@ function requestRaw(urlPath, apiKey, body, timeout) {
   });
 }
 
-/** 从响应（普通 JSON 或 SSE chunk）中递归查找图片 URL */
+/** 从响应（普通 JSON 或 SSE chunk）中递归查找图片载荷
+ * 文档结构：choices[0].delta = {"type":"image","image":{"url":"...", width, height,...}}
+ * 兜底兼容 b64_json 载荷（转 data URI），避免上游返回 base64 时解析失败。 */
 function findImageUrl(node, depth = 0) {
   if (!node || depth > 8) return null;
   if (Array.isArray(node)) {
@@ -104,11 +108,26 @@ function findImageUrl(node, depth = 0) {
   if (typeof node === 'object') {
     if (node.image && typeof node.image === 'object' && typeof node.image.url === 'string') return node.image.url;
     if (node.image_url && typeof node.image_url.url === 'string') return node.image_url.url;
+    if (typeof node.b64_json === 'string' && node.b64_json) return `data:image/png;base64,${node.b64_json}`;
     for (const key of Object.keys(node)) {
       const hit = findImageUrl(node[key], depth + 1);
       if (hit) return hit;
     }
   }
+  return null;
+}
+
+/** v1.13.2：归一化生成结果地址。
+ * 根因修复：v3.5-preview 上游返回的图片 URL 可能为 http://（官方文档样例即为
+ * http://hunyuan-image-result-tob-*.cos.ap-guangzhou.myqcloud.com/...），
+ * 此前 downloadImage 强制要求 https 导致 IMAGE_URL_NOT_HTTPS。
+ * COS 同域名支持 HTTPS，统一升级为 https；data URI 原样透传；其余视为无效。 */
+function normalizeImageUrl(url) {
+  const trimmed = String(url || '').trim();
+  if (!trimmed) return null;
+  if (/^data:image\//i.test(trimmed)) return trimmed;
+  if (/^http:\/\//i.test(trimmed)) return 'https://' + trimmed.slice(7);
+  if (/^https:\/\//i.test(trimmed)) return trimmed;
   return null;
 }
 
@@ -154,15 +173,16 @@ async function callHunyuanImage(prompt) {
     },
     GEN_TIMEOUT
   );
-  const url = parseImageResponse(raw);
+  const found = parseImageResponse(raw);
+  const url = normalizeImageUrl(found);
   if (!url) {
-    throw new Error('BAD_IMAGE_OUTPUT: ' + String(raw).slice(0, 300));
+    throw new Error('BAD_IMAGE_URL: ' + String(found || raw).slice(0, 120));
   }
   console.log(`[seasonalImages] ${MODEL} 生图成功，耗时 ${Date.now() - startedAt}ms`);
   return url;
 }
 
-/** 下载图片为 Buffer（最多跟随 3 次重定向，限制体积） */
+/** 下载图片为 Buffer（最多跟随 3 次重定向，限制体积；v1.13.2 支持 data URI 直接解码） */
 function downloadImage(url, redirects = 0) {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -172,8 +192,14 @@ function downloadImage(url, redirects = 0) {
       if (err) reject(err);
       else resolve(value);
     };
+    const dataMatch = /^data:image\/[a-z0-9.+-]+;base64,([A-Za-z0-9+/=]+)$/i.exec(String(url || ''));
+    if (dataMatch) {
+      finish(null, Buffer.from(dataMatch[1], 'base64'));
+      return;
+    }
     if (!/^https:\/\//i.test(url)) {
-      finish(new Error('IMAGE_URL_NOT_HTTPS'));
+      // v1.13.2：带上地址前缀便于云端日志定位（正常流程已在 normalizeImageUrl 升级为 https）
+      finish(new Error('IMAGE_URL_NOT_HTTPS: ' + String(url).slice(0, 80)));
       return;
     }
     const req = https.get(url, { timeout: DOWNLOAD_TIMEOUT }, (res) => {
@@ -210,4 +236,4 @@ function downloadImage(url, redirects = 0) {
   });
 }
 
-module.exports = { callHunyuanImage, downloadImage, MODEL };
+module.exports = { callHunyuanImage, downloadImage, findImageUrl, normalizeImageUrl, parseImageResponse, MODEL };

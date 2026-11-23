@@ -4,10 +4,12 @@
 | --- | --- |
 | 产品名称 | 老登衣柜 |
 | 目标平台 | 微信小程序 |
-| 文档版本 | v1.13.0 |
+| 文档版本 | v1.13.2 |
 | 日期 | 2026-11-23 |
-| 状态 | v1.13.1（2026-11-23 当季图组模型与档位调整）：在 v1.13.0 基础上，① 生图模型改为 Hy-Image-3.5-Preview（`hy-image-v3.5-preview`，Chat/Messages 流式接口）；② 档位调整为**普通版不生图（展示本地示例）**、VIP 1 张、SVIP 2 张，风格组随档位变化（VIP=通勤简约；SVIP=高定质感 + 配饰细节） |
+| 状态 | v1.13.2（2026-11-23 当季图组生图地址修复版）：在 v1.13.1 基础上修复 `IMAGE_URL_NOT_HTTPS`——v3.5-preview 上游返回的图片 URL 可能为 http://（官方 TOB COS 样例即 http），现统一升级为 https 后再下载，并兼容 data URI / b64_json 载荷 |
 
+
+**v1.13.2 修订摘要（2026-11-23，当季图组生图地址修复版）**：修复当季图组生成报 `IMAGE_URL_NOT_HTTPS` 导致图片不显示的问题。**根因**：Hy-Image-3.5-Preview 上游返回的图片地址可能为 `http://`（官方文档多轮编辑样例即为 `http://hunyuan-image-result-tob-*.cos.ap-guangzhou.myqcloud.com/...`），而下载函数此前强制要求 `https://`。**修复**：新增 `normalizeImageUrl` 归一化——`http://` 统一升级为 `https://`（COS 同域名支持 HTTPS）、data URI 透传、其余协议视为无效并在错误信息中携带地址前缀便于定位；`findImageUrl` 兜底兼容 `b64_json` 载荷（转 data URI 直接解码，不再走下载）；失败日志带地址前缀。本地已用官方样例（SSE 流式帧 + http 地址、单段 JSON、b64、data URI、非法协议）5 个用例验证通过。**版本按规则 z 位递增 1.13.1 → 1.13.2**（纯修复）。**部署要求**：需重新上传部署 `seasonalImages` 云函数。
 
 **v1.13.1 修订摘要（2026-11-23，当季图组模型与档位调整）**：① **生图模型更换**：由混元生图极速版 `hy-image-lite`（`/v1/api/image/lite`）改为 **Hy-Image-3.5-Preview**（`hy-image-v3.5-preview`），接口改为 Chat/Messages 协议的 `POST /v1/wand/hunyuan-image/v35-generation`，输出竖版 1024×1536，响应为 SSE 流式 chunk，云函数按行解析并提取 `image.url`，再下载转存云存储。② **档位额度调整（需求方 2026-11-23 确认）**：当季图组由 1/3/5 调整为**普通版 0 张（不生图，展示 1 张本地示例并引导开通 VIP）、VIP 1 张、SVIP 2 张**；风格组同步调整为 VIP=通勤简约、SVIP=高定质感 + 配饰细节；普通版请求云函数将返回 `TIER_NOT_ALLOWED`，前端不发起生图请求。**版本按规则 z 位递增 1.13.0 → 1.13.1**（调整现有功能，未新增功能）。**部署要求**：重新上传部署 `seasonalImages` 云函数；TokenHub 控制台需开通 Hy-Image-3.5-Preview；费用按该模型实际单价重新校准 `SEASONAL_COST_PER_IMAGE`。
 
