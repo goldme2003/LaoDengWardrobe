@@ -758,8 +758,18 @@ export const setCloudSync = async (enabled: boolean): Promise<boolean> => {
 
 /** ---------- 照片上传（设计方案 7） ---------- */
 
-const isLocalPath = (p: string): boolean =>
-  !!p && !p.startsWith('cloud://') && !p.startsWith('http://') && !p.startsWith('https://');
+/**
+ * 本地路径判定（v1.17.1 修复）：微信开发者工具 wx.chooseMedia 返回的临时文件形如
+ * http://tmp/xxx.jpg——http 前缀但属本地临时文件。旧逻辑按 http:// 前缀直接判为远程 URL，
+ * 导致开发者工具内照片从未上传云存储，快照里全是失效临时路径，云同步后另一端无图可显。
+ */
+const isLocalPath = (p: string): boolean => {
+  if (!p) return false;
+  if (p.startsWith('cloud://')) return false; // 已是云存储 fileID
+  if (/^https?:\/\/tmp\//i.test(p)) return true; // 开发者工具临时文件
+  if (p.startsWith('http://') || p.startsWith('https://')) return false; // 真远程 URL
+  return true; // wxfile:// 等本地路径
+};
 
 const getUploadMap = (): Record<string, string> => {
   try {

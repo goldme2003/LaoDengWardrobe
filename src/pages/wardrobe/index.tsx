@@ -22,6 +22,8 @@ import styles from './index.module.scss';
 
 /** 分组类型顺序（自定义类型排在预设之后） */
 const PLAN_TYPE_ORDER = ['上装', '外套', '裤装', '裙装', '连衣裙', '内衣', '家居服', '鞋履', '配饰', '其他'];
+// v1.17.1：备选套序号中文（超出后回落数字）
+const PLAN_SET_CN = ['一', '二', '三', '四', '五'];
 
 /** v1.4.3：小程序启动标记（由 app.tsx useLaunch 写入），首次进入首页时自动执行穿搭推荐 */
 const APP_LAUNCH_FLAG = 'ldw_app_launched';
@@ -71,6 +73,8 @@ const WardrobePage: React.FC = () => {
   const [weatherCity, setWeatherCity] = useState('');
   // v0.6：明日穿搭勾选模式
   const [planMode, setPlanMode] = useState(false);
+  // v1.17.1：手动勾选展开态（有备选套时默认收起，只展示备选套与已选衣物）
+  const [manualPick, setManualPick] = useState(false);
   // v0.7：手风琴分组收起状态（key = 类型名，true = 收起；不在表中 = 展开，默认全部展开）
   const [collapsedMap, setCollapsedMap] = useState<Record<string, boolean>>({});
   // v1.1：点击页内「切换衣橱」按钮弹出的衣橱切换弹层
@@ -363,6 +367,12 @@ const WardrobePage: React.FC = () => {
   );
 
   const itemMap = useMemo(() => new Map(currentItems.map((it) => [it.id, it])), [currentItems]);
+
+  // v1.17.1：已选衣物实体（明日穿搭页只展示选中的衣物，不再全衣橱打勾）
+  const planSelected = useMemo(
+    () => tomorrowIds.map((id) => itemMap.get(id)).filter((it): it is ClothingItem => !!it),
+    [tomorrowIds, itemMap]
+  );
   const cachedVMs = useMemo<OutfitVM[]>(
     () =>
       cachedEntries
@@ -974,7 +984,7 @@ const WardrobePage: React.FC = () => {
           <View className={styles.planEntryInfo}>
             <Text className={styles.planEntryTitle}>明日穿搭</Text>
             <Text className={styles.planEntryDesc}>
-              {tomorrowIds.length > 0 ? `已选 ${tomorrowIds.length} 件` : '从衣柜勾选明天要穿的衣物'}
+              {tomorrowIds.length > 0 ? `已选 ${tomorrowIds.length} 件` : '从今日备选套中挑选明天要穿的衣物'}
             </Text>
           </View>
           <Text className={styles.planEntryArrow}>›</Text>
@@ -987,10 +997,10 @@ const WardrobePage: React.FC = () => {
             <View className={styles.planBack} onClick={() => setPlanMode(false)}>
               <Text className={styles.planBackText}>‹ 返回</Text>
             </View>
-            <Text className={styles.planTitle}>🧳 明日穿搭（点击勾选）</Text>
+            <Text className={styles.planTitle}>🧳 明日穿搭</Text>
             <Text className={styles.planCount}>已选 {tomorrowIds.length} 件</Text>
           </View>
-          {/* v1.7.0：空衣橱进入勾选页时给出引导，避免整页空白 */}
+          {/* v1.7.0：空衣橱进入时给出引导，避免整页空白 */}
           {planGroups.length === 0 && (
             <EmptyState
               icon='🧳'
@@ -1000,33 +1010,109 @@ const WardrobePage: React.FC = () => {
               onAction={goAdd}
             />
           )}
-          {planGroups.map((g) => (
-            <View key={g.type} className={styles.planGroup}>
-              <Text className={styles.planGroupTitle}>{g.type}</Text>
-              <View className={styles.planGrid}>
-                {g.list.map((it) => {
-                  const selected = tomorrowIds.includes(it.id);
-                  return (
-                    <View
-                      key={it.id}
-                      className={`${styles.planItem} ${selected ? styles.planItemSelected : ''}`}
-                      onClick={() => toggleTomorrowItem(it.id)}
-                    >
-                      <Image className={styles.planPhoto} src={it.photos[0]} mode='aspectFill' />
-                      <Text className={styles.planName} numberOfLines={1}>
-                        {it.name}
+
+          {/* v1.17.1：今日备选套（首页推荐缓存）——整套点选应用，不再全衣橱打勾 */}
+          {planGroups.length > 0 && cachedVMs.length > 0 && (
+            <View className={styles.planSets}>
+              <Text className={styles.planSectionTitle}>今日备选套（点击整套应用）</Text>
+              {cachedVMs.map((vm, idx) => {
+                const active = vm.items.length > 0 && vm.items.every((it) => tomorrowIds.includes(it.id));
+                return (
+                  <View
+                    key={`${vm.scene}-${idx}`}
+                    className={`${styles.planSetCard} ${active ? styles.planSetCardActive : ''}`}
+                    onClick={() => {
+                      adoptTomorrowItems(vm.items.map((it) => it.id));
+                      Taro.showToast({ title: `已选第${PLAN_SET_CN[idx] || idx + 1}套为明日穿搭`, icon: 'success' });
+                    }}
+                  >
+                    <View className={styles.planSetHeader}>
+                      <Text className={styles.planSetTitle}>
+                        第{PLAN_SET_CN[idx] || idx + 1}套备选 · {vm.sceneLabel || '推荐搭配'}
                       </Text>
-                      {selected && (
-                        <View className={styles.planCheck}>
-                          <Text className={styles.planCheckText}>✓</Text>
-                        </View>
-                      )}
+                      {active && <Text className={styles.planSetCheck}>✓ 已选</Text>}
                     </View>
-                  );
-                })}
+                    <View className={styles.planGrid}>
+                      {vm.items.map((it) => (
+                        <View key={it.id} className={styles.planItem}>
+                          <Image className={styles.planPhoto} src={it.photos[0]} mode='aspectFill' />
+                          <Text className={styles.planName} numberOfLines={1}>
+                            {it.name}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {/* v1.17.1：已选衣物——只显示选中的衣物，点击取消 */}
+          {planSelected.length > 0 && (
+            <View className={styles.planSelBox}>
+              <Text className={styles.planSectionTitle}>已选衣物（{planSelected.length} 件，点击取消）</Text>
+              <View className={styles.planGrid}>
+                {planSelected.map((it) => (
+                  <View
+                    key={it.id}
+                    className={`${styles.planItem} ${styles.planItemSelected}`}
+                    onClick={() => toggleTomorrowItem(it.id)}
+                  >
+                    <Image className={styles.planPhoto} src={it.photos[0]} mode='aspectFill' />
+                    <Text className={styles.planName} numberOfLines={1}>
+                      {it.name}
+                    </Text>
+                    <View className={styles.planCheck}>
+                      <Text className={styles.planCheckText}>✓</Text>
+                    </View>
+                  </View>
+                ))}
               </View>
             </View>
-          ))}
+          )}
+
+          {/* v1.17.1：手动勾选折叠入口（无备选套时默认展开兜底，保留逐件勾选能力） */}
+          {planGroups.length > 0 && (manualPick || cachedVMs.length === 0) ? (
+            <>
+              <View className={styles.planManualToggle} onClick={() => setManualPick(false)}>
+                <Text className={styles.planManualToggleText}>收起手动勾选 ▴</Text>
+              </View>
+              {planGroups.map((g) => (
+                <View key={g.type} className={styles.planGroup}>
+                  <Text className={styles.planGroupTitle}>{g.type}</Text>
+                  <View className={styles.planGrid}>
+                    {g.list.map((it) => {
+                      const selected = tomorrowIds.includes(it.id);
+                      return (
+                        <View
+                          key={it.id}
+                          className={`${styles.planItem} ${selected ? styles.planItemSelected : ''}`}
+                          onClick={() => toggleTomorrowItem(it.id)}
+                        >
+                          <Image className={styles.planPhoto} src={it.photos[0]} mode='aspectFill' />
+                          <Text className={styles.planName} numberOfLines={1}>
+                            {it.name}
+                          </Text>
+                          {selected && (
+                            <View className={styles.planCheck}>
+                              <Text className={styles.planCheckText}>✓</Text>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
+            </>
+          ) : (
+            planGroups.length > 0 && (
+              <View className={styles.planManualToggle} onClick={() => setManualPick(true)}>
+                <Text className={styles.planManualToggleText}>没有合适的备选？手动勾选衣物 ▾</Text>
+              </View>
+            )
+          )}
           <View className={styles.planDone} onClick={() => setPlanMode(false)}>
             <Text className={styles.planDoneText}>完成（已选 {tomorrowIds.length} 件）</Text>
           </View>
