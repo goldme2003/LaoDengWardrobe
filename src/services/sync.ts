@@ -170,6 +170,7 @@ export const buildSnapshotData = (s: LdwData, wardrobeIds?: string[]): SnapshotD
 /**
  * 实体合并（设计方案 5.5）：在内存中完成合并计算，结果经 applySyncMerge 一次 commit 写入（原子化）。
  * 规则：仅本地 → 保留；仅云端 → 写入；同 id → updatedAt||createdAt 新者胜；
+ * v1.15.2：同名不同 id 的衣橱去重——空的一方并入有数据的一方，双方均有数据则按 id 并存；
  * customOptions 按 dimension+value 并集；customScenes/favoriteBrands 字符串并集；
  * counters 取 max（计数器单调递增）；bodyProfiles 本地优先（无时间戳字段）。
  */
@@ -177,10 +178,42 @@ export const mergeSnapshot = (
   local: LdwData,
   remote: SnapshotData
 ): { patch: Partial<LdwData>; stats: { wardrobes: number; items: number; diary: number; tryout: number } } => {
-  const wardrobes = [...local.wardrobes];
+  // v1.15.2：同名衣橱去重——新设备/清缓存后本地自动创建的默认衣橱（无数据）与云端同名衣橱
+  //（有数据）按 id 合并时会产生两个同名衣橱（绕过 addWardrobe 重名校验）。
+  // 规则：同名不同 id 时，保留有数据的一方；双方均有数据则保守处理（按 id 并存），由用户手动处理。
+  const localEntityCount = (wid: string): number =>
+    local.items.filter((it) => it.wardrobeId === wid).length +
+    local.diaryEntries.filter((d) => d.wardrobeId === wid).length +
+    local.tryoutItems.filter((t) => t.wardrobeId === wid).length;
+  const remoteEntityCount = (wid: string): number =>
+    remote.items.filter((it) => it.wardrobeId === wid).length +
+    remote.diaryEntries.filter((d) => d.wardrobeId === wid).length +
+    remote.tryoutItems.filter((t) => t.wardrobeId === wid).length;
+
+  /** 本地待丢弃的空同名衣橱 id → 云端保留衣橱 id */
+  const adoptMap = new Map<string, string>();
+  /** 云端待跳过的空同名衣橱 id（不写入本地，随下次 push 全量覆盖自然清理） */
+  const skipRemoteIds = new Set<string>();
+  remote.wardrobes.forEach((rw) => {
+    const lw = local.wardrobes.find((w) => w.id !== rw.id && w.name === rw.name);
+    if (!lw) return;
+    const lc = localEntityCount(lw.id);
+    const rc = remoteEntityCount(rw.id);
+    if (lc === 0 && rc > 0) {
+      adoptMap.set(lw.id, rw.id);
+    } else if (rc === 0 && lc > 0) {
+      skipRemoteIds.add(rw.id);
+    }
+  });
+  if (adoptMap.size > 0 || skipRemoteIds.size > 0) {
+    console.info('[Sync] 同名衣橱去重, 本地空衣橱并入云端 =', adoptMap.size, '云端空衣橱跳过 =', skipRemoteIds.size);
+  }
+
+  const wardrobes = local.wardrobes.filter((w) => !adoptMap.has(w.id));
   const wardrobeMap = new Map(wardrobes.map((w) => [w.id, w]));
   let wardrobeWins = 0;
   remote.wardrobes.forEach((rw) => {
+    if (skipRemoteIds.has(rw.id)) return;
     const lw = wardrobeMap.get(rw.id);
     if (!lw) {
       wardrobes.push(rw);
@@ -268,18 +301,42 @@ export const mergeSnapshot = (
   Object.entries(remote.counters || {}).forEach(([k, v]) => {
     counters[k] = Math.max(counters[k] || 0, v);
   });
+  // v1.15.2：被丢弃衣橱的编号计数器迁移到保留衣橱（编号不回收，避免沿用旧计数被重置）
+  adoptMap.forEach((keep, dropped) => {
+    Object.entries(counters).forEach(([k, v]) => {
+      if (k.startsWith(`${dropped}__`)) {
+        const nk = `${keep}__${k.slice(dropped.length + 2)}`;
+        counters[nk] = Math.max(counters[nk] || 0, v);
+        delete counters[k];
+      }
+    });
+  });
 
   // 身体数据本地优先（无时间戳，设计方案 5.5 简化：仅云端存在的衣橱写入）
   const bodyProfiles = { ...local.bodyProfiles };
   Object.entries(remote.bodyProfiles || {}).forEach(([wid, bp]) => {
     if (!bodyProfiles[wid]) bodyProfiles[wid] = bp;
   });
+  // v1.15.2：被丢弃衣橱的身体数据迁移到保留衣橱
+  adoptMap.forEach((keep, dropped) => {
+    if (bodyProfiles[dropped]) {
+      if (!bodyProfiles[keep]) bodyProfiles[keep] = bodyProfiles[dropped];
+      delete bodyProfiles[dropped];
+    }
+  });
 
-  // 当前衣橱：本地选择优先；本地值失效时回落
+  // 当前衣橱：本地选择优先；本地值失效时回落（被丢弃衣橱跟随迁移到云端保留衣橱）
   const mergedIds = wardrobes.map((w) => w.id);
-  const currentWardrobeId = mergedIds.includes(local.currentWardrobeId)
-    ? local.currentWardrobeId
+  const preferredCurrent = adoptMap.get(local.currentWardrobeId) || local.currentWardrobeId;
+  const currentWardrobeId = mergedIds.includes(preferredCurrent)
+    ? preferredCurrent
     : mergedIds[0] || local.currentWardrobeId;
+
+  // v1.15.2：同步范围同步重映射（丢弃 id → 保留 id），避免合并结果不在同步范围内被下次 push 覆盖丢失
+  const patchSync: Partial<LdwData> = {};
+  if (adoptMap.size > 0 && local.syncWardrobeIds) {
+    patchSync.syncWardrobeIds = local.syncWardrobeIds.map((id) => adoptMap.get(id) || id);
+  }
 
   return {
     patch: {
@@ -292,7 +349,8 @@ export const mergeSnapshot = (
       favoriteBrands,
       counters,
       bodyProfiles,
-      currentWardrobeId
+      currentWardrobeId,
+      ...patchSync
     },
     stats: {
       wardrobes: wardrobeWins,
