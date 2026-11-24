@@ -101,6 +101,7 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onSho
   const isFree = quota <= 0;
   const shown = Math.max(0, quota); // 每日可生成张数（0/1/2）
   const exhausted = viewed >= shown;
+  const genderLabel = gender === 'female' ? '女士' : '男士';
 
   const [slides, setSlides] = useState<SeasonalImage[]>([]);
   const [genLoading, setGenLoading] = useState(false);
