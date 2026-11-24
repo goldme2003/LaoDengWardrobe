@@ -11,7 +11,7 @@ import RecommendCard, { OutfitVM } from '@/components/RecommendCard';
 import SeasonalCard from '@/components/SeasonalCard';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
 import { getWeather, cityFromLocation } from '@/services/weather';
-import { getEmptyGuide, EmptyGuideResult } from '@/services/emptyGuide';
+import { getEmptyGuide } from '@/services/emptyGuide';
 import { buildOutfits, SCENE_OPTIONS, SceneId, SceneOption, RecommendOutfit } from '@/services/recommend';
 import { requestOutfitRecommend, composeAiReason } from '@/services/outfitRecommend';
 import { DEFAULT_CITY } from '@/data/mockWeather';
@@ -77,9 +77,6 @@ const WardrobePage: React.FC = () => {
   const [switcherOpen, setSwitcherOpen] = useState(false);
   // v1.1：侧边标签栏选中类型（随滚动联动/手风琴展开收起同步更新）
   const [activeType, setActiveType] = useState('');
-  // v1.2.1：空衣橱专属引导文案（云函数按性别/年龄动态生成，失败用兜底）
-  // v1.4.1：附带来源（hunyuan/fallback），界面用绿/红角标区分，便于调试
-  const [emptyGuide, setEmptyGuide] = useState<EmptyGuideResult | null>(null);
   // v1.4.1：搭配场景（仅预设选项，不支持自由输入）
   const [scene, setScene] = useState<SceneId>('all');
   // v1.6.1：出差模式
@@ -441,6 +438,66 @@ const WardrobePage: React.FC = () => {
     }
   }, [currentWardrobeId]);
 
+  // ===== v1.16.0：空衣橱明日穿搭建议——按衣橱主人性别/年龄（结合明日天气）生成，
+  // 每次生成消耗 1 次当日推荐额度（itemIds 为空的缓存条目，计入「今日 x/y 套」） =====
+  const adviceEntries = useMemo(() => cachedEntries.filter((e) => e.itemIds.length === 0), [cachedEntries]);
+  const latestAdvice = adviceEntries.length > 0 ? adviceEntries[adviceEntries.length - 1] : null;
+  const adviceLeft = outfitQuota - cachedEntries.length;
+  const [adviceLoading, setAdviceLoading] = useState(false);
+  const adviceGender = currentWardrobe?.gender;
+  const adviceAge = currentWardrobe?.age ?? null;
+
+  const genEmptyAdvice = useCallback(async () => {
+    if (adviceLoading) return;
+    if (cachedEntries.length >= outfitQuota) {
+      // 额度用尽：与场景切换同口径提示（SVIP 提示明日再来，其余引导升级）
+      if (memberTier === 'svip') {
+        Taro.showToast({ title: `今日 ${outfitQuota} 套已生成完毕，明天再来看新搭配`, icon: 'none' });
+      } else {
+        const upTier = memberTier === 'free' ? 'VIP' : 'SVIP';
+        const upQuota = tierOf(memberTier === 'free' ? 'vip' : 'svip').dailyOutfits;
+        Taro.showModal({
+          title: '今日推荐已达上限',
+          content: `当前等级每日可生成 ${outfitQuota} 套明日推荐，今日额度已用完。升级 ${upTier} 每日可生成 ${upQuota} 套。`,
+          confirmText: '去升级',
+          success: (r) => {
+            if (r.confirm) goMember();
+          }
+        });
+      }
+      return;
+    }
+    setAdviceLoading(true);
+    try {
+      // 天气失败时传 null，getEmptyGuide 走无天气上下文流程，仍按性别/年龄生成
+      const res = await getEmptyGuide(adviceGender, adviceAge, weatherFailed ? null : weather);
+      appendDailyOutfit(currentWardrobeId, {
+        scene: 'all',
+        sceneLabel: '穿搭建议',
+        reason: res.tip,
+        itemIds: [],
+        source: res.source
+      });
+      jumpToLatest();
+      console.info(`[Wardrobe] 空衣橱建议已生成（消耗 1 次推荐）, 来源 = ${res.source}`);
+    } finally {
+      setAdviceLoading(false);
+    }
+  }, [
+    adviceLoading,
+    cachedEntries.length,
+    outfitQuota,
+    memberTier,
+    goMember,
+    adviceGender,
+    adviceAge,
+    weather,
+    weatherFailed,
+    appendDailyOutfit,
+    currentWardrobeId,
+    jumpToLatest
+  ]);
+
   const generateOutfit = useCallback(
     async (excludeIds: string[] = [], sceneOverride?: SceneId) => {
       if (!weather || weatherFailed || weatherStale || currentItems.length === 0) return;
@@ -672,33 +729,8 @@ const WardrobePage: React.FC = () => {
     }
   });
 
-  // v1.2.1：空衣橱时加载专属引导文案（性别/年龄取自当前衣橱主人，PRD 9.1.2）
-  // v1.4.0（C 模块天气增强）：天气加载完成后再请求引导，传入当前天气生成天气适配建议；
-  // 天气失败（weatherFailed）时降级为无天气上下文，引导照常展示
-  const emptyGender = currentWardrobe?.gender;
-  const emptyAge = currentWardrobe?.age ?? null;
-  const weatherResolved = weather !== null || weatherFailed;
-  useEffect(() => {
-    if (currentItems.length > 0 || isFiltering) {
-      setEmptyGuide(null);
-      return;
-    }
-    if (!weatherResolved || weatherStale) return; // 等天气首次加载完成（成功或失败）再取建议；v1.8.0（F-18）：城市切换重载期间不基于旧城市天气取建议
-    let alive = true;
-    getEmptyGuide(emptyGender, emptyAge, weather).then((res) => {
-      if (alive) setEmptyGuide(res);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [currentItems.length, isFiltering, emptyGender, emptyAge, weatherResolved, weatherStale, weather]);
-
-  // v1.7.0：空衣橱时推荐卡默认展示天气建议——复用 C 模块空衣橱引导
-  // （云函数按性别/年龄/明日天气生成 → hunyuan 绿标；本地兜底 → fallback 红标）
-  const emptyAdvice = useMemo(() => {
-    if (currentItems.length > 0 || !emptyGuide) return null;
-    return { text: emptyGuide.tip, source: emptyGuide.source };
-  }, [currentItems.length, emptyGuide]);
+  // v1.16.0：空衣橱建议改为「点击生成 + 消耗当日推荐额度」（原自动加载的 emptyGuide 已移除，
+  // 生成逻辑见上方 genEmptyAdvice），避免未获用户确认即消耗推荐次数
 
   // v1.1：listGroups 的 ref 同步（滚动/定位回调中读取，避免闭包过期）
   const listGroupsRef = useRef(listGroups);
@@ -877,16 +909,31 @@ const WardrobePage: React.FC = () => {
 
       {/* v1.4.3：推荐卡片移至天气卡片下方（筛选/明日穿搭勾选模式下不展示）
           v1.7.0：卡片默认展示——空衣橱时进入建议模式，显示按天气生成的着装建议（不再整卡隐藏）
-          v1.10.0：当地模式展示今日缓存的 1/2/5 套（左右滑动），套数用尽不再生成 */}
+          v1.10.0：当地模式展示今日缓存的 1/2/5 套（左右滑动），套数用尽不再生成
+          v1.16.0：空衣橱改为点击生成建议（按性别/年龄/明日天气，消耗 1 次推荐）+ 添加衣物引导 */}
       {!planMode && !isFiltering && (
         <RecommendCard
           outfits={cardOutfits}
-          advice={cardOutfits.length === 0 ? emptyAdvice : null}
+          advice={
+            currentItems.length === 0 && latestAdvice
+              ? { text: latestAdvice.reason, source: latestAdvice.source }
+              : null
+          }
+          adviceAction={
+            currentItems.length === 0
+              ? {
+                  canGenerate: adviceLeft > 0,
+                  loading: adviceLoading,
+                  onGenerate: genEmptyAdvice,
+                  onAddClothes: goAdd
+                }
+              : null
+          }
           scenes={sceneOptions}
           scene={scene}
           onSelectScene={handleSelectScene}
           adopted={outfitAdopted}
-          loading={mode === 'trip' ? tripLoading : genLoading}
+          loading={mode === 'trip' ? tripLoading : genLoading || adviceLoading}
           loadingHint={mode === 'trip' ? '正在生成出差穿搭，请稍候…' : genHint}
           canShuffle={mode === 'trip' || !quotaReached}
           used={mode === 'trip' ? 0 : cachedEntries.length}

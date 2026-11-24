@@ -25,6 +25,13 @@ interface Props {
   outfits: OutfitVM[];
   /** v1.7.0：空衣橱时的天气推荐（outfits 为空时展示，同样区分云端/兜底来源角标） */
   advice?: RecommendAdvice | null;
+  /** v1.16.0：空衣橱建议模式操作——生成建议（消耗当日推荐额度）与添加衣物引导；null = 非空衣橱场景 */
+  adviceAction?: {
+    canGenerate: boolean;
+    loading: boolean;
+    onGenerate: () => void;
+    onAddClothes: () => void;
+  } | null;
   /** 搭配场景（v1.4.1 预设；v1.12.0 含自定义场景） */
   scenes: SceneOption[];
   scene: SceneId;
@@ -64,6 +71,7 @@ interface Props {
 const RecommendCard: React.FC<Props> = ({
   outfits,
   advice,
+  adviceAction,
   scenes,
   scene,
   onSelectScene,
@@ -94,8 +102,8 @@ const RecommendCard: React.FC<Props> = ({
   const current = outfits[Math.min(idx, Math.max(outfits.length - 1, 0))];
   // 来源角标：仅云端生成时显示「混元生成」（v1.8.1：兜底方案不再显示角标）
   const tagSource = current ? current.source : isAdvice ? advice!.source : undefined;
-  // 无搭配也无建议时（如天气尚在加载 / 首套生成中）统一展示生成中，保证卡片默认可见
-  const showLoading = loading || (outfits.length === 0 && !advice);
+  // 无搭配也无建议时统一展示生成中；v1.16.0：空衣橱建议模式有操作入口时不强制 loading
+  const showLoading = loading || (outfits.length === 0 && !advice && !adviceAction);
 
   const confirmAddScene = () => {
     if (!onAddScene) return;
@@ -249,10 +257,41 @@ const RecommendCard: React.FC<Props> = ({
         </>
       ) : (
         <>
-          {/* v1.7.0：空衣橱建议模式——只展示按天气生成的建议文案 + 添加衣物引导 */}
+          {/* v1.7.0：空衣橱建议模式；v1.16.0：生成建议消耗当日推荐额度 + 添加衣物引导 */}
           <View className={styles.adviceHint}>
-            <Text className={styles.adviceHintText}>添加衣物后，将按你的衣橱实况生成可一键采纳的专属搭配</Text>
+            <Text className={styles.adviceHintText}>
+              {isAdvice
+                ? '以上建议按你的性别、年龄与明日天气生成。添加衣物后，可获得可一键采纳的专属搭配'
+                : '衣橱还是空的～可先生成一份穿搭建议作参考，也可以直接添加衣物'}
+            </Text>
           </View>
+          {adviceAction && (
+            <View className={styles.adviceActions}>
+              {isAdvice ? (
+                <View className={styles.adoptBtn} onClick={adviceAction.onAddClothes}>
+                  <Text className={styles.adoptText}>去添加衣物</Text>
+                </View>
+              ) : (
+                <>
+                  <View
+                    className={`${styles.adoptBtn} ${!adviceAction.canGenerate ? styles.shuffleBtnDisabled : ''}`}
+                    onClick={adviceAction.canGenerate && !adviceAction.loading ? adviceAction.onGenerate : undefined}
+                  >
+                    <Text className={styles.adoptText}>
+                      {adviceAction.loading
+                        ? '建议生成中…'
+                        : adviceAction.canGenerate
+                          ? '生成穿搭建议'
+                          : '今日次数已用完'}
+                    </Text>
+                  </View>
+                  <View className={styles.shuffleBtn} onClick={adviceAction.onAddClothes}>
+                    <Text className={styles.shuffleText}>添加衣物</Text>
+                  </View>
+                </>
+              )}
+            </View>
+          )}
         </>
       )}
     </View>

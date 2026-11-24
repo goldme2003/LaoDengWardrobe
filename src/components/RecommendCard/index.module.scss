@@ -225,6 +225,18 @@
   background: var(--bg-secondary, #f5f2ee);
 }
 
+/* v1.16.0：空衣橱建议模式操作行（生成建议消耗推荐额度 / 添加衣物） */
+.adviceActions {
+  display: flex;
+  gap: $spacing-sm;
+  margin-top: $spacing-sm;
+
+  .adoptBtn,
+  .shuffleBtn {
+    flex: 1;
+  }
+}
+
 .adviceHintText {
   font-size: $font-size-xs;
   color: $color-text-tertiary;

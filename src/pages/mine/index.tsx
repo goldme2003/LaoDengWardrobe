@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, Switch } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
@@ -8,10 +8,7 @@ import {
   useSyncStore,
   setCloudSync,
   syncNow,
-  deleteCloudData,
-  resolveConflictUseRemote,
-  resolveConflictKeepLocal,
-  deferConflict
+  deleteCloudData
 } from '@/services/sync';
 import { exportBackup } from '@/services/exportBackup';
 import { BodyProfile } from '@/types';
@@ -62,10 +59,8 @@ const MinePage: React.FC = () => {
   const syncStatus = useSyncStore((s) => s.status);
   const syncErrorMsg = useSyncStore((s) => s.errorMsg);
   const syncOpenid = useSyncStore((s) => s.openid);
-  const conflict = useSyncStore((s) => s.conflict);
   const lastSyncedAt = useSyncStore((s) => s.lastSyncedAt);
   const hasRemote = useSyncStore((s) => s.hasRemote);
-  const [conflictOpen, setConflictOpen] = useState(false);
 
   const pad2 = (n: number) => String(n).padStart(2, '0');
   // v1.15.1：登录账号展示（openid 前 8 位脱敏），让用户确认微信账号已登录
@@ -88,8 +83,6 @@ const MinePage: React.FC = () => {
         return { dot: '#e6a23c', text: '有变更待上行（稍后自动同步）' };
       case 'ready':
         return { dot: '#67c23a', text: time ? `已同步 ${time}` : '已连接云端' };
-      case 'conflict':
-        return { dot: '#c0392b', text: '数据冲突待处理，本地功能不受影响' };
       case 'error':
         return { dot: '#c0392b', text: `云端未连接：${syncErrorMsg || '网络异常'}（可点「立即同步」重试）` };
       default:
@@ -104,7 +97,23 @@ const MinePage: React.FC = () => {
     }
   };
 
+  // v1.16.0：立即同步——普通版提示升级（此前误报「同步未完成」）；VIP/SVIP 未开开关时给出指引
   const handleSyncNow = async () => {
+    if (tierOf(memberTier).cloudSync !== 'cloud') {
+      Taro.showModal({
+        title: '云同步为会员权益',
+        content: '普通版不含云同步。升级 VIP/SVIP 后，可将衣橱/衣物/日记同步到云端，换设备不丢数据。',
+        confirmText: '去升级',
+        success: (r) => {
+          if (r.confirm) goMember();
+        }
+      });
+      return;
+    }
+    if (!cloudSyncEnabled) {
+      Taro.showToast({ title: '请先打开上方「云同步」开关', icon: 'none' });
+      return;
+    }
     Taro.showLoading({ title: '同步中…', mask: true });
     const ok = await syncNow();
     Taro.hideLoading();
@@ -134,25 +143,7 @@ const MinePage: React.FC = () => {
     });
   };
 
-  // 快照冲突三选一（设计方案 6.3）
-  const handleConflictChoice = () => {
-    Taro.showActionSheet({
-      itemList: ['使用云端版本', '保留本地版本', '稍后处理'],
-      success: async (res) => {
-        if (res.tapIndex === 0) {
-          Taro.showLoading({ title: '合并云端数据…', mask: true });
-          await resolveConflictUseRemote();
-          Taro.hideLoading();
-        } else if (res.tapIndex === 1) {
-          Taro.showLoading({ title: '上传本地数据…', mask: true });
-          await resolveConflictKeepLocal();
-          Taro.hideLoading();
-        } else {
-          deferConflict();
-        }
-      }
-    });
-  };
+  // v1.16.0：冲突策略改为「云端覆盖本地」——冲突在同步层自动解决，不再提供三选一面板
 
   // VIP 同步衣橱多选（VIP ≤2；SVIP 全部，不展示选择）
   const maxSync = tierOf(memberTier).maxSyncWardrobes;
@@ -330,22 +321,6 @@ const MinePage: React.FC = () => {
           </View>
         )}
 
-        {/* 快照冲突面板（三选一；设计方案 6.3） */}
-        {conflict && conflictOpen && (
-          <View className={styles.conflictBox}>
-            <Text className={styles.conflictTitle}>数据已在其他设备更新</Text>
-            <Text className={styles.conflictMeta}>
-              本地版本 {conflict.localVersion} · 云端版本 {conflict.remoteVersion}
-              {conflict.createdAt ? ` · 产生于 ${pad2(new Date(conflict.createdAt).getHours())}:${pad2(new Date(conflict.createdAt).getMinutes())}` : ''}
-            </Text>
-            <View className={styles.conflictBtnRow}>
-              <View className={styles.syncActionBtn} onClick={handleConflictChoice}>
-                <Text>处理冲突</Text>
-              </View>
-            </View>
-          </View>
-        )}
-
         {/* 操作行 */}
         <View className={styles.syncActions}>
           <View className={styles.syncActionBtn} onClick={handleSyncNow}>
@@ -354,11 +329,6 @@ const MinePage: React.FC = () => {
           <View className={styles.syncActionBtn} onClick={handleExport}>
             <Text>导出备份</Text>
           </View>
-          {conflict && !conflictOpen && (
-            <View className={styles.syncActionBtn} onClick={() => setConflictOpen(true)}>
-              <Text>冲突记录</Text>
-            </View>
-          )}
           {hasRemote && (
             <View className={[styles.syncActionBtn, styles.syncActionBtnDanger].join(' ')} onClick={handleDeleteCloud}>
               <Text>删除云端数据</Text>

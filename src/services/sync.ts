@@ -5,9 +5,9 @@
  *   3. 实体合并（设计方案 5.5：按 id 合并、updatedAt 新者胜、计数器取 max、集合取并集、合并原子化）；
  *   4. 同步范围裁剪（4.4：所选衣橱 + 衣物/日记/备选/身体数据/计数器 + 全局自定义项/品牌/场景；
  *      明日穿搭勾选、推荐缓存、推荐产物、城市、会员用量不上云）；
- *   5. 3s 防抖上行（commit 打脏后自动触发，冲突待处理时暂停）；
+ *   5. 3s 防抖上行（commit 打脏后自动触发）；
  *   6. 照片上传（仅衣物/日记照片，分批 5 张、路径去重、容量按档位约束、fileID 回填不打脏）；
- *   7. 快照冲突三选一（使用云端 / 保留本地 / 稍后处理）。
+ *   7. 快照冲突策略（v1.16.0，需求方确认）：如遇冲突，云端覆盖本地——同步范围自动以云端为准，不再三选一。
  * 仅微信端可用（CLOUD_READY）；H5 端所有入口静默返回，不阻塞本地功能。
  * 云同步开关默认关闭：开启后才发起任何云端数据请求（登录本身除外，仅返回身份与档位）。 */
 import Taro from '@tarojs/taro';
@@ -34,17 +34,7 @@ export type SyncStatus =
   | 'ready' // 已同步（无待上行变更）
   | 'pending' // 有变更待上行（防抖/重试中）
   | 'syncing' // 同步中
-  | 'conflict' // 冲突待用户选择
-  | 'error'; // 登录或同步失败（可重试）
-
-/** 快照冲突信息（快照级，三选一） */
-export interface SnapshotConflict {
-  localData: SnapshotData;
-  remoteData: SnapshotData | null;
-  localVersion: number;
-  remoteVersion: number;
-  createdAt: number;
-}
+  | 'error'; // 登录或同步失败（可重试；v1.16.0 起冲突自动以云端覆盖本地，不再有待处理冲突态）
 
 /** 云端快照数据结构（同步范围，见设计方案 4.4；与服务端 wardrobe_snapshots.data 一致） */
 export interface SnapshotData {
@@ -73,7 +63,6 @@ interface SyncState {
   hasRemote: boolean;
   lastSyncedAt: number;
   errorMsg: string;
-  conflict: SnapshotConflict | null;
 }
 
 export const useSyncStore = create<SyncState>(() => ({
@@ -85,8 +74,7 @@ export const useSyncStore = create<SyncState>(() => ({
   photoBytes: 0,
   hasRemote: false,
   lastSyncedAt: 0,
-  errorMsg: '',
-  conflict: null
+  errorMsg: ''
 }));
 
 const setSyncState = (patch: Partial<SyncState>) => useSyncStore.setState(patch);
@@ -170,7 +158,9 @@ export const buildSnapshotData = (s: LdwData, wardrobeIds?: string[]): SnapshotD
 /**
  * 实体合并（设计方案 5.5）：在内存中完成合并计算，结果经 applySyncMerge 一次 commit 写入（原子化）。
  * 规则：仅本地 → 保留；仅云端 → 写入；同 id → updatedAt||createdAt 新者胜；
- * v1.15.2：同名不同 id 的衣橱去重——空的一方并入有数据的一方，双方均有数据则按 id 并存；
+ * v1.16.0：同名不同 id 的衣橱一律并入保留方，消除重复衣橱——
+ *   本地空 → 采用云端 id；云端空 → 跳过云端衣橱；双方均有数据 → 云端覆盖本地（需求方确认）：
+ *   采用云端衣橱 id，本地实体 wardrobeId 重映射到云端 id 后与云端实体按 id 合并去重；
  * customOptions 按 dimension+value 并集；customScenes/favoriteBrands 字符串并集；
  * counters 取 max（计数器单调递增）；bodyProfiles 本地优先（无时间戳字段）。
  */
@@ -178,9 +168,7 @@ export const mergeSnapshot = (
   local: LdwData,
   remote: SnapshotData
 ): { patch: Partial<LdwData>; stats: { wardrobes: number; items: number; diary: number; tryout: number } } => {
-  // v1.15.2：同名衣橱去重——新设备/清缓存后本地自动创建的默认衣橱（无数据）与云端同名衣橱
-  //（有数据）按 id 合并时会产生两个同名衣橱（绕过 addWardrobe 重名校验）。
-  // 规则：同名不同 id 时，保留有数据的一方；双方均有数据则保守处理（按 id 并存），由用户手动处理。
+  // 同名衣橱去重（v1.16.0：不再「双方均有数据则并存」——那是重复衣橱反复出现的根源）
   const localEntityCount = (wid: string): number =>
     local.items.filter((it) => it.wardrobeId === wid).length +
     local.diaryEntries.filter((d) => d.wardrobeId === wid).length +
@@ -190,7 +178,7 @@ export const mergeSnapshot = (
     remote.diaryEntries.filter((d) => d.wardrobeId === wid).length +
     remote.tryoutItems.filter((t) => t.wardrobeId === wid).length;
 
-  /** 本地待丢弃的空同名衣橱 id → 云端保留衣橱 id */
+  /** 本地待丢弃的同名衣橱 id → 云端保留衣橱 id（含双方均有数据时的云端覆盖） */
   const adoptMap = new Map<string, string>();
   /** 云端待跳过的空同名衣橱 id（不写入本地，随下次 push 全量覆盖自然清理） */
   const skipRemoteIds = new Set<string>();
@@ -199,15 +187,23 @@ export const mergeSnapshot = (
     if (!lw) return;
     const lc = localEntityCount(lw.id);
     const rc = remoteEntityCount(rw.id);
-    if (lc === 0 && rc > 0) {
-      adoptMap.set(lw.id, rw.id);
-    } else if (rc === 0 && lc > 0) {
+    if (rc === 0 && lc > 0) {
       skipRemoteIds.add(rw.id);
+    } else {
+      // 本地空 → 并入云端；双方均有数据 → 云端覆盖本地（保留云端 id）
+      adoptMap.set(lw.id, rw.id);
     }
   });
   if (adoptMap.size > 0 || skipRemoteIds.size > 0) {
-    console.info('[Sync] 同名衣橱去重, 本地空衣橱并入云端 =', adoptMap.size, '云端空衣橱跳过 =', skipRemoteIds.size);
+    console.info('[Sync] 同名衣橱去重, 本地衣橱并入云端 =', adoptMap.size, '云端空衣橱跳过 =', skipRemoteIds.size);
   }
+
+  /** 本地实体重映射：被丢弃衣橱的实体 wardrobeId 改挂到云端保留衣橱（按 id 与云端实体去重合并） */
+  const remapWid = <T extends { wardrobeId: string }>(list: T[]): T[] =>
+    adoptMap.size === 0 ? list : list.map((e) => {
+      const keep = adoptMap.get(e.wardrobeId);
+      return keep ? { ...e, wardrobeId: keep } : e;
+    });
 
   const wardrobes = local.wardrobes.filter((w) => !adoptMap.has(w.id));
   const wardrobeMap = new Map(wardrobes.map((w) => [w.id, w]));
@@ -228,7 +224,7 @@ export const mergeSnapshot = (
     }
   });
 
-  const items = [...local.items];
+  const items = remapWid([...local.items]);
   const itemMap = new Map(items.map((it) => [it.id, it]));
   let itemWins = 0;
   remote.items.forEach((ri) => {
@@ -245,7 +241,7 @@ export const mergeSnapshot = (
     }
   });
 
-  const diary = [...local.diaryEntries];
+  const diary = remapWid([...local.diaryEntries]);
   const diaryMap = new Map(diary.map((d) => [d.id, d]));
   let diaryWins = 0;
   remote.diaryEntries.forEach((rd) => {
@@ -262,7 +258,7 @@ export const mergeSnapshot = (
     }
   });
 
-  const tryout = [...local.tryoutItems];
+  const tryout = remapWid([...local.tryoutItems]);
   const tryoutMap = new Map(tryout.map((t) => [t.id, t]));
   let tryoutWins = 0;
   remote.tryoutItems.forEach((rt) => {
@@ -481,6 +477,60 @@ const markSynced = (serverVersion: number) => {
   setSyncState({ lastSyncedAt: Date.now() });
 };
 
+/** 自定义选项按 dimension+value 去重合并（并集） */
+const optKey = (o: CustomOption): string => `${o.dimension}__${o.value}`;
+const unionOptions = (a: CustomOption[], b: CustomOption[]): CustomOption[] => {
+  const seen = new Set(a.map(optKey));
+  return [...a, ...b.filter((o) => !seen.has(optKey(o)))];
+};
+
+/**
+ * 云端覆盖本地（v1.16.0 冲突策略，需求方确认）：
+ * 同步范围内以云端快照为准整体替换；范围外（未选同步的衣橱）数据保留；
+ * 自定义项/场景/品牌为全局数据取并集，避免误删；版本游标对齐云端，不打脏。
+ * 云端无有效快照时返回 false（调用方回退为保留本地强制上行对齐）。
+ */
+const applyRemoteOverwrite = (remote: SnapshotData | null, remoteVersion: number): boolean => {
+  if (!remote || remote.wardrobes.length === 0) return false;
+  const s = useWardrobeStore.getState();
+  const ids = new Set(remote.wardrobeIds.length > 0 ? remote.wardrobeIds : remote.wardrobes.map((w) => w.id));
+  const counters: Record<string, number> = {};
+  Object.entries(s.counters || {}).forEach(([k, v]) => {
+    if (!ids.has(k.split('__')[0])) counters[k] = v; // 范围外计数器保留
+  });
+  Object.entries(remote.counters || {}).forEach(([k, v]) => {
+    counters[k] = v; // 同步范围内以云端为准
+  });
+  const remoteCurrent = remote.currentWardrobeId;
+  s.applySyncMerge({
+    wardrobes: [...s.wardrobes.filter((w) => !ids.has(w.id)), ...remote.wardrobes],
+    items: [...s.items.filter((it) => !ids.has(it.wardrobeId)), ...remote.items],
+    diaryEntries: [...s.diaryEntries.filter((d) => !ids.has(d.wardrobeId)), ...remote.diaryEntries],
+    tryoutItems: [...s.tryoutItems.filter((t) => !ids.has(t.wardrobeId)), ...remote.tryoutItems],
+    customOptions: unionOptions(s.customOptions || [], remote.customOptions),
+    customScenes: Array.from(new Set([...(s.customScenes || []), ...remote.customScenes])),
+    favoriteBrands: Array.from(new Set([...(s.favoriteBrands || []), ...remote.favoriteBrands])),
+    bodyProfiles: { ...s.bodyProfiles, ...remote.bodyProfiles },
+    counters,
+    currentWardrobeId: ids.has(s.currentWardrobeId)
+      ? s.currentWardrobeId
+      : remoteCurrent && ids.has(remoteCurrent)
+        ? remoteCurrent
+        : s.currentWardrobeId,
+    // 同步范围对齐云端（原范围外衣橱转仅本地，数据不删除）
+    syncWardrobeIds: remote.wardrobeIds.length > 0 ? remote.wardrobeIds : s.syncWardrobeIds
+  });
+  useWardrobeStore.getState().patchSyncMeta({
+    dataVersion: Math.max(useWardrobeStore.getState().syncMeta.dataVersion, remoteVersion),
+    lastSyncedVersion: remoteVersion,
+    dirty: false,
+    lastSyncedAt: Date.now()
+  });
+  setSyncState({ lastSyncedAt: Date.now() });
+  console.info('[Sync] 云端覆盖本地完成, 同步衣橱 =', ids.size, '衣物 =', remote.items.length, '云端版本 =', remoteVersion);
+  return true;
+};
+
 const pushSnapshot = async (force = false): Promise<boolean> => {
   const s = useWardrobeStore.getState();
   if (!s.syncMeta.dirty && !force) return true;
@@ -499,26 +549,23 @@ const pushSnapshot = async (force = false): Promise<boolean> => {
   const result = res.result as { code: string; message?: string } & Record<string, any>;
   if (result.code === 'OK') {
     markSynced(result.dataVersion || meta.dataVersion);
-    setSyncState({ status: 'ready', hasRemote: true, conflict: null });
+    setSyncState({ status: 'ready', hasRemote: true });
     console.info('[Sync] 上行成功, dataVersion =', result.dataVersion);
     return true;
   }
   if (result.code === 'CONFLICT') {
-    // 快照级冲突：写副本在服务端完成，客户端三选一（设计方案 6.3）
+    // v1.16.0：冲突策略改为「云端覆盖本地」（需求方确认）——自动采用云端版本，不再三选一
+    const remoteVersion = result.remoteVersion || 0;
     const remote = normalizeSnapshot(result.remoteData);
-    setSyncState({
-      status: 'conflict',
-      conflict: {
-        localData: data,
-        remoteData: remote,
-        localVersion: meta.dataVersion,
-        remoteVersion: result.remoteVersion || 0,
-        createdAt: Date.now()
-      },
-      errorMsg: ''
-    });
-    console.warn('[Sync] 上行冲突, remoteVersion =', result.remoteVersion);
-    return false;
+    console.warn('[Sync] 上行冲突, 云端覆盖本地, remoteVersion =', remoteVersion);
+    if (applyRemoteOverwrite(remote, remoteVersion)) {
+      setSyncState({ status: 'ready', hasRemote: true, errorMsg: '' });
+      Taro.showToast({ title: '检测到数据冲突，已采用云端数据', icon: 'none', duration: 2000 });
+      return true;
+    }
+    // 云端无有效快照（如刚清空云端）：无数据可覆盖，保留本地并强制上行对齐版本
+    useWardrobeStore.getState().patchSyncMeta({ lastSyncedVersion: remoteVersion });
+    return pushSnapshot(true);
   }
   throw new Error(result.message || '上行失败');
 };
@@ -567,7 +614,7 @@ export const syncOnce = async (): Promise<boolean> => {
     await pushSnapshot();
     retryCount = 0;
     syncing = false;
-    setSyncState({ status: useSyncStore.getState().status === 'conflict' ? 'conflict' : 'ready' });
+    setSyncState({ status: 'ready' });
     return true;
   } catch (e: any) {
     syncing = false;
@@ -587,7 +634,6 @@ export const schedulePush = (): void => {
     return;
   }
   if (!s.cloudSyncEnabled || !s.syncMeta.openid) return;
-  if (useSyncStore.getState().status === 'conflict') return;
   if (pushTimer) clearTimeout(pushTimer);
   setSyncState({ status: 'pending' });
   pushTimer = setTimeout(() => {
@@ -671,38 +717,9 @@ export const setCloudSync = async (enabled: boolean): Promise<boolean> => {
       clearTimeout(pushTimer);
       pushTimer = null;
     }
-    setSyncState({ status: 'disabled', conflict: null });
+    setSyncState({ status: 'disabled' });
   }
   return true;
-};
-
-/** ---------- 快照冲突三选一（设计方案 6.3） ---------- */
-
-/** 冲突选择：使用云端版本（先合并云端数据，本地独有数据保留并随新版本上行） */
-export const resolveConflictUseRemote = async (): Promise<void> => {
-  const { conflict } = useSyncStore.getState();
-  if (!conflict) return;
-  const remote = normalizeSnapshot(conflict.remoteData);
-  if (remote && remote.wardrobes.length > 0) {
-    const local = useWardrobeStore.getState();
-    const { patch } = mergeSnapshot(local, remote);
-    local.applySyncMerge(patch);
-  }
-  // 上行成功后 lastSyncedVersion 对齐远端版本，本地剩余独有变更随新版本 push
-  useWardrobeStore.getState().patchSyncMeta({ lastSyncedVersion: conflict.remoteVersion, dirty: true });
-  setSyncState({ status: 'pending', conflict: null });
-  await pushSnapshot();
-};
-
-/** 冲突选择：保留本地版本（强制上行，生成新版本号） */
-export const resolveConflictKeepLocal = async (): Promise<void> => {
-  setSyncState({ status: 'pending', conflict: null });
-  await pushSnapshot(true);
-};
-
-/** 冲突选择：稍后处理（保持本地可继续使用，状态条提示待处理冲突） */
-export const deferConflict = (): void => {
-  setSyncState({ status: 'pending' });
 };
 
 /** ---------- 照片上传（设计方案 7） ---------- */
@@ -841,14 +858,16 @@ export const deleteCloudData = async (): Promise<boolean> => {
     });
     const result = res.result as { code: string; message?: string };
     if (result.code !== 'OK') throw new Error(result.message || '删除失败');
-    // 本地数据保留；对齐同步游标，下次开启同步后以当前本地数据重新上行
+    // 本地数据保留；对齐同步游标（服务端版本已重置为 0），以当前本地数据重新上行
     useWardrobeStore.getState().patchSyncMeta({
       lastSyncedVersion: 0,
       dirty: true,
       lastSyncedAt: 0
     });
-    setSyncState({ hasRemote: false, photoBytes: 0, status: 'ready', conflict: null, errorMsg: '' });
+    setSyncState({ hasRemote: false, photoBytes: 0, status: 'ready', errorMsg: '' });
     console.info('[Sync] 云端数据已删除（本地数据保留）');
+    // v1.16.0：删除成功后立即以本地干净数据重建云端（修复残留脏数据导致重复衣橱/衣物的问题）
+    void syncNow();
     return true;
   } catch (e: any) {
     console.warn('[Sync] 删除云端数据失败:', e?.message || e);

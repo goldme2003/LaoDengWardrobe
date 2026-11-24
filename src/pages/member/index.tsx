@@ -149,18 +149,15 @@ const MemberPage: React.FC = () => {
           <Text className={styles.tdLabel}>权益</Text>
           <Text className={styles.td}>普通版</Text>
           <Text className={styles.td}>VIP</Text>
-          <Text className={styles.td}>SVIP</Text>
+          {/* v1.16.0：SVIP 列固定金色、VIP 列固定黑色（不再随当前档位高亮） */}
+          <Text className={`${styles.td} ${styles.tdSvip}`}>SVIP</Text>
         </View>
         {BENEFIT_ROWS.map((row) => (
           <View key={row.label} className={styles.tr}>
             <Text className={styles.tdLabel}>{row.label}</Text>
             <Text className={styles.td}>{row.values.free}</Text>
-            <Text className={`${styles.td} ${memberTier === 'vip' ? styles.tdMine : ''}`}>
-              {row.values.vip}
-            </Text>
-            <Text className={`${styles.td} ${memberTier === 'svip' ? styles.tdMine : ''}`}>
-              {row.values.svip}
-            </Text>
+            <Text className={styles.td}>{row.values.vip}</Text>
+            <Text className={`${styles.td} ${styles.tdSvip}`}>{row.values.svip}</Text>
           </View>
         ))}
       </View>

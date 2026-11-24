@@ -214,7 +214,8 @@
   color: $color-text-primary;
 }
 
-.tdMine {
+/* v1.16.0：SVIP 列固定金色字（VIP 列用默认黑色，不再随当前档位高亮） */
+.tdSvip {
   color: #b07d50;
   font-weight: $font-weight-medium;
 }
