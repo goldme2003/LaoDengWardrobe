@@ -18,7 +18,7 @@ export interface TierConfig {
   wardrobes: number;
   /** 服装批量导入/批量添加（次/月），0 = 无（v1.11.0 已上线：单次批量任务 = 1 次，写 memberUsage.batchImportUsed） */
   batchImportPerMonth: number;
-  /** 当季推荐图组（张/天）：普通 0（不生图，展示本地示例）/ VIP 1 / SVIP 2（v1.13.1 调整） */
+  /** 当季推荐图组（张/天）：普通 0（不生图，展示本地示例）/ VIP 1 / SVIP 2（v1.13.1 调整；v1.14.0 起为每日可生成张数——点击风格或自定义风格后按张生成） */
   seasonalPerDay: number;
   /** 天气穿搭推荐档位 */
   weatherLevel: WeatherLevel;
@@ -91,7 +91,7 @@ export const weatherLevelLabel: Record<WeatherLevel, string> = {
 export interface MemberUsage {
   /** 当前天（YYYY-MM-DD），与当日不符则日额度重置 */
   day: string;
-  /** 当季推荐图组今日已看张数 */
+  /** 当季图组今日已生成张数（v1.14.0：点击风格生成 1 张记 1 次，恢复展示已生成图组不重复计数） */
   seasonalViewed: number;
   /** 当前月（YYYY-MM），与当月不符则月额度重置 */
   month: string;

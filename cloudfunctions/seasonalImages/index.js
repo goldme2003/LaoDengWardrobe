@@ -1,16 +1,20 @@
-/** 当季推荐图组云函数（v1.13.1）
- * 入参：{ action: 'ping' | 'generate', tier?: 'free'|'vip'|'svip', gender?: 'male'|'female'|'other', age?: number }
+/** 当季推荐图组云函数（v1.14.0）
+ * 入参：{ action: 'ping' | 'generate', tier?: 'free'|'vip'|'svip', gender?: 'male'|'female'|'other', age?: number,
+ *        style?: string, custom?: string }
  * 出参：{ code: 'OK'|'BAD_PARAM'|'TIER_NOT_ALLOWED'|'BUDGET_EXCEEDED'|'GENERATE_FAILED',
  *        images: [{ fileID, label }], season, seasonLabel, dateKey, source: 'cloud' }
  * 说明：
- *   1. 按「当日 + 季节 + 性别 + 年龄段 + 风格」缓存到集合 seasonal_images，全用户共享同一天同组合的图片，避免重复计费；
- *   2. 生成的临时 URL 一律下载后转存云开发存储，返回 cloud fileID，绕开小程序图片域名白名单；
- *   3. 会员档位决定张数与风格组：普通版不支持生图（0 张，前端展示本地示例并引导升级）、VIP 1 张（通勤简约）、
- *      SVIP 2 张（高定质感 + 配饰细节）；
+ *   1. v1.14.0 起改为「点击后按需生成」：前端点击默认风格（style key）或填写自定义风格（custom 文本）后按张生成，
+ *      每次生成 1 张；每日可生成张数由会员额度控制（普通 0 / VIP 1 / SVIP 2，在前端 memberUsage 计数），
+ *      云端不再按档位固定整组生成；
+ *   2. 按「当日 + 季节 + 性别 + 年龄段 + 风格」缓存到集合 seasonal_images，全用户共享同一天同组合的图片，避免重复计费；
+ *      自定义风格以 c_<md5 前 10 位> 作为缓存风格键，label 保留原文；
+ *   3. 生成的临时 URL 一律下载后转存云开发存储，返回 cloud fileID，绕开小程序图片域名白名单；
  *   4. 月度预算熔断：环境变量 SEASONAL_BUDGET_YUAN（默认 30 元）、SEASONAL_COST_PER_IMAGE（默认 0.2 元/张），
- *      超预算返回 BUDGET_EXCEEDED，前端使用本地图组兜底。
+ *      超预算返回 BUDGET_EXCEEDED，前端不新增图片。
  *   5. 需在云开发控制台创建集合：seasonal_images、seasonal_usage（权限：仅管理端可读写）。 */
 const cloud = require('wx-server-sdk');
+const crypto = require('crypto');
 const { callHunyuanImage, downloadImage, MODEL } = require('./provider/hunyuanImage');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
@@ -21,8 +25,6 @@ const COLLECTION = 'seasonal_images';
 const USAGE_COLLECTION = 'seasonal_usage';
 const MONTHLY_BUDGET = Number(process.env.SEASONAL_BUDGET_YUAN || 30);
 const COST_PER_IMAGE = Number(process.env.SEASONAL_COST_PER_IMAGE || 0.2);
-/** 生图并发（云函数总超时 60s，5 张分两轮完成） */
-const CONCURRENCY = 3;
 
 /** 季节：流行元素词库（每年可在此更新当季趋势） */
 const SEASONS = {
@@ -32,22 +34,25 @@ const SEASONS = {
   winter: { label: '冬季', pop: '羽绒与羊绒质感、大衣叠穿、深色系、围巾、手套、切尔西靴' }
 };
 
-/** 风格库（云端缓存与会员档位共用：同一风格跨档位复用，只按张数与风格组合区分） */
+/** 风格库（v1.14.0 扩充为点击选择风格池：默认风格 VIP/SVIP 可选，高级风格 SVIP 专属） */
 const STYLE_LIB = {
   daily: { label: '日常百搭', desc: '基础款干净清爽的日常休闲穿搭，版型合身舒适' },
   commute: { label: '通勤简约', desc: '通勤造型，利落剪裁与克制的配色，衬衫、西裤与风衣的层次搭配' },
   street: { label: '街头休闲', desc: '街头休闲造型，廓形外套与宽松裤型，复古球鞋' },
+  sport: { label: '运动活力', desc: '运动活力造型，速干面料与机能细节，轻盈有型的运动鞋履' },
   smart: { label: '轻正式', desc: '轻正式造型，垂坠面料与精致细节，简约皮质鞋履' },
+  weekend: { label: '周末出行', desc: '周末出行造型，轻松随性的叠穿与舒适鞋履，适合逛街与短途出游' },
   couture: { label: '高定质感', desc: '高级定制质感造型，考究面料与剪裁，低饱和高级配色，配饰点缀' },
   detail: { label: '配饰细节', desc: '重点呈现配饰搭配：包袋、墨镜、腰带、首饰与鞋履的呼应关系' }
 };
 
-/** 会员档位 → 风格组与张数（普通不支持 / VIP 1 / SVIP 2，内容与数量双差异） */
-const TIER_STYLES = {
-  free: [],
-  vip: ['commute'],
-  svip: ['couture', 'detail']
-};
+/** SVIP 专属高级风格（VIP 请求时返回 TIER_NOT_ALLOWED） */
+const PREMIUM_STYLES = ['couture', 'detail'];
+
+/** 自定义风格缓存键：c_<md5 前 10 位>（label 保留原文，同文本稳定映射） */
+function customStyleKey(text) {
+  return `c_${crypto.createHash('md5').update(text).digest('hex').slice(0, 10)}`;
+}
 
 /** 北京时间（云函数默认时区可能为 UTC，显式换算保证「今日」口径一致） */
 function beijingNow() {
@@ -80,11 +85,14 @@ function ageGroupOf(age) {
   return { key: 'senior', text: '熟龄' };
 }
 
-function buildPrompt({ seasonKey, gender, ageGroup, styleKey }) {
+/** 生图提示词：默认风格用风格库描述，自定义风格用原文拼接 */
+function buildPrompt({ seasonKey, gender, ageGroup, styleKey, customText }) {
   const season = SEASONS[seasonKey];
   const genderText = gender === 'female' ? '女性' : gender === 'male' ? '男性' : '中性';
-  const style = STYLE_LIB[styleKey];
-  return `专业时尚摄影，竖版全身构图。${ageGroup.text}${genderText}模特，${season.label}当季流行穿搭：${style.desc}。
+  const styleDesc = customText
+    ? `以「${customText}」为主题的当季流行造型，风格特征贴合文字描述，整体配色与版型协调统一`
+    : STYLE_LIB[styleKey].desc;
+  return `专业时尚摄影，竖版全身构图。${ageGroup.text}${genderText}模特，${season.label}当季流行穿搭：${styleDesc}。
 当季流行元素参考：${season.pop}。
 写实街拍风格，自然光，背景简洁，服装面料与版型细节清晰，画面中不出现文字、水印、品牌 logo，不出现真实名人。`;
 }
@@ -135,25 +143,11 @@ async function recordUsage(monthKey, count) {
   }
 }
 
-/** 限并发映射 */
-async function mapWithLimit(list, limit, fn) {
-  const results = new Array(list.length);
-  let cursor = 0;
-  const workers = new Array(Math.min(limit, list.length)).fill(0).map(async () => {
-    while (cursor < list.length) {
-      const idx = cursor++;
-      results[idx] = await fn(list[idx], idx);
-    }
-  });
-  await Promise.all(workers);
-  return results;
-}
+/** v1.14.0：版本标识（启动日志与 ping 均输出，用于确认云端部署的是否为最新代码） */
+const VERSION = 'v1.14.0';
 
-/** v1.13.2：版本标识（启动日志与 ping 均输出，用于确认云端部署的是否为最新代码） */
-const VERSION = 'v1.13.2';
-
-async function generateStyle({ dateKey, seasonKey, gender, ageGroup, styleKey }) {
-  const prompt = buildPrompt({ seasonKey, gender, ageGroup, styleKey });
+async function generateStyle({ dateKey, seasonKey, gender, ageGroup, styleKey, label, customText }) {
+  const prompt = buildPrompt({ seasonKey, gender, ageGroup, styleKey, customText });
   // session 按日期+风格固定：同组合重复请求路由到同一推理实例（官方文档建议用法）
   const url = await callHunyuanImage(prompt, `seasonal-${dateKey}-${styleKey}`);
   // v1.13.2：生图已计费（单张 10s+），下载失败重试 1 次，避免偶发网络错误浪费已生成的结果
@@ -161,7 +155,7 @@ async function generateStyle({ dateKey, seasonKey, gender, ageGroup, styleKey })
   try {
     buffer = await downloadImage(url);
   } catch (e) {
-    console.warn(`[seasonalImages] ${styleKey} 下载失败（${e.message}），1s 后重试`);
+    console.warn(`[seasonalImages] ${label} 下载失败（${e.message}），1s 后重试`);
     await new Promise((r) => setTimeout(r, 1000));
     buffer = await downloadImage(url);
   }
@@ -176,12 +170,13 @@ async function generateStyle({ dateKey, seasonKey, gender, ageGroup, styleKey })
     gender,
     ageGroup: ageGroup.key,
     style: styleKey,
-    label: STYLE_LIB[styleKey].label,
+    label,
+    custom: !!customText,
     prompt,
     updatedAt: Date.now()
   };
   await saveDoc(docIdOf(dateKey, seasonKey, gender, ageGroup.key, styleKey), record);
-  return { fileID: uploaded.fileID, label: STYLE_LIB[styleKey].label };
+  return { fileID: uploaded.fileID, label };
 }
 
 exports.main = async (event = {}) => {
@@ -203,7 +198,7 @@ exports.main = async (event = {}) => {
     return { code: 'BAD_PARAM', message: '未知 action', images: [] };
   }
 
-  const tier = TIER_STYLES[event.tier] ? event.tier : 'free';
+  const tier = ['vip', 'svip'].includes(event.tier) ? event.tier : 'free';
   const gender = ['male', 'female'].includes(event.gender) ? event.gender : 'other';
   const rawAge = Number(event.age);
   const age = Number.isFinite(rawAge) ? Math.min(99, Math.max(10, Math.round(rawAge))) : 30;
@@ -214,44 +209,47 @@ exports.main = async (event = {}) => {
     return {
       code: 'TIER_NOT_ALLOWED',
       images: [],
-      message: '普通版不支持 AI 当季图组，开通 VIP 后可查看'
+      message: '普通版不支持 AI 当季图组，开通 VIP 后可生成'
     };
+  }
+
+  // v1.14.0：按需生成——单次调用只生成一个风格（默认风格 key 或自定义风格文本，custom 优先）
+  const customText = typeof event.custom === 'string' ? event.custom.trim().slice(0, 12) : '';
+  const styleKey = customText ? customStyleKey(customText) : String(event.style || '');
+  const label = customText || (STYLE_LIB[styleKey] ? STYLE_LIB[styleKey].label : '');
+
+  if (!label) {
+    return { code: 'BAD_PARAM', message: '缺少风格（style 或 custom）', images: [] };
+  }
+  if (!customText && PREMIUM_STYLES.includes(styleKey) && tier !== 'svip') {
+    return { code: 'TIER_NOT_ALLOWED', images: [], message: '高定风格为 SVIP 专属，升级后可生成' };
   }
 
   const d = beijingNow();
   const dateKey = dateKeyOf(d);
   const seasonKey = seasonKeyOf(d.getUTCMonth() + 1);
-  const styleKeys = TIER_STYLES[tier];
+  const docId = docIdOf(dateKey, seasonKey, gender, ageGroup.key, styleKey);
 
-  // 1. 命中缓存直接返回（同一天同组合全用户共享）
-  const images = [];
-  const missing = [];
-  for (const styleKey of styleKeys) {
-    const hit = await getDoc(docIdOf(dateKey, seasonKey, gender, ageGroup.key, styleKey));
-    if (hit && hit.status === 'ready' && hit.fileID) {
-      images.push({ fileID: hit.fileID, label: hit.label || STYLE_LIB[styleKey].label });
-    } else {
-      missing.push(styleKey);
-    }
-  }
-
-  if (missing.length === 0) {
+  // 1. 命中缓存直接返回（同一天同组合全用户共享，不重复计费）
+  const hit = await getDoc(docId);
+  if (hit && hit.status === 'ready' && hit.fileID) {
     return {
       code: 'OK',
-      images,
+      images: [{ fileID: hit.fileID, label: hit.label || label }],
       season: seasonKey,
       seasonLabel: SEASONS[seasonKey].label,
       dateKey,
-      source: 'cloud'
+      source: 'cloud',
+      cached: true
     };
   }
 
   // 2. 预算熔断
-  if (await overBudget(monthKeyOf(d), missing.length)) {
-    console.warn('[seasonalImages] 本月生图预算已用尽，返回已缓存结果');
+  if (await overBudget(monthKeyOf(d), 1)) {
+    console.warn('[seasonalImages] 本月生图预算已用尽');
     return {
-      code: images.length > 0 ? 'OK' : 'BUDGET_EXCEEDED',
-      images,
+      code: 'BUDGET_EXCEEDED',
+      images: [],
       season: seasonKey,
       seasonLabel: SEASONS[seasonKey].label,
       dateKey,
@@ -260,46 +258,37 @@ exports.main = async (event = {}) => {
     };
   }
 
-  // 3. 生成缺失风格（限并发），单个失败不影响其余图片
-  let okCount = 0;
-  const generated = await mapWithLimit(missing, CONCURRENCY, async (styleKey) => {
-    try {
-      const out = await generateStyle({ dateKey, seasonKey, gender, ageGroup, styleKey });
-      okCount += 1;
-      return out;
-    } catch (e) {
-      console.error(`[seasonalImages] 风格 ${styleKey} 生成失败：`, e.message);
-      return null;
-    }
-  });
-
-  generated.forEach((it) => {
-    if (it) images.push(it);
-  });
-  if (okCount > 0) await recordUsage(monthKeyOf(d), okCount);
-
-  // 按档位风格顺序输出，保证跑马灯顺序稳定
-  const order = new Map(styleKeys.map((k, i) => [STYLE_LIB[k].label, i]));
-  images.sort((a, b) => (order.get(a.label) || 0) - (order.get(b.label) || 0));
-
-  if (images.length === 0) {
+  // 3. 生成单张并转存云存储
+  try {
+    const image = await generateStyle({
+      dateKey,
+      seasonKey,
+      gender,
+      ageGroup,
+      styleKey,
+      label,
+      customText: customText || undefined
+    });
+    await recordUsage(monthKeyOf(d), 1);
+    return {
+      code: 'OK',
+      images: [image],
+      season: seasonKey,
+      seasonLabel: SEASONS[seasonKey].label,
+      dateKey,
+      source: 'cloud',
+      generated: 1
+    };
+  } catch (e) {
+    console.error(`[seasonalImages] 风格「${label}」生成失败：`, e.message);
     return {
       code: 'GENERATE_FAILED',
       images: [],
       season: seasonKey,
       seasonLabel: SEASONS[seasonKey].label,
       dateKey,
-      source: 'cloud'
+      source: 'cloud',
+      message: e.message
     };
   }
-
-  return {
-    code: 'OK',
-    images,
-    season: seasonKey,
-    seasonLabel: SEASONS[seasonKey].label,
-    dateKey,
-    source: 'cloud',
-    generated: okCount
-  };
 };

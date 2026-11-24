@@ -99,8 +99,146 @@
 }
 
 .skeletonText {
+  padding: 0 $spacing-md;
   font-size: $font-size-sm;
   color: $color-text-tertiary;
+  text-align: center;
+}
+
+/* v1.14.0：待生成占位（VIP/SVIP 当日尚未生成时，引导点击风格） */
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 640rpx;
+  border-radius: $radius-md;
+  background: var(--bg-secondary, #f5f2ee);
+}
+
+.placeholderText {
+  padding: 0 $spacing-md;
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+  text-align: center;
+}
+
+/* v1.14.0：已有图组时的生成中提示 */
+.genHint {
+  display: block;
+  margin-top: $spacing-xs;
+  font-size: $font-size-xs;
+  color: var(--primary, #b07d50);
+}
+
+/* v1.14.0：风格选择条（点击后按需生成，交互对齐明日推荐场景条） */
+.styleBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: $spacing-sm;
+}
+
+.styleChip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 6rpx $spacing-sm;
+  border-radius: $radius-round;
+  background: var(--bg-secondary, #f5f2ee);
+  border: 1px solid transparent;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.styleChipText {
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+}
+
+/* 已生成风格右上角绿点（与明日推荐「已推荐场景」同款标识） */
+.styleChipDot {
+  position: absolute;
+  top: -4rpx;
+  right: -2rpx;
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: #1f8a5b;
+  box-shadow: 0 0 0 2rpx var(--bg-card, #ffffff);
+}
+
+/* 「＋ 自定义」入口 chip（虚线边框弱化样式） */
+.styleChipAdd {
+  display: flex;
+  align-items: center;
+  padding: 6rpx $spacing-sm;
+  border-radius: $radius-round;
+  border: 1px dashed var(--border-color, rgba(0, 0, 0, 0.2));
+  background: transparent;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.styleChipAddText {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+/* 自定义风格内联输入行 */
+.styleAddForm {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  margin-top: $spacing-sm;
+}
+
+.styleAddInput {
+  flex: 1;
+  height: 56rpx;
+  padding: 0 $spacing-sm;
+  border-radius: $radius-md;
+  background: var(--bg-secondary, #f5f2ee);
+  font-size: $font-size-sm;
+  color: $color-text-primary;
+}
+
+.styleAddBtn {
+  height: 56rpx;
+  padding: 0 $spacing-sm;
+  border-radius: $radius-md;
+  background: var(--primary, #b07d50);
+  display: flex;
+  align-items: center;
+}
+
+.styleAddBtnText {
+  font-size: $font-size-sm;
+  color: #ffffff;
+}
+
+.styleAddCancel {
+  height: 56rpx;
+  padding: 0 $spacing-sm;
+  border-radius: $radius-md;
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.12));
+  display: flex;
+  align-items: center;
+}
+
+.styleAddCancelText {
+  font-size: $font-size-sm;
+  color: $color-text-tertiary;
+}
+
+.styleAddErr {
+  display: block;
+  margin-top: $spacing-xs;
+  font-size: $font-size-xs;
+  color: #d4494a;
 }
 
 .noteRow {
