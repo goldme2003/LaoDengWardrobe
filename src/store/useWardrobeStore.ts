@@ -701,7 +701,20 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
 
     setMemberTier: (tier) => {
       console.info('[Store] 会员档位切换, tier =', tier);
-      commit({ memberTier: tier, memberUsage: rolledUsage(get().memberUsage) }, { localOnly: true });
+      // v1.15.1：档位联动——切到 free（无云同步权益）时自动关闭云同步开关，保证开关与档位一致
+      const s = get();
+      const closeSync = tier === 'free' && s.cloudSyncEnabled;
+      commit(
+        {
+          memberTier: tier,
+          memberUsage: rolledUsage(s.memberUsage),
+          ...(closeSync ? { cloudSyncEnabled: false } : {})
+        },
+        { localOnly: true }
+      );
+      if (closeSync) {
+        console.info('[Store] 档位切换为 free，云同步开关已自动关闭');
+      }
     },
 
     recordSeasonalView: (count) => {

@@ -91,6 +91,9 @@ export const useSyncStore = create<SyncState>(() => ({
 
 const setSyncState = (patch: Partial<SyncState>) => useSyncStore.setState(patch);
 
+/** v1.15.1：档位门控——云同步（含 push/pull/照片上传）为 VIP/SVIP 权益，所有同步动作前统一校验 */
+const canSync = (): boolean => tierOf(useWardrobeStore.getState().memberTier).cloudSync === 'cloud';
+
 const PUSH_DEBOUNCE_MS = 3000;
 /** 指数退避重试上限（登录与同步共用，超限后停止自动重试，可手动触发） */
 const MAX_RETRY = 5;
@@ -367,7 +370,22 @@ export const loginAndSync = async (): Promise<void> => {
     });
     retryCount = 0;
     console.info('[Sync] 登录成功, openid =', result.openid, 'tier =', result.tier);
-    const enabled = useWardrobeStore.getState().cloudSyncEnabled;
+    // v1.15.1：登录反馈——首次登录（此前无 openid）给出轻提示，确认微信账号登录成功
+    const isFirstLogin = !store.syncMeta.openid;
+    if (isFirstLogin) {
+      Taro.showToast({ title: '微信账号登录成功', icon: 'success', duration: 1500 });
+    }
+    const cur = useWardrobeStore.getState();
+    // v1.15.1：档位联动——无云同步权益（free）时开关残留开启 → 自动关闭，保证开关状态与档位一致
+    if (tierOf(cur.memberTier).cloudSync !== 'cloud') {
+      if (cur.cloudSyncEnabled) {
+        cur.setCloudSyncEnabled(false);
+        Taro.showToast({ title: '云同步为 VIP/SVIP 权益，已自动关闭', icon: 'none' });
+      }
+      setSyncState({ status: 'disabled' });
+      return;
+    }
+    const enabled = cur.cloudSyncEnabled;
     if (enabled) {
       await syncOnce();
     } else {
@@ -477,6 +495,11 @@ const pullAndMerge = async (): Promise<void> => {
 export const syncOnce = async (): Promise<boolean> => {
   if (!CLOUD_READY || syncing) return false;
   const s = useWardrobeStore.getState();
+  // v1.15.1：档位门控——free 不发起任何同步；开关残留开启时纠正为关闭
+  if (!canSync()) {
+    if (s.cloudSyncEnabled) s.setCloudSyncEnabled(false);
+    return false;
+  }
   if (!s.syncMeta.openid || !s.cloudSyncEnabled) return false;
   syncing = true;
   setSyncState({ status: 'syncing' });
@@ -500,6 +523,11 @@ export const syncOnce = async (): Promise<boolean> => {
 export const schedulePush = (): void => {
   if (!CLOUD_READY) return;
   const s = useWardrobeStore.getState();
+  // v1.15.1：档位门控——free 不防抖上行（含开关残留纠正）
+  if (!canSync()) {
+    if (s.cloudSyncEnabled) s.setCloudSyncEnabled(false);
+    return;
+  }
   if (!s.cloudSyncEnabled || !s.syncMeta.openid) return;
   if (useSyncStore.getState().status === 'conflict') return;
   if (pushTimer) clearTimeout(pushTimer);
@@ -527,6 +555,11 @@ export const onAppShow = (): void => {
   registerWatcher();
   const s = useWardrobeStore.getState();
   if (!s.syncMeta.openid) return;
+  // v1.15.1：档位门控——free 不同步（含开关残留纠正）
+  if (!canSync()) {
+    if (s.cloudSyncEnabled) s.setCloudSyncEnabled(false);
+    return;
+  }
   if (!s.cloudSyncEnabled) return;
   void syncOnce();
 };
@@ -572,6 +605,8 @@ export const setCloudSync = async (enabled: boolean): Promise<boolean> => {
   }
   s.setCloudSyncEnabled(enabled);
   if (enabled) {
+    // v1.15.1：开启成功给出明确反馈，随后立即同步一轮
+    Taro.showToast({ title: '云同步已开启', icon: 'success', duration: 1500 });
     void syncOnce();
   } else {
     if (pushTimer) {
@@ -646,7 +681,8 @@ const uploadOne = async (filePath: string, cloudPath: string): Promise<string> =
  */
 export const uploadPendingPhotos = async (): Promise<void> => {
   const s = useWardrobeStore.getState();
-  if (!s.syncMeta.openid || !s.cloudSyncEnabled) return;
+  // v1.15.1：档位门控——照片上传仅 VIP/SVIP（free 容量为 0，quotaBytes 校验不足够前置）
+  if (!s.syncMeta.openid || !s.cloudSyncEnabled || !canSync()) return;
   const openid = s.syncMeta.openid;
   const selected = new Set(s.syncWardrobeIds || []);
   const uploadMap = getUploadMap();

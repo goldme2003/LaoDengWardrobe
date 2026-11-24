@@ -61,19 +61,27 @@ const MinePage: React.FC = () => {
   const setSyncWardrobeIds = useWardrobeStore((s) => s.setSyncWardrobeIds);
   const syncStatus = useSyncStore((s) => s.status);
   const syncErrorMsg = useSyncStore((s) => s.errorMsg);
+  const syncOpenid = useSyncStore((s) => s.openid);
   const conflict = useSyncStore((s) => s.conflict);
   const lastSyncedAt = useSyncStore((s) => s.lastSyncedAt);
   const hasRemote = useSyncStore((s) => s.hasRemote);
   const [conflictOpen, setConflictOpen] = useState(false);
 
   const pad2 = (n: number) => String(n).padStart(2, '0');
+  // v1.15.1：登录账号展示（openid 前 8 位脱敏），让用户确认微信账号已登录
+  const loginLabel = syncOpenid ? `已登录微信账号（${syncOpenid.slice(0, 8)}…）` : '未登录（启动后自动登录）';
   const syncStatusInfo = useMemo(() => {
     const time = lastSyncedAt ? `${pad2(new Date(lastSyncedAt).getHours())}:${pad2(new Date(lastSyncedAt).getMinutes())}` : '';
     switch (syncStatus) {
       case 'logging-in':
         return { dot: '#e6a23c', text: '正在登录云端…' };
       case 'disabled':
-        return { dot: '#909399', text: '云同步已关闭，数据仅保存在本机' };
+        return {
+          dot: '#909399',
+          text: syncOpenid
+            ? '云同步已关闭，数据仅保存在本机'
+            : '未连接云端（启动后自动登录，失败会自动重试）'
+        };
       case 'syncing':
         return { dot: '#409eff', text: '同步中…' };
       case 'pending':
@@ -87,7 +95,7 @@ const MinePage: React.FC = () => {
       default:
         return { dot: '#909399', text: '未连接云端（启动后自动登录）' };
     }
-  }, [syncStatus, syncErrorMsg, lastSyncedAt]);
+  }, [syncStatus, syncErrorMsg, lastSyncedAt, syncOpenid]);
 
   const handleSyncSwitch = async (e) => {
     const ok = await setCloudSync(e.detail.value);
@@ -274,7 +282,13 @@ const MinePage: React.FC = () => {
           <Text className={styles.syncStatusText}>{syncStatusInfo.text}</Text>
         </View>
 
-        {/* 云同步开关（默认关闭，设计方案 5.1 第 4 条） */}
+        {/* v1.15.1：登录账号行（静默登录无弹窗，此处确认微信账号登录态） */}
+        <View className={styles.syncStatusBar}>
+          <View className={styles.syncDot} style={{ background: syncOpenid ? '#67c23a' : '#909399' }} />
+          <Text className={styles.syncStatusText}>{loginLabel}</Text>
+        </View>
+
+        {/* 云同步开关（默认关闭，设计方案 5.1 第 4 条；v1.15.1：free 档展示开通入口而非开关，避免状态不一致） */}
         <View className={styles.syncSwitchRow}>
           <View className={styles.syncSwitchInfo}>
             <Text className={styles.entryTitle}>云同步</Text>
@@ -284,7 +298,13 @@ const MinePage: React.FC = () => {
                 : '开启后衣物、日记等数据自动同步云端；关闭后仅保存在本机'}
             </Text>
           </View>
-          <Switch checked={cloudSyncEnabled} color="#B07D50" onChange={handleSyncSwitch} />
+          {memberTier === 'free' ? (
+            <View className={styles.syncChip} onClick={goMember}>
+              <Text>VIP 专属 · 去开通</Text>
+            </View>
+          ) : (
+            <Switch checked={cloudSyncEnabled} color="#B07D50" onChange={handleSyncSwitch} />
+          )}
         </View>
 
         {/* 同步衣橱选择（VIP ≤2 / SVIP 全部；开关开启后展示） */}
