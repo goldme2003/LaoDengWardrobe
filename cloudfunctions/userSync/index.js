@@ -77,7 +77,7 @@ function inGrace(user) {
 
 exports.main = async (event = {}) => {
   const action = event.action || 'login';
-  console.log(`[userSync] v1.15.0 action=${action}`);
+  console.log(`[userSync] v1.17.0 action=${action}`);
 
   if (action === 'ping') {
     return {
@@ -140,6 +140,29 @@ exports.main = async (event = {}) => {
       maxWardrobes: limits.maxWardrobes,
       photoQuotaMB: limits.photoQuotaMB
     };
+  }
+
+  // ---------- 档位变更上行：会话内切换会员档位后实时同步云端（v1.17.0） ----------
+  // 口径与 login 一致：订单校验优先，测试期（服务端 free）接受客户端上报值
+  if (action === 'setTier') {
+    const clientTier = ['free', 'vip', 'svip'].includes(event.tier) ? event.tier : null;
+    if (!clientTier) return { code: 'BAD_PARAM', message: '无效档位' };
+    let user = await getUser(OPENID);
+    if (!user) {
+      user = { _id: OPENID, tier: 'free', dataVersion: 0, photoBytes: 0, createdAt: Date.now() };
+    }
+    const serverTier = await tierFromOrders(OPENID);
+    const tier = serverTier === 'free' ? clientTier : serverTier;
+    try {
+      await db.collection('users').doc(OPENID).set({
+        data: stripId({ ...user, tier, updatedAt: Date.now() })
+      });
+    } catch (e) {
+      console.error('[userSync] 档位写入失败：', e.message);
+      return { code: 'DB_ERROR', message: '档位写入失败: ' + e.message };
+    }
+    console.log(`[userSync] 档位已更新: ${tier}`);
+    return { code: 'OK', tier };
   }
 
   // ---------- 下行：返回云端全量快照（合并由客户端执行，见设计方案 5.5） ----------

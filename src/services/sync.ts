@@ -7,7 +7,8 @@
  *      明日穿搭勾选、推荐缓存、推荐产物、城市、会员用量不上云）；
  *   5. 3s 防抖上行（commit 打脏后自动触发）；
  *   6. 照片上传（仅衣物/日记照片，分批 5 张、路径去重、容量按档位约束、fileID 回填不打脏）；
- *   7. 快照冲突策略（v1.16.0，需求方确认）：如遇冲突，云端覆盖本地——同步范围自动以云端为准，不再三选一。
+ *   7. 快照冲突策略（v1.16.0，需求方确认）：如遇冲突，云端覆盖本地——同步范围自动以云端为准，不再三选一；
+ *   8. 会员档位上行（v1.17.0）：启动 login 上报 + 会话内档位变更实时 setTier 上行（档位不入快照）。
  * 仅微信端可用（CLOUD_READY）；H5 端所有入口静默返回，不阻塞本地功能。
  * 云同步开关默认关闭：开启后才发起任何云端数据请求（登录本身除外，仅返回身份与档位）。 */
 import Taro from '@tarojs/taro';
@@ -379,10 +380,6 @@ const applyLoginResult = (res: {
 }) => {
   const store = useWardrobeStore.getState();
   store.patchSyncMeta({ openid: res.openid });
-  // 会员档位以服务端为准（设计方案 5.1 第 3 条；测试期服务端 free 时回落客户端上报值）
-  if (res.tier !== store.memberTier) {
-    store.setMemberTier(res.tier);
-  }
   setSyncState({
     openid: res.openid,
     tier: res.tier,
@@ -392,6 +389,11 @@ const applyLoginResult = (res: {
     hasRemote: res.hasRemote,
     errorMsg: ''
   });
+  // 会员档位以服务端为准（设计方案 5.1 第 3 条；测试期服务端 free 时回落客户端上报值）
+  // v1.17.0：setSyncState 先行，避免下方 setMemberTier 触发订阅时对刚写入的档位重复上行
+  if (res.tier !== store.memberTier) {
+    store.setMemberTier(res.tier);
+  }
   // 同步衣橱选择初始化（null = 未设置）
   const cur = useWardrobeStore.getState();
   if (!cur.syncWardrobeIds) {
@@ -642,13 +644,45 @@ export const schedulePush = (): void => {
   }, PUSH_DEBOUNCE_MS);
 };
 
-/** 监听 store 写操作（脏标记 → 防抖上行）；幂等，模块首次使用时注册 */
+/**
+ * 档位变更上行云端（v1.17.0）：login 只覆盖启动时刻，会话内（如会员页测试切换档位）变更此前
+ * 需重启才会落云端。订阅档位变化实时上报；档位不属于快照数据，不走 push 通道。
+ * 服务端口径与 login 一致（订单校验优先，测试期服务端 free 时接受客户端上报值）。
+ */
+const pushTierUpdate = async (tier: MemberTier): Promise<void> => {
+  if (!CLOUD_READY) return;
+  const st = useSyncStore.getState();
+  if (!st.openid || st.tier === tier) return; // 未登录由 login 兜底；档位已一致则跳过（防 login 回写造成回环）
+  try {
+    const res = await Taro.cloud.callFunction({
+      name: USER_SYNC_FN_NAME,
+      data: { action: 'setTier', tier }
+    });
+    const result = res.result as { code: string; tier?: MemberTier; message?: string };
+    if (result.code === 'OK' && result.tier) {
+      setSyncState({ tier: result.tier });
+      console.info('[Sync] 档位已同步云端, tier =', result.tier);
+      // 服务端权威档位与本地不一致（如订单校验覆盖客户端上报值）时以服务端为准回写本地
+      if (result.tier !== useWardrobeStore.getState().memberTier) {
+        useWardrobeStore.getState().setMemberTier(result.tier);
+      }
+    }
+  } catch (e: any) {
+    // 档位同步失败不阻塞本地操作，下次变更或重启登录时会对齐
+    console.warn('[Sync] 档位同步云端失败（下次变更/重启对齐）:', e?.message || e);
+  }
+};
+
+/** 监听 store 写操作（脏标记 → 防抖上行；档位变更 → 实时上行，v1.17.0）；幂等，模块首次使用时注册 */
 const registerWatcher = (): void => {
   if (watcherRegistered) return;
   watcherRegistered = true;
   useWardrobeStore.subscribe((state, prev) => {
     if (state.syncMeta.dirty && state.syncMeta.dataVersion !== prev.syncMeta.dataVersion) {
       schedulePush();
+    }
+    if (state.memberTier !== prev.memberTier) {
+      void pushTierUpdate(state.memberTier);
     }
   });
 };
