@@ -52,6 +52,14 @@ async function getUser(openid) {
   }
 }
 
+/** doc().set 的 data 中不允许包含 _id 字段（否则抛「不能更新 _id」类错误），写入前剥离 */
+function stripId(doc) {
+  if (!doc || typeof doc !== 'object') return {};
+  const copy = { ...doc };
+  delete copy._id;
+  return copy;
+}
+
 async function getSnapshot(openid) {
   try {
     const res = await db.collection('wardrobe_snapshots').doc(openid).get();
@@ -113,10 +121,10 @@ exports.main = async (event = {}) => {
     };
     if (reset) patch.deletedAt = null;
     try {
-      await db.collection('users').doc(OPENID).set({ data: { ...user, ...patch } });
+      await db.collection('users').doc(OPENID).set({ data: stripId({ ...user, ...patch }) });
     } catch (e) {
       console.error('[userSync] 用户档案写入失败：', e.message);
-      return { code: 'DB_ERROR', message: '用户档案写入失败' };
+      return { code: 'DB_ERROR', message: '用户档案写入失败: ' + e.message };
     }
 
     const snap = await getSnapshot(OPENID);
@@ -158,10 +166,10 @@ exports.main = async (event = {}) => {
     let user = await getUser(OPENID);
     if (!user) {
       try {
-        user = { _id: OPENID, tier: 'free', dataVersion: 0, photoBytes: 0, createdAt: now };
-        await db.collection('users').doc(OPENID).set({ data: user });
+        user = { tier: 'free', dataVersion: 0, photoBytes: 0, createdAt: now };
+        await db.collection('users').doc(OPENID).set({ data: stripId(user) });
       } catch (e) {
-        return { code: 'DB_ERROR', message: '用户档案初始化失败' };
+        return { code: 'DB_ERROR', message: '用户档案初始化失败: ' + e.message };
       }
     }
     const serverVersion = user.dataVersion || 0;
@@ -231,14 +239,20 @@ exports.main = async (event = {}) => {
       console.error('[userSync] 冲突副本清理失败：', e.message);
     }
     const user = await getUser(OPENID);
-    const base = user || { _id: OPENID, tier: 'free', createdAt: now };
+    const base = user || { tier: 'free', createdAt: now };
     try {
       await db.collection('users').doc(OPENID).set({
-        data: { ...base, dataVersion: 0, photoBytes: 0, deletedAt: now, updatedAt: now }
+        data: stripId({
+          ...base,
+          dataVersion: 0,
+          photoBytes: 0,
+          deletedAt: now,
+          updatedAt: now
+        })
       });
     } catch (e) {
       console.error('[userSync] 注销标记写入失败：', e.message);
-      return { code: 'DB_ERROR', message: '注销标记写入失败' };
+      return { code: 'DB_ERROR', message: '注销标记写入失败: ' + e.message };
     }
     return { code: 'OK' };
   }
@@ -248,15 +262,15 @@ exports.main = async (event = {}) => {
     const delta = Number(event.delta) || 0;
     try {
       const user = await getUser(OPENID);
-      const base = user || { _id: OPENID, tier: 'free', dataVersion: 0, photoBytes: 0, createdAt: Date.now() };
+      const base = user || { tier: 'free', dataVersion: 0, photoBytes: 0, createdAt: Date.now() };
       const next = Math.max(0, (base.photoBytes || 0) + delta);
       await db.collection('users').doc(OPENID).set({
-        data: { ...base, photoBytes: next, updatedAt: Date.now() }
+        data: stripId({ ...base, photoBytes: next, updatedAt: Date.now() })
       });
       return { code: 'OK', photoBytes: next };
     } catch (e) {
       console.error('[userSync] 容量计量失败：', e.message);
-      return { code: 'DB_ERROR', message: '容量计量失败' };
+      return { code: 'DB_ERROR', message: '容量计量失败: ' + e.message };
     }
   }
 
