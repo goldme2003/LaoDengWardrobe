@@ -39,7 +39,7 @@ const ProfilePage: React.FC = () => {
 
   // 草稿态（保存时统一提交）
   const [draftName, setDraftName] = useState(currentWardrobe?.name || '');
-  const [draftGender, setDraftGender] = useState<Gender>(currentWardrobe?.gender || 'female');
+  const [draftGender, setDraftGender] = useState<Gender>(currentWardrobe?.gender || 'male');
   const [draftAge, setDraftAge] = useState<number | null>(currentWardrobe?.age ?? null);
   const [draftBody, setDraftBody] = useState<BodyProfile>({ ...bodyProfile });
   // 身高文本框草稿（独立维护，保存时校验并入 draftBody）

@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import Taro, { useDidShow, useDidHide, useLaunch } from '@tarojs/taro';
 import { CLOUD_ENV_ID, RECOGNIZE_AVAILABLE } from '@/config/cloud';
+import { initSync, onAppShow } from '@/services/sync';
 // 全局样式
 import './app.scss';
 
@@ -30,13 +31,17 @@ function App(props) {
     try {
       Taro.cloud.init({ env: CLOUD_ENV_ID, traceUser: true });
       console.info('[Cloud] 云开发初始化完成, env =', CLOUD_ENV_ID);
+      // v1.15.0（R-5 M1）：启动静默登录（微信授权，失败指数退避重试）+ 注册同步脏标记监听
+      initSync();
     } catch (e) {
       console.error('[Cloud] 云开发初始化失败，请检查环境 ID 与云开发开通状态', e);
     }
   }, []);
 
-  // 对应 onShow
-  useDidShow(() => {});
+  // 对应 onShow：v1.15.0（R-5）回到前台时若云同步开启则立即同步一轮
+  useDidShow(() => {
+    onAppShow();
+  });
 
   // 对应 onHide
   useDidHide(() => {});

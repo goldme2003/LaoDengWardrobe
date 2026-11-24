@@ -27,7 +27,7 @@ const WardrobeNewPage: React.FC = () => {
 
   const [name, setName] = useState('');
   const [themeId, setThemeId] = useState<ThemeId>(THEME_SETS[0].id);
-  const [gender, setGender] = useState<Gender>('female');
+  const [gender, setGender] = useState<Gender>('male');
   const [age, setAge] = useState<number | null>(null);
 
   const genderIndex = GENDER_OPTIONS.findIndex((g) => g.value === gender);

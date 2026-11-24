@@ -1,9 +1,19 @@
-import React, { useMemo } from 'react';
-import { View, Text } from '@tarojs/components';
+import React, { useMemo, useState } from 'react';
+import { View, Text, Switch } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
 import { APP_VERSION, GENDER_OPTIONS, BODY_FIELD_DEFS, themeVarsOf } from '@/data/presets';
 import { tierOf } from '@/services/entitlement';
+import {
+  useSyncStore,
+  setCloudSync,
+  syncNow,
+  deleteCloudData,
+  resolveConflictUseRemote,
+  resolveConflictKeepLocal,
+  deferConflict
+} from '@/services/sync';
+import { exportBackup } from '@/services/exportBackup';
 import { BodyProfile } from '@/types';
 import styles from './index.module.scss';
 
@@ -44,6 +54,116 @@ const MinePage: React.FC = () => {
   const memberTier = useWardrobeStore((s) => s.memberTier);
   const memberLabel = tierOf(memberTier).label;
   const goMember = () => Taro.navigateTo({ url: '/pages/member/index' });
+
+  // ===== v1.15.0（R-5 M1）：云同步 =====
+  const cloudSyncEnabled = useWardrobeStore((s) => s.cloudSyncEnabled);
+  const syncWardrobeIds = useWardrobeStore((s) => s.syncWardrobeIds);
+  const setSyncWardrobeIds = useWardrobeStore((s) => s.setSyncWardrobeIds);
+  const syncStatus = useSyncStore((s) => s.status);
+  const syncErrorMsg = useSyncStore((s) => s.errorMsg);
+  const conflict = useSyncStore((s) => s.conflict);
+  const lastSyncedAt = useSyncStore((s) => s.lastSyncedAt);
+  const hasRemote = useSyncStore((s) => s.hasRemote);
+  const [conflictOpen, setConflictOpen] = useState(false);
+
+  const pad2 = (n: number) => String(n).padStart(2, '0');
+  const syncStatusInfo = useMemo(() => {
+    const time = lastSyncedAt ? `${pad2(new Date(lastSyncedAt).getHours())}:${pad2(new Date(lastSyncedAt).getMinutes())}` : '';
+    switch (syncStatus) {
+      case 'logging-in':
+        return { dot: '#e6a23c', text: '正在登录云端…' };
+      case 'disabled':
+        return { dot: '#909399', text: '云同步已关闭，数据仅保存在本机' };
+      case 'syncing':
+        return { dot: '#409eff', text: '同步中…' };
+      case 'pending':
+        return { dot: '#e6a23c', text: '有变更待上行（稍后自动同步）' };
+      case 'ready':
+        return { dot: '#67c23a', text: time ? `已同步 ${time}` : '已连接云端' };
+      case 'conflict':
+        return { dot: '#c0392b', text: '数据冲突待处理，本地功能不受影响' };
+      case 'error':
+        return { dot: '#c0392b', text: `云端未连接：${syncErrorMsg || '网络异常'}（可点「立即同步」重试）` };
+      default:
+        return { dot: '#909399', text: '未连接云端（启动后自动登录）' };
+    }
+  }, [syncStatus, syncErrorMsg, lastSyncedAt]);
+
+  const handleSyncSwitch = async (e) => {
+    const ok = await setCloudSync(e.detail.value);
+    if (!ok) {
+      Taro.showToast({ title: e.detail.value ? '未能开启云同步' : '已关闭', icon: 'none' });
+    }
+  };
+
+  const handleSyncNow = async () => {
+    Taro.showLoading({ title: '同步中…', mask: true });
+    const ok = await syncNow();
+    Taro.hideLoading();
+    Taro.showToast({ title: ok ? '同步完成' : '同步未完成，请稍后重试', icon: 'none' });
+  };
+
+  const handleExport = async () => {
+    const ok = await exportBackup();
+    if (ok) {
+      Taro.showToast({ title: '备份已导出，请在微信中保存', icon: 'none' });
+    }
+  };
+
+  const handleDeleteCloud = () => {
+    Taro.showModal({
+      title: '删除云端数据',
+      content: '将删除云端保存的衣橱/衣物/日记等同步数据（30 天宽限期内登录可恢复），本机数据不受影响。确定删除？',
+      confirmText: '删除',
+      confirmColor: '#c0392b',
+      success: async (res) => {
+        if (!res.confirm) return;
+        Taro.showLoading({ title: '删除中…', mask: true });
+        const ok = await deleteCloudData();
+        Taro.hideLoading();
+        if (ok) Taro.showToast({ title: '云端数据已删除', icon: 'none' });
+      }
+    });
+  };
+
+  // 快照冲突三选一（设计方案 6.3）
+  const handleConflictChoice = () => {
+    Taro.showActionSheet({
+      itemList: ['使用云端版本', '保留本地版本', '稍后处理'],
+      success: async (res) => {
+        if (res.tapIndex === 0) {
+          Taro.showLoading({ title: '合并云端数据…', mask: true });
+          await resolveConflictUseRemote();
+          Taro.hideLoading();
+        } else if (res.tapIndex === 1) {
+          Taro.showLoading({ title: '上传本地数据…', mask: true });
+          await resolveConflictKeepLocal();
+          Taro.hideLoading();
+        } else {
+          deferConflict();
+        }
+      }
+    });
+  };
+
+  // VIP 同步衣橱多选（VIP ≤2；SVIP 全部，不展示选择）
+  const maxSync = tierOf(memberTier).maxSyncWardrobes;
+  const selectedIds = syncWardrobeIds || [];
+  const handleToggleWardrobe = (id: string) => {
+    if (selectedIds.includes(id)) {
+      if (selectedIds.length <= 1) {
+        Taro.showToast({ title: '至少保留 1 个同步衣橱', icon: 'none' });
+        return;
+      }
+      setSyncWardrobeIds(selectedIds.filter((v) => v !== id));
+    } else {
+      if (maxSync !== null && selectedIds.length >= maxSync) {
+        Taro.showToast({ title: `VIP 最多同步 ${maxSync} 个衣橱，升级 SVIP 可同步全部`, icon: 'none' });
+        return;
+      }
+      setSyncWardrobeIds([...selectedIds, id]);
+    }
+  };
 
   const genderLabel = GENDER_OPTIONS.find((g) => g.value === currentWardrobe?.gender)?.label || '-';
   // v0.7.0：身体数据摘要（已填项拼接，如「身高 170 · 胸围 92 · 肩宽 45」；全部未填显示「未填写」）
@@ -141,6 +261,96 @@ const MinePage: React.FC = () => {
         </View>
       </View>
 
+      {/* v1.15.0（R-5 M1）：云同步（状态条 / 开关 / 同步衣橱选择 / 冲突 / 删除云端数据 / 导出备份） */}
+      <View className={styles.card}>
+        <View className={styles.infoHeader}>
+          <Text className={styles.sectionTitle}>云同步</Text>
+          <Text className={styles.infoEditHint}>{memberLabel}</Text>
+        </View>
+
+        {/* 同步状态条 */}
+        <View className={styles.syncStatusBar}>
+          <View className={styles.syncDot} style={{ background: syncStatusInfo.dot }} />
+          <Text className={styles.syncStatusText}>{syncStatusInfo.text}</Text>
+        </View>
+
+        {/* 云同步开关（默认关闭，设计方案 5.1 第 4 条） */}
+        <View className={styles.syncSwitchRow}>
+          <View className={styles.syncSwitchInfo}>
+            <Text className={styles.entryTitle}>云同步</Text>
+            <Text className={styles.entryDesc}>
+              {memberTier === 'free'
+                ? 'VIP/SVIP 权益：换设备不丢数据，登录后自动合并云端与本机数据'
+                : '开启后衣物、日记等数据自动同步云端；关闭后仅保存在本机'}
+            </Text>
+          </View>
+          <Switch checked={cloudSyncEnabled} color="#B07D50" onChange={handleSyncSwitch} />
+        </View>
+
+        {/* 同步衣橱选择（VIP ≤2 / SVIP 全部；开关开启后展示） */}
+        {cloudSyncEnabled && memberTier !== 'free' && (
+          <View>
+            <Text className={styles.syncSectionLabel}>
+              {maxSync === null
+                ? 'SVIP 同步全部衣橱，无需选择'
+                : `同步衣橱（VIP 最多 ${maxSync} 个，已选 ${selectedIds.length} 个）`}
+            </Text>
+            <View className={styles.syncChips}>
+              {maxSync !== null &&
+                wardrobes.map((w) => (
+                  <View
+                    key={w.id}
+                    className={[styles.syncChip, selectedIds.includes(w.id) ? styles.syncChipActive : ''].join(' ')}
+                    onClick={() => handleToggleWardrobe(w.id)}
+                  >
+                    <Text>{w.name}</Text>
+                  </View>
+                ))}
+            </View>
+          </View>
+        )}
+
+        {/* 快照冲突面板（三选一；设计方案 6.3） */}
+        {conflict && conflictOpen && (
+          <View className={styles.conflictBox}>
+            <Text className={styles.conflictTitle}>数据已在其他设备更新</Text>
+            <Text className={styles.conflictMeta}>
+              本地版本 {conflict.localVersion} · 云端版本 {conflict.remoteVersion}
+              {conflict.createdAt ? ` · 产生于 ${pad2(new Date(conflict.createdAt).getHours())}:${pad2(new Date(conflict.createdAt).getMinutes())}` : ''}
+            </Text>
+            <View className={styles.conflictBtnRow}>
+              <View className={styles.syncActionBtn} onClick={handleConflictChoice}>
+                <Text>处理冲突</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* 操作行 */}
+        <View className={styles.syncActions}>
+          <View className={styles.syncActionBtn} onClick={handleSyncNow}>
+            <Text>立即同步</Text>
+          </View>
+          <View className={styles.syncActionBtn} onClick={handleExport}>
+            <Text>导出备份</Text>
+          </View>
+          {conflict && !conflictOpen && (
+            <View className={styles.syncActionBtn} onClick={() => setConflictOpen(true)}>
+              <Text>冲突记录</Text>
+            </View>
+          )}
+          {hasRemote && (
+            <View className={[styles.syncActionBtn, styles.syncActionBtnDanger].join(' ')} onClick={handleDeleteCloud}>
+              <Text>删除云端数据</Text>
+            </View>
+          )}
+        </View>
+
+        <Text className={styles.cardTip}>
+          同步范围：衣橱、衣物、着装日记、自定义项、备选条目、身体数据；明日穿搭记录与推荐方案仅保存在本机，不上传云端。开关关闭时全部数据仅存本机。
+        </Text>
+      </View>
+
       {/* 衣橱设置（v0.7.0：风格主题移至衣橱管理页，此处保留管理入口） */}
       <View className={styles.card}>
         <Text className={styles.sectionTitle}>衣橱设置</Text>
@@ -162,7 +372,9 @@ const MinePage: React.FC = () => {
         </View>
         <View className={styles.aboutRow}>
           <Text className={styles.aboutLabel}>数据存储</Text>
-          <Text className={styles.aboutValue}>本机存储</Text>
+          <Text className={styles.aboutValue}>
+            {cloudSyncEnabled ? '本机 + 云端同步' : '本机存储'}
+          </Text>
         </View>
         <Text className={styles.cardTip}>
           当前版本所有数据（照片与衣物档案）保存在本机。卸载小程序或清除数据会导致数据丢失，请知悉。

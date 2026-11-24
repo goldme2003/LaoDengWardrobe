@@ -26,8 +26,12 @@ export interface TierConfig {
   tripPerMonth: number | null;
   /** 时尚穿搭推荐（次/月），0 = 无，null = 无限次（功能待开发，仅登记权益） */
   fashionPerMonth: number | null;
-  /** 云同步：local = 本地存储，cloud = 云端（待开发，仅登记权益） */
+  /** 云同步：local = 本地存储，cloud = 云端（v1.15.0 M1 已落地同步链路） */
   cloudSync: 'local' | 'cloud';
+  /** v1.15.0（R-5）：照片云容量（MB，仅衣物/日记照片）；0 = 无云同步 */
+  photoQuotaMB: number;
+  /** v1.15.0（R-5）：可同步衣橱数；null = 不限（SVIP 全部），0 = 无云同步 */
+  maxSyncWardrobes: number | null;
   /** v1.10.0：明日穿搭推荐每日可生成套数（生成后当天缓存，次日重新生成；套数用尽只展示缓存） */
   dailyOutfits: number;
 }
@@ -44,6 +48,8 @@ export const TIERS: Record<MemberTier, TierConfig> = {
     tripPerMonth: 0,
     fashionPerMonth: 0,
     cloudSync: 'local',
+    photoQuotaMB: 0,
+    maxSyncWardrobes: 0,
     dailyOutfits: 1
   },
   vip: {
@@ -57,6 +63,8 @@ export const TIERS: Record<MemberTier, TierConfig> = {
     tripPerMonth: 5,
     fashionPerMonth: 5,
     cloudSync: 'cloud',
+    photoQuotaMB: 500,
+    maxSyncWardrobes: 2,
     dailyOutfits: 2
   },
   svip: {
@@ -70,11 +78,16 @@ export const TIERS: Record<MemberTier, TierConfig> = {
     tripPerMonth: null,
     fashionPerMonth: null,
     cloudSync: 'cloud',
+    photoQuotaMB: 2048,
+    maxSyncWardrobes: null,
     dailyOutfits: 5
   }
 };
 
 export const TIER_ORDER: MemberTier[] = ['free', 'vip', 'svip'];
+
+/** v1.15.0（R-5）：同步冲突副本统一保留天数（设计方案 §6，过期清理在 M3 落地） */
+export const CONFLICT_RETENTION_DAYS = 30;
 
 export const tierOf = (tier: MemberTier | undefined | ''): TierConfig =>
   TIERS[tier || 'free'] || TIERS.free;

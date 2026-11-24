@@ -19,6 +19,8 @@ export const OUTFIT_RECOMMEND_FN_NAME = 'outfitRecommend';
 export const MEMBER_FN_NAME = 'member';
 /** v1.13.0：当季推荐图组（混元生图 + 云存储缓存，按季节/性别/年龄段/会员档位差异化） */
 export const SEASONAL_FN_NAME = 'seasonalImages';
+/** v1.15.0（R-5 M1）：云同步（微信静默登录 / 快照上下行 / 冲突副本 / 删除云端数据 / 照片容量计量） */
+export const USER_SYNC_FN_NAME = 'userSync';
 
 /** 月熔断预算（元，与云函数 RECOGNIZE_BUDGET_YUAN 保持一致）与预警阈值 */
 export const RECOGNIZE_BUDGET_YUAN = 50;

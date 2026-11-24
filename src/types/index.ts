@@ -18,6 +18,8 @@ export interface Wardrobe {
   /** 风格主题（v0.5） */
   themeId: ThemeId;
   createdAt: number;
+  /** 最后修改时间（v1.15.0 云同步合并「新者胜」依据，旧数据无值时以 createdAt 兜底） */
+  updatedAt?: number;
 }
 
 /** 个人身体数据（v0.5：缝纫/尺码参考信息，均为选填） */
@@ -84,6 +86,8 @@ export interface TryoutItem {
   /** 试穿感受/备注 */
   note?: string;
   createdAt: number;
+  /** 最后修改时间（v1.15.0 云同步合并「新者胜」依据，旧数据无值时以 createdAt 兜底） */
+  updatedAt?: number;
 }
 
 /** 衣物条目 */
@@ -119,6 +123,8 @@ export interface ClothingItem {
   /** 备注 ≤200 字，可空 */
   remark: string;
   createdAt: number;
+  /** 最后修改时间（v1.15.0 云同步合并「新者胜」依据，旧数据无值时以 createdAt 兜底） */
+  updatedAt?: number;
 }
 
 /** 自定义选项维度（v0.5：扩展至尺码与适用场合；v1.4.3：补充内外穿与季节，保证所有属性可手动输入） */
@@ -176,4 +182,18 @@ export interface NewItemInput {
   occasions: string[];
   purchase?: PurchaseInfo;
   remark: string;
+}
+
+/** v1.15.0（R-5）：云同步元数据（随主文档持久化，见《云端同步设计方案》5.2） */
+export interface SyncMeta {
+  /** 微信 openid（登录成功后写入；空串 = 未登录） */
+  openid: string;
+  /** 本地数据版本号（同步范围内每次 commit +1，单调递增） */
+  dataVersion: number;
+  /** 上次上行成功时的云端版本号（push 乐观锁 baseVersion） */
+  lastSyncedVersion: number;
+  /** 上次同步后是否有未上行变更 */
+  dirty: boolean;
+  /** 上次同步成功时间（epoch ms，0 = 从未同步） */
+  lastSyncedAt: number;
 }
