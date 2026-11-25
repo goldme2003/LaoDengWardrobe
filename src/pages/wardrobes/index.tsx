@@ -4,13 +4,16 @@ import classnames from 'classnames';
 import Taro from '@tarojs/taro';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
 import { GENDER_OPTIONS, THEME_SETS, getThemeById, themeVarsOf } from '@/data/presets';
+import { tierOf } from '@/services/entitlement';
 import { formatDate } from '@/utils/format';
 import styles from './index.module.scss';
 
 /** 衣橱管理页（v0.6：仅展示全部衣橱列表；新建衣橱为独立页面）
- * v0.7.0：风格主题选择移入本页（列表项内色点点选，替代「我的」页主题区块） */
+ * v0.7.0：风格主题选择移入本页（列表项内色点点选，替代「我的」页主题区块）
+ * v1.20.3：标题行展示当前档位衣橱额度（如 VIP 2/3），达上限文字变红 */
 const WardrobesPage: React.FC = () => {
   const wardrobes = useWardrobeStore((s) => s.wardrobes);
+  const memberTier = useWardrobeStore((s) => s.memberTier);
   const currentWardrobeId = useWardrobeStore((s) => s.currentWardrobeId);
   const items = useWardrobeStore((s) => s.items);
   const deleteWardrobe = useWardrobeStore((s) => s.deleteWardrobe);
@@ -55,7 +58,17 @@ const WardrobesPage: React.FC = () => {
       </View>
 
       <View className={styles.card}>
-        <Text className={styles.sectionTitle}>👥 全部衣橱</Text>
+        <View className={styles.sectionHead}>
+          <Text className={styles.sectionTitle}>👥 全部衣橱</Text>
+          {/* v1.20.3：当前档位衣橱额度（如 VIP 2/3），达上限文字变红 */}
+          <Text
+            className={
+              wardrobes.length >= tierOf(memberTier).wardrobes ? styles.quotaTextFull : styles.quotaText
+            }
+          >
+            {tierOf(memberTier).label} {wardrobes.length}/{tierOf(memberTier).wardrobes}
+          </Text>
+        </View>
         {wardrobes.map((w) => {
           const theme = getThemeById(w.themeId);
           const genderLabel = GENDER_OPTIONS.find((g) => g.value === w.gender)?.label || '-';

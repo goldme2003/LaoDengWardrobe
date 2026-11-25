@@ -1217,7 +1217,17 @@ const WardrobePage: React.FC = () => {
         <View className={styles.sheetMask} onClick={() => setSwitcherOpen(false)}>
           <View className={styles.sheet} onClick={(e) => e.stopPropagation()}>
             <View className={styles.sheetHead}>
-              <Text className={styles.sheetTitle}>切换衣橱</Text>
+              <View className={styles.sheetHeadLeft}>
+                <Text className={styles.sheetTitle}>切换衣橱</Text>
+                {/* v1.20.3：当前档位衣橱额度（如 VIP 2/3），达上限文字变红 */}
+                <Text
+                  className={
+                    counts.length >= tierCfg.wardrobes ? styles.sheetQuotaFull : styles.sheetQuota
+                  }
+                >
+                  {tierCfg.label} {counts.length}/{tierCfg.wardrobes}
+                </Text>
+              </View>
               <View className={styles.sheetManage} onClick={goManage}>
                 <Text className={styles.sheetManageText}>管理衣橱</Text>
               </View>
