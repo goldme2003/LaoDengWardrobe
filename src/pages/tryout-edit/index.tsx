@@ -1,21 +1,17 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, Image, Input, Textarea } from '@tarojs/components';
 import Taro, { useRouter } from '@tarojs/taro';
+import dayjs from 'dayjs';
 import OptionSelector from '@/components/OptionSelector';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
-import {
-  TYPE_PRESETS,
-  COLOR_PRESETS,
-  COLOR_HEX_MAP,
-  SAMPLE_PHOTO_IDS,
-  samplePhoto,
-  themeVarsOf
-} from '@/data/presets';
+import { TYPE_PRESETS, themeVarsOf } from '@/data/presets';
 import styles from './index.module.scss';
 
 const NOTE_MAX_LEN = 200;
 
-/** 备选编辑页（v0.5 用户意见 7）：试穿/展示图片 + 名称/类型/颜色/品牌/尺码/价格/备注 */
+/** 备选编辑页（v0.5 用户意见 7）：试穿/展示图片 + 类型/品牌/尺码/价格/备注
+ * v1.20.7：删除「添加示例照片」；名称去掉输入、自动生成为【品牌】+【拍摄日期】；
+ * 「期望类型/期望价格」更名「类型/价格」；颜色采集移除（历史数据保留） */
 const TryoutEditPage: React.FC = () => {
   const router = useRouter();
   const editId = router.params.id;
@@ -33,9 +29,7 @@ const TryoutEditPage: React.FC = () => {
   const editing = useMemo(() => tryoutItems.find((t) => t.id === editId), [tryoutItems, editId]);
 
   const [photos, setPhotos] = useState<string[]>([]);
-  const [name, setName] = useState('');
   const [type, setType] = useState('');
-  const [color, setColor] = useState('');
   const [brand, setBrand] = useState('');
   const [size, setSize] = useState('');
   const [price, setPrice] = useState('');
@@ -44,9 +38,7 @@ const TryoutEditPage: React.FC = () => {
   useEffect(() => {
     if (editing) {
       setPhotos(editing.photos || []);
-      setName(editing.name === '未命名试穿' ? '' : editing.name);
       setType(editing.type || '');
-      setColor(editing.color || '');
       setBrand(editing.brand || '');
       setSize(editing.size || '');
       setPrice(editing.price || '');
@@ -54,8 +46,6 @@ const TryoutEditPage: React.FC = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const sampleIndex = useState({ n: 0 })[0];
 
   const addPhoto = async (source: 'camera' | 'album') => {
     try {
@@ -71,12 +61,6 @@ const TryoutEditPage: React.FC = () => {
     }
   };
 
-  const addSamplePhoto = () => {
-    const url = samplePhoto(sampleIndex.n);
-    sampleIndex.n += 1;
-    setPhotos((prev) => [...prev, url].slice(0, 9));
-  };
-
   const removePhoto = (index: number) => {
     setPhotos(photos.filter((_, i) => i !== index));
   };
@@ -86,12 +70,15 @@ const TryoutEditPage: React.FC = () => {
       Taro.showToast({ title: '请至少添加 1 张图片', icon: 'none' });
       return;
     }
+    // v1.20.7：名称自动生成——【品牌】+【拍摄日期】（拍摄日期取记录日期；无品牌时仅日期）
+    const dateStr = dayjs(editing?.createdAt ?? Date.now()).format('YYYY-MM-DD');
+    const trimmedBrand = brand.trim();
+    const autoName = trimmedBrand ? `【${trimmedBrand}】${dateStr}` : dateStr;
     const payload = {
       photos,
-      name: name.trim(),
+      name: autoName,
       type,
-      color,
-      brand: brand.trim(),
+      brand: trimmedBrand,
       size,
       price: price.trim(),
       note: note.trim()
@@ -131,41 +118,18 @@ const TryoutEditPage: React.FC = () => {
           <View className={styles.actionBtn} onClick={() => addPhoto('album')}>
             <Text className={styles.actionBtnText}>从相册选择</Text>
           </View>
-          <View className={styles.actionBtn} onClick={addSamplePhoto}>
-            <Text className={styles.actionBtnText}>添加示例照片</Text>
-          </View>
         </View>
         <Text className={styles.hint}>试穿照或卖家展示图，作为购入前的参考记录</Text>
       </View>
 
       <View className={styles.card}>
-        <View className={styles.formRow}>
-          <Text className={styles.formLabel}>名称</Text>
-          <Input
-            className={styles.formInput}
-            value={name}
-            maxlength={20}
-            placeholder='如：春季风衣 候选（≤20 字）'
-            onInput={(e) => setName(e.detail.value)}
-          />
-        </View>
-
         <OptionSelector
-          label='期望类型'
+          label='类型'
           mode='picker'
           options={TYPE_PRESETS}
           value={type}
-          placeholder='请选择期望类型（转正式时预填）'
+          placeholder='请选择类型（转正式时预填）'
           onChange={(v) => setType(v as string)}
-        />
-
-        <OptionSelector
-          label='颜色'
-          mode='chips'
-          options={COLOR_PRESETS.map((c) => c.name)}
-          colorHexMap={COLOR_HEX_MAP}
-          value={color}
-          onChange={(v) => setColor(v as string)}
         />
 
         <View className={styles.formRow}>
@@ -191,7 +155,7 @@ const TryoutEditPage: React.FC = () => {
         </View>
 
         <View className={styles.formRow}>
-          <Text className={styles.formLabel}>期望价格</Text>
+          <Text className={styles.formLabel}>价格</Text>
           <Input
             className={styles.formInput}
             type='digit'
