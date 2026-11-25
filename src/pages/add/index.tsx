@@ -353,7 +353,7 @@ const AddItemPage: React.FC = () => {
       // 普通版：入口可见但受限，点击弹窗引导开通
       Taro.showModal({
         title: '批量添加为会员功能',
-        content: '批量添加为 VIP/SVIP 专属权益：一次选择多张照片，每张照片自动存为一件衣物，并自动识别服装类型、颜色、穿着季节（VIP 5 次/月，SVIP 15 次/月）。',
+        content: '批量添加为 VIP/SVIP 专属权益：一次选择多张照片，每张照片自动存为一件衣物，并自动识别服装类型、颜色、穿着季节（VIP 5 次/月，SVIP 无限次）。',
         confirmText: '去开通',
         cancelText: '取消',
         success: (r) => {
@@ -362,7 +362,7 @@ const AddItemPage: React.FC = () => {
       });
       return;
     }
-    if ((memberUsage.batchImportUsed || 0) >= quota.limit) {
+    if (quota.kind === 'counted' && (memberUsage.batchImportUsed || 0) >= quota.limit) {
       Taro.showToast({ title: `本月批量添加额度已用尽（${quota.limit} 次/月），下月恢复`, icon: 'none' });
       return;
     }

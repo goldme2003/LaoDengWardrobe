@@ -21,7 +21,7 @@ const WardrobeNewPage: React.FC = () => {
   const wardrobes = useWardrobeStore((s) => s.wardrobes);
   const currentWardrobeId = useWardrobeStore((s) => s.currentWardrobeId);
   const addWardrobe = useWardrobeStore((s) => s.addWardrobe);
-  // v1.9.0（F-19）：会员档位决定衣橱数量上限（普通 1 / VIP 2 / SVIP 5）
+  // v1.9.0（F-19）：会员档位决定衣橱数量上限（v1.19.1：普通 1 / VIP 3 / SVIP 8）
   const memberTier = useWardrobeStore((s) => s.memberTier);
   const tierCfg = tierOf(memberTier);
 
@@ -47,7 +47,7 @@ const WardrobeNewPage: React.FC = () => {
     if (wardrobes.length >= tierCfg.wardrobes) {
       Taro.showModal({
         title: '衣橱数量已达上限',
-        content: `当前版本最多创建 ${tierCfg.wardrobes} 个衣橱（${tierCfg.label}）。升级会员最多可创建 5 个。`,
+        content: `当前版本最多创建 ${tierCfg.wardrobes} 个衣橱（${tierCfg.label}）。升级会员最多可创建 8 个。`,
         confirmText: '去升级',
         success: (r) => {
           if (r.confirm) Taro.navigateTo({ url: '/pages/member/index' });
@@ -145,7 +145,7 @@ const WardrobeNewPage: React.FC = () => {
         </View>
         <Text className={styles.tip}>
           {tierCfg.label}最多创建 {tierCfg.wardrobes} 个衣橱
-          {tierCfg.wardrobes < 5 ? '，升级会员可创建更多；' : '；'}
+          {tierCfg.wardrobes < 8 ? '，升级会员可创建更多；' : '；'}
           衣橱名称创建后不可修改；性别/年龄/风格主题可在「我的」页修改；删除衣橱将连带删除其下全部衣物。
         </Text>
       </View>

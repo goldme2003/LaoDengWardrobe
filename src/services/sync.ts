@@ -62,7 +62,7 @@ interface SyncState {
   status: SyncStatus;
   openid: string;
   tier: MemberTier;
-  /** 服务端权威上限：可同步衣橱数（VIP 2 / SVIP 999≈全部） */
+  /** 服务端权威上限：可同步衣橱数（v1.19.1：VIP 3 / SVIP 999≈全部） */
   maxWardrobes: number;
   /** 服务端权威上限：照片容量 MB */
   photoQuotaMB: number;

@@ -233,7 +233,7 @@ const WardrobePage: React.FC = () => {
   const tierCfg = useMemo(() => tierOf(memberTier), [memberTier]);
   const goMember = useCallback(() => Taro.navigateTo({ url: '/pages/member/index' }), []);
 
-  // v1.9.0（F-19）：出差模式门控——普通版无出差推荐；VIP 5 次/月（用尽提示升级）；SVIP 无限次
+  // v1.9.0（F-19）：出差模式门控——普通版无出差推荐；v1.19.1：VIP 2 次/月（用尽提示升级）；SVIP 无限次
   const handleSwitchMode = useCallback(
     (m: 'local' | 'trip') => {
       if (m === 'trip') {
@@ -341,7 +341,7 @@ const WardrobePage: React.FC = () => {
     () => dailyOutfitsOf(dailyOutfitsMap, currentWardrobeId),
     [dailyOutfitsMap, currentWardrobeId]
   );
-  const outfitQuota = tierCfg.dailyOutfits; // 普通 1 / VIP 2 / SVIP 5
+  const outfitQuota = tierCfg.dailyOutfits; // v1.19.1：普通 0 / VIP 2 / SVIP 5
   const quotaReached = cachedEntries.length >= outfitQuota;
 
   // ===== v1.12.0：场景条扩展——预设 + 自定义场景、已推荐场景高亮、点标签跳转对应缓存套 =====

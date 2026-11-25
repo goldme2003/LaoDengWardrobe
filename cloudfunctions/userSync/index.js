@@ -27,10 +27,10 @@ const _ = db.command;
 const CONFLICT_RETENTION_DAYS = 30;
 const DAY_MS = 24 * 3600 * 1000;
 
-/** 档位约束（与前端 entitlement.ts 保持一致）：VIP 可同步 2 个衣橱 / 500MB 照片，SVIP 全部 / 2GB */
+/** 档位约束（与前端 entitlement.ts 保持一致，v1.19.1）：VIP 可同步 3 个衣橱 / 500MB 照片，SVIP 全部 / 2GB */
 const TIER_LIMITS = {
   free: { maxWardrobes: 0, photoQuotaMB: 0 },
-  vip: { maxWardrobes: 2, photoQuotaMB: 500 },
+  vip: { maxWardrobes: 3, photoQuotaMB: 500 },
   svip: { maxWardrobes: 999, photoQuotaMB: 2048 }
 };
 

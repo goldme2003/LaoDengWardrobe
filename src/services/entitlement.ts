@@ -14,25 +14,25 @@ export interface TierConfig {
   label: string;
   /** 一次性买断价（元）；null = 免费 */
   price: number | null;
-  /** 衣橱数量上限 */
+  /** 衣橱数量上限（v1.19.1：VIP 3 个 / SVIP 8 个） */
   wardrobes: number;
-  /** 服装批量导入/批量添加（次/月），0 = 无（v1.11.0 已上线：单次批量任务 = 1 次，写 memberUsage.batchImportUsed） */
-  batchImportPerMonth: number;
+  /** 服装批量导入/批量添加（次/月），0 = 无，null = 无限次（v1.19.1：SVIP 无限次；v1.11.0 已上线：单次批量任务 = 1 次，写 memberUsage.batchImportUsed） */
+  batchImportPerMonth: number | null;
   /** 当季推荐图组（张/天）：普通 0（不生图，展示本地示例）/ VIP 1 / SVIP 2（v1.13.1 调整；v1.14.0 起为每日可生成张数——点击风格或自定义风格后按张生成） */
   seasonalPerDay: number;
   /** 天气穿搭推荐档位 */
   weatherLevel: WeatherLevel;
-  /** 出差推荐（次/月），0 = 无，null = 无限次 */
+  /** 出差推荐（次/月），0 = 无，null = 无限次（v1.19.1：VIP 调整为 2 次/月） */
   tripPerMonth: number | null;
-  /** 时尚穿搭推荐（次/月），0 = 无，null = 无限次（功能待开发，仅登记权益） */
+  /** 时尚穿搭推荐（次/月），0 = 无，null = 无限次（功能待开发，仅登记权益；v1.19.1：VIP 2 次/月、SVIP 5 次/月） */
   fashionPerMonth: number | null;
   /** 云同步：local = 本地存储，cloud = 云端（v1.15.0 M1 已落地同步链路） */
   cloudSync: 'local' | 'cloud';
   /** v1.15.0（R-5）：照片云容量（MB，仅衣物/日记照片）；0 = 无云同步 */
   photoQuotaMB: number;
-  /** v1.15.0（R-5）：可同步衣橱数；null = 不限（SVIP 全部），0 = 无云同步 */
+  /** v1.15.0（R-5）：可同步衣橱数；null = 不限（SVIP 全部），0 = 无云同步（v1.19.1：VIP 3 个） */
   maxSyncWardrobes: number | null;
-  /** v1.10.0：明日穿搭推荐每日可生成套数（生成后当天缓存，次日重新生成；套数用尽只展示缓存） */
+  /** v1.10.0：明日穿搭推荐每日可生成套数（生成后当天缓存，次日重新生成；套数用尽只展示缓存；v1.19.1：普通版 0 套） */
   dailyOutfits: number;
 }
 
@@ -50,33 +50,33 @@ export const TIERS: Record<MemberTier, TierConfig> = {
     cloudSync: 'local',
     photoQuotaMB: 0,
     maxSyncWardrobes: 0,
-    dailyOutfits: 1
+    dailyOutfits: 0 // v1.19.1：普通版不提供明日推荐生成
   },
   vip: {
     id: 'vip',
     label: 'VIP',
     price: 18,
-    wardrobes: 2,
+    wardrobes: 3,
     batchImportPerMonth: 5,
     seasonalPerDay: 1,
     weatherLevel: 'plus',
-    tripPerMonth: 5,
-    fashionPerMonth: 5,
+    tripPerMonth: 2,
+    fashionPerMonth: 2,
     cloudSync: 'cloud',
     photoQuotaMB: 500,
-    maxSyncWardrobes: 2,
+    maxSyncWardrobes: 3,
     dailyOutfits: 2
   },
   svip: {
     id: 'svip',
     label: 'SVIP',
     price: 48,
-    wardrobes: 5,
-    batchImportPerMonth: 15,
+    wardrobes: 8,
+    batchImportPerMonth: null, // v1.19.1：SVIP 批量导入无限次
     seasonalPerDay: 2,
     weatherLevel: 'full',
     tripPerMonth: null,
-    fashionPerMonth: null,
+    fashionPerMonth: 5,
     cloudSync: 'cloud',
     photoQuotaMB: 2048,
     maxSyncWardrobes: null,
@@ -167,11 +167,13 @@ export const tripQuota = (
   return { kind: 'counted', limit: v };
 };
 
-/** v1.11.0：批量添加（批量导入）额度状态——blocked = 无权益（普通版），counted = 按月限次 */
+/** v1.11.0：批量添加（批量导入）额度状态——blocked = 无权益（普通版），counted = 按月限次，
+ * unlimited = 无限次（v1.19.1：SVIP） */
 export const batchImportQuota = (
   tier: MemberTier
-): { kind: 'blocked' | 'counted'; limit: number } => {
+): { kind: 'blocked' | 'counted' | 'unlimited'; limit: number } => {
   const v = tierOf(tier).batchImportPerMonth;
+  if (v === null) return { kind: 'unlimited', limit: Infinity };
   if (v <= 0) return { kind: 'blocked', limit: 0 };
   return { kind: 'counted', limit: v };
 };
