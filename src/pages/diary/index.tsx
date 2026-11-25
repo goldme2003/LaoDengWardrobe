@@ -3,7 +3,7 @@ import { View, Text, Image } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import dayjs from 'dayjs';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
-import { MAX_PHOTOS, samplePhoto, themeVarsOf } from '@/data/presets';
+import { MAX_PHOTOS, themeVarsOf } from '@/data/presets';
 import styles from './index.module.scss';
 
 const WEEK_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
@@ -67,12 +67,6 @@ const DiaryPage: React.FC = () => {
     } catch (e) {
       console.warn('[Diary] 选择照片取消或失败', e);
     }
-  };
-
-  const addSample = () => {
-    addDiaryEntry(selectedDate, [samplePhoto(Date.now() % 6)]);
-    console.info('[Diary] 添加示例照片, date =', selectedDate);
-    Taro.showToast({ title: '已记录', icon: 'success' });
   };
 
   const handleDelete = (id: string) => {
@@ -172,9 +166,6 @@ const DiaryPage: React.FC = () => {
           </View>
           <View className={styles.actionBtn} onClick={() => addPhotos('album')}>
             <Text className={styles.actionBtnText}>从相册选择</Text>
-          </View>
-          <View className={styles.actionBtn} onClick={addSample}>
-            <Text className={styles.actionBtnText}>添加示例照片</Text>
           </View>
         </View>
       </View>

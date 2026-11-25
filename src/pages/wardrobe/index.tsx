@@ -1040,7 +1040,11 @@ const WardrobePage: React.FC = () => {
             <View className={styles.planSets}>
               <Text className={styles.planSectionTitle}>今日备选套（点击整套应用 · 长按图片移出）</Text>
               {cachedVMs.map((vm, idx) => {
-                const active = vm.items.length > 0 && vm.items.every((it) => tomorrowIds.includes(it.id));
+                // v1.20.6 修复：长按移出后套内展示跟随实际勾选（picked）——
+                // 已应用（或部分移出）时只展示仍在明日穿搭中的衣物，未应用时展示整套预览
+                const picked = vm.items.filter((it) => tomorrowIds.includes(it.id));
+                const active = vm.items.length > 0 && picked.length === vm.items.length;
+                const shown = picked.length > 0 ? picked : vm.items;
                 return (
                   <View
                     key={`${vm.scene}-${idx}`}
@@ -1054,10 +1058,14 @@ const WardrobePage: React.FC = () => {
                       <Text className={styles.planSetTitle}>
                         第{PLAN_SET_CN[idx] || idx + 1}套备选 · {vm.sceneLabel || '推荐搭配'}
                       </Text>
-                      {active && <Text className={styles.planSetCheck}>✓ 已选</Text>}
+                      {active ? (
+                        <Text className={styles.planSetCheck}>✓ 已选</Text>
+                      ) : picked.length > 0 ? (
+                        <Text className={styles.planSetCheck}>已选 {picked.length}/{vm.items.length} 件</Text>
+                      ) : null}
                     </View>
                     <View className={styles.planGrid}>
-                      {vm.items.map((it) => (
+                      {shown.map((it) => (
                         <View
                           key={it.id}
                           className={styles.planItem}
