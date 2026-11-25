@@ -347,6 +347,14 @@
   margin-bottom: $spacing-sm;
 }
 
+// v1.20.5：明日穿搭空态引导文案（手动勾选区已移除，选择在首页长按完成）
+.planSectionTip {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  line-height: $line-height-loose;
+}
+
 .planSetCard {
   background: $color-bg-card;
   border-radius: $radius-lg;

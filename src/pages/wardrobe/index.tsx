@@ -73,8 +73,6 @@ const WardrobePage: React.FC = () => {
   const [weatherCity, setWeatherCity] = useState('');
   // v0.6：明日穿搭勾选模式
   const [planMode, setPlanMode] = useState(false);
-  // v1.17.1：手动勾选展开态（有备选套时默认收起，只展示备选套与已选衣物）
-  const [manualPick, setManualPick] = useState(false);
   // v0.7：手风琴分组收起状态（key = 类型名，true = 收起；不在表中 = 展开，默认全部展开）
   const [collapsedMap, setCollapsedMap] = useState<Record<string, boolean>>({});
   // v1.1：点击页内「切换衣橱」按钮弹出的衣橱切换弹层
@@ -1037,10 +1035,10 @@ const WardrobePage: React.FC = () => {
             />
           )}
 
-          {/* v1.17.1：今日备选套（首页推荐缓存）——整套点选应用，不再全衣橱打勾 */}
+          {/* v1.17.1：今日备选套（首页推荐缓存）——整套点选应用；v1.20.5：长按套内图片移出单件 */}
           {planGroups.length > 0 && cachedVMs.length > 0 && (
             <View className={styles.planSets}>
-              <Text className={styles.planSectionTitle}>今日备选套（点击整套应用）</Text>
+              <Text className={styles.planSectionTitle}>今日备选套（点击整套应用 · 长按图片移出）</Text>
               {cachedVMs.map((vm, idx) => {
                 const active = vm.items.length > 0 && vm.items.every((it) => tomorrowIds.includes(it.id));
                 return (
@@ -1060,7 +1058,14 @@ const WardrobePage: React.FC = () => {
                     </View>
                     <View className={styles.planGrid}>
                       {vm.items.map((it) => (
-                        <View key={it.id} className={styles.planItem}>
+                        <View
+                          key={it.id}
+                          className={styles.planItem}
+                          onLongPress={() => {
+                            toggleTomorrowItem(it.id);
+                            Taro.showToast({ title: `已将「${it.name}」移出明日穿搭`, icon: 'none' });
+                          }}
+                        >
                           <Image className={styles.planPhoto} src={it.photos[0]} mode='aspectFill' />
                           <Text className={styles.planName} numberOfLines={1}>
                             {it.name}
@@ -1074,10 +1079,10 @@ const WardrobePage: React.FC = () => {
             </View>
           )}
 
-          {/* v1.18.0：自选套——衣橱长按/手动勾选加入的衣物聚合为一套，点击卡片整体取消 */}
+          {/* v1.18.0：自选套——首页长按衣物加入的衣物聚合为一套；v1.20.5：长按套内图片移出单件 */}
           {customSetItems.length > 0 && (
             <View className={styles.planSets}>
-              <Text className={styles.planSectionTitle}>我的自选套（衣橱长按衣物加入）</Text>
+              <Text className={styles.planSectionTitle}>我的自选套（首页长按衣物加入 · 长按图片移出）</Text>
               <View
                 className={styles.planSetCard}
                 onClick={() => {
@@ -1091,7 +1096,14 @@ const WardrobePage: React.FC = () => {
                 </View>
                 <View className={styles.planGrid}>
                   {customSetItems.map((it) => (
-                    <View key={it.id} className={styles.planItem}>
+                    <View
+                      key={it.id}
+                      className={styles.planItem}
+                      onLongPress={() => {
+                        toggleTomorrowItem(it.id);
+                        Taro.showToast({ title: `已将「${it.name}」移出明日穿搭`, icon: 'none' });
+                      }}
+                    >
                       <Image className={styles.planPhoto} src={it.photos[0]} mode='aspectFill' />
                       <Text className={styles.planName} numberOfLines={1}>
                         {it.name}
@@ -1103,46 +1115,14 @@ const WardrobePage: React.FC = () => {
             </View>
           )}
 
-          {/* v1.17.1：手动勾选折叠入口（无备选套时默认展开兜底，保留逐件勾选能力；取消已选在手动勾选区操作） */}
-          {planGroups.length > 0 && (manualPick || cachedVMs.length === 0) ? (
-            <>
-              <View className={styles.planManualToggle} onClick={() => setManualPick(false)}>
-                <Text className={styles.planManualToggleText}>收起手动勾选 ▴</Text>
-              </View>
-              {planGroups.map((g) => (
-                <View key={g.type} className={styles.planGroup}>
-                  <Text className={styles.planGroupTitle}>{g.type}</Text>
-                  <View className={styles.planGrid}>
-                    {g.list.map((it) => {
-                      const selected = tomorrowIds.includes(it.id);
-                      return (
-                        <View
-                          key={it.id}
-                          className={`${styles.planItem} ${selected ? styles.planItemSelected : ''}`}
-                          onClick={() => toggleTomorrowItem(it.id)}
-                        >
-                          <Image className={styles.planPhoto} src={it.photos[0]} mode='aspectFill' />
-                          <Text className={styles.planName} numberOfLines={1}>
-                            {it.name}
-                          </Text>
-                          {selected && (
-                            <View className={styles.planCheck}>
-                              <Text className={styles.planCheckText}>✓</Text>
-                            </View>
-                          )}
-                        </View>
-                      );
-                    })}
-                  </View>
-                </View>
-              ))}
-            </>
-          ) : (
-            planGroups.length > 0 && (
-              <View className={styles.planManualToggle} onClick={() => setManualPick(true)}>
-                <Text className={styles.planManualToggleText}>没有合适的备选？手动勾选衣物 ▾</Text>
-              </View>
-            )
+          {/* v1.20.5：手动勾选区已移除——衣物选择统一在首页长按完成 */}
+          {customSetItems.length === 0 && cachedVMs.length === 0 && (
+            <View className={styles.planSets}>
+              <Text className={styles.planSectionTitle}>暂无已选衣物</Text>
+              <Text className={styles.planSectionTip}>
+                回到衣橱长按衣物即可加入明日穿搭；也可在上方推荐卡生成今日备选套
+              </Text>
+            </View>
           )}
           <View className={styles.planDone} onClick={() => setPlanMode(false)}>
             <Text className={styles.planDoneText}>完成（已选 {tomorrowIds.length} 件）</Text>
