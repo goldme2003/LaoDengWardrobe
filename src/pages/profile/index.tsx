@@ -10,6 +10,7 @@ import {
   BODY_FIELD_DEFS,
   BODY_TAILORING_KEYS,
   CLOTHING_SIZE_FIELD_DEFS,
+  TOP_SIZE_OPTIONS,
   themeVarsOf
 } from '@/data/presets';
 import { BodyProfile, Gender } from '@/types';
@@ -19,6 +20,9 @@ const UNFILLED = '未填写';
 /** 身高合理区间（cm），与 BODY_FIELD_DEFS 中身高定义一致 */
 const HEIGHT_MIN = 50;
 const HEIGHT_MAX = 250;
+/** 体重合理区间（kg），与 BODY_FIELD_DEFS 中体重定义一致（v1.20.4 移入基本信息） */
+const WEIGHT_MIN = 10;
+const WEIGHT_MAX = 300;
 
 /** 数字拨盘选项：['未填写', min..max] */
 const buildNumberRange = (min: number, max: number): string[] => {
@@ -50,6 +54,8 @@ const ProfilePage: React.FC = () => {
 
   // 拨盘选项（年龄 + 身体数据，均为「未填写」+ 数字区间；身高改为文本框，不在拨盘之列）
   const ageRange = useMemo(() => buildNumberRange(AGE_MIN, AGE_MAX), []);
+  // v1.20.4：基本信息体重拨盘
+  const weightRange = useMemo(() => buildNumberRange(WEIGHT_MIN, WEIGHT_MAX), []);
   const bodyRanges = useMemo(() => {
     const map: Record<string, string[]> = {};
     BODY_FIELD_DEFS.forEach((f) => {
@@ -154,7 +160,7 @@ const ProfilePage: React.FC = () => {
             </View>
           </Picker>
         </View>
-        {/* v0.7.0 用户意见 5：身高改为文本框直接填写 */}
+        {/* v0.7.0 用户意见 5：身高文本框直接填写；v1.20.4：体重保留在基本信息（拨盘） */}
         <View className={styles.row}>
           <Text className={styles.label}>身高（cm）</Text>
           <Input
@@ -166,6 +172,32 @@ const ProfilePage: React.FC = () => {
             onInput={(e) => setHeightInput(e.detail.value)}
           />
         </View>
+        <View className={styles.row}>
+          <Text className={styles.label}>体重（kg）</Text>
+          <Picker
+            mode='selector'
+            range={weightRange}
+            value={
+              draftBody.weight === undefined
+                ? 0
+                : Math.max(0, Math.min(weightRange.length - 1, draftBody.weight - WEIGHT_MIN + 1))
+            }
+            onChange={(e) => {
+              const idx = Number(e.detail.value);
+              setDraftBody((prev) => ({
+                ...prev,
+                weight: idx === 0 ? undefined : WEIGHT_MIN + idx - 1
+              }));
+            }}
+          >
+            <View className={styles.picker}>
+              <Text className={styles.value}>
+                {draftBody.weight === undefined ? UNFILLED : `${draftBody.weight} kg`}
+              </Text>
+              <Text className={styles.arrow}>▾</Text>
+            </View>
+          </Picker>
+        </View>
       </View>
 
       {/* v1.20.2：常用衣物尺寸移到身材数据之前，改为手动填写 */}
@@ -173,8 +205,31 @@ const ProfilePage: React.FC = () => {
         <Text className={styles.sectionTitle}>服装尺寸数据</Text>
         {CLOTHING_SIZE_FIELD_DEFS.map((f) => {
           const cur = draftBody[f.key];
+          // v1.20.4：上衣尺码改为拨盘选择（字母码 XXS–XXXL + 身高码 90–190 两口径均可选）
+          if (f.key === 'topSize') {
+            const options = [UNFILLED, ...TOP_SIZE_OPTIONS];
+            const valueIdx = cur === undefined || cur === '' ? 0 : Math.max(0, options.indexOf(String(cur)));
+            return (
+              <View key={f.key} className={styles.row}>
+                <Text className={styles.label}>{f.label}</Text>
+                <Picker
+                  mode='selector'
+                  range={options}
+                  value={valueIdx}
+                  onChange={(e) => {
+                    const idx = Number(e.detail.value);
+                    setDraftBody((prev) => ({ ...prev, topSize: idx === 0 ? undefined : options[idx] }));
+                  }}
+                >
+                  <View className={styles.picker}>
+                    <Text className={styles.value}>{cur === undefined || cur === '' ? UNFILLED : cur}</Text>
+                    <Text className={styles.arrow}>▾</Text>
+                  </View>
+                </Picker>
+              </View>
+            );
+          }
           const placeholderMap: Record<string, string> = {
-            topSize: '如 M / L / 175',
             pantsSize: '如 30（腰围档）',
             shoeSize: '如 38、40'
           };
@@ -194,7 +249,7 @@ const ProfilePage: React.FC = () => {
           );
         })}
         <Text className={styles.tip}>
-          支持手动填写：上衣尺码如 M/L 等字母码或 170/175 等身高码；裤装为 24–40 腰围档位；鞋码如 38、40。均为选填。
+          上衣尺码可选字母码（XXS–XXXL）或身高码（90–190）；裤装、鞋码手动填写。均为选填。
         </Text>
       </View>
 

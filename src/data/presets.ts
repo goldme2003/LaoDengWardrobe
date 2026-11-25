@@ -1,7 +1,7 @@
 import { CustomDimension, Gender, ThemeId, BodyProfile } from '@/types';
 
 /** 当前版本号（在「我的」页展示） */
-export const APP_VERSION = 'v1.20.3';
+export const APP_VERSION = 'v1.20.4';
 
 /** 性别选项（v0.5） */
 export const GENDER_OPTIONS: { value: Gender; label: string }[] = [
@@ -114,8 +114,18 @@ export const SIZE_OPTIONS = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 /** 裤装腰围尺码档位（v0.7.0：24–40 英寸，共 17 档；服装类型为「裤装」时使用） */
 export const WAIST_SIZE_OPTIONS: string[] = Array.from({ length: 17 }, (_, i) => String(24 + i));
 
-/** 常用上衣尺码选项（v0.7.0：字母码 + 常见身高码，支持 170/175/M/L 等格式） */
-export const TOP_SIZE_OPTIONS = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '160', '165', '170', '175', '180', '185'];
+/** 常用上衣尺码选项（v1.20.4：字母码 XXS–XXXL + 身高码 90–190（步长 5），两种口径均可选） */
+export const TOP_SIZE_OPTIONS = [
+  'XXS',
+  'XS',
+  'S',
+  'M',
+  'L',
+  'XL',
+  'XXL',
+  'XXXL',
+  ...Array.from({ length: 21 }, (_, i) => String(90 + i * 5))
+];
 
 /** 常用鞋码选项（v0.7.0：35–46 码） */
 export const SHOE_SIZE_OPTIONS: string[] = Array.from({ length: 12 }, (_, i) => String(35 + i));
