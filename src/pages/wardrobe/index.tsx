@@ -368,11 +368,6 @@ const WardrobePage: React.FC = () => {
 
   const itemMap = useMemo(() => new Map(currentItems.map((it) => [it.id, it])), [currentItems]);
 
-  // v1.17.1：已选衣物实体（明日穿搭页只展示选中的衣物，不再全衣橱打勾）
-  const planSelected = useMemo(
-    () => tomorrowIds.map((id) => itemMap.get(id)).filter((it): it is ClothingItem => !!it),
-    [tomorrowIds, itemMap]
-  );
   const cachedVMs = useMemo<OutfitVM[]>(
     () =>
       cachedEntries
@@ -1048,31 +1043,7 @@ const WardrobePage: React.FC = () => {
             </View>
           )}
 
-          {/* v1.17.1：已选衣物——只显示选中的衣物，点击取消 */}
-          {planSelected.length > 0 && (
-            <View className={styles.planSelBox}>
-              <Text className={styles.planSectionTitle}>已选衣物（{planSelected.length} 件，点击取消）</Text>
-              <View className={styles.planGrid}>
-                {planSelected.map((it) => (
-                  <View
-                    key={it.id}
-                    className={`${styles.planItem} ${styles.planItemSelected}`}
-                    onClick={() => toggleTomorrowItem(it.id)}
-                  >
-                    <Image className={styles.planPhoto} src={it.photos[0]} mode='aspectFill' />
-                    <Text className={styles.planName} numberOfLines={1}>
-                      {it.name}
-                    </Text>
-                    <View className={styles.planCheck}>
-                      <Text className={styles.planCheckText}>✓</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* v1.17.1：手动勾选折叠入口（无备选套时默认展开兜底，保留逐件勾选能力） */}
+          {/* v1.17.1：手动勾选折叠入口（无备选套时默认展开兜底，保留逐件勾选能力；取消已选在手动勾选区操作） */}
           {planGroups.length > 0 && (manualPick || cachedVMs.length === 0) ? (
             <>
               <View className={styles.planManualToggle} onClick={() => setManualPick(false)}>

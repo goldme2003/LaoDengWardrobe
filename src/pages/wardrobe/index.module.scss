@@ -361,14 +361,6 @@
   color: var(--w-color, $color-primary);
 }
 
-.planSelBox {
-  background: $color-bg-card;
-  border-radius: $radius-lg;
-  box-shadow: $shadow-card;
-  padding: $spacing-md;
-  margin-bottom: $spacing-md;
-}
-
 .planManualToggle {
   display: flex;
   align-items: center;
