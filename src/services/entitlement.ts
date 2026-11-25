@@ -114,6 +114,9 @@ export interface MemberUsage {
   batchImportUsed: number;
   /** 本月时尚穿搭推荐已用次数 */
   fashionUsed: number;
+  /** v1.19.0：今日明日穿搭推荐已生成套数（key = 衣橱id，与 dailyOutfits 缓存口径一致；
+   * 随用量计数上云，跨端取 max 合并，防止换设备后重复生成超出档位套数） */
+  dailyOutfitUsed?: Record<string, number>;
 }
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -130,7 +133,8 @@ export const initialUsage = (): MemberUsage => ({
   month: monthKey(),
   tripUsed: 0,
   batchImportUsed: 0,
-  fashionUsed: 0
+  fashionUsed: 0,
+  dailyOutfitUsed: {}
 });
 
 /** 窗口滚动：day/month 与当前不符时重置对应计数（读取/写入前调用） */
@@ -142,6 +146,7 @@ export const rolledUsage = (usage: MemberUsage | undefined): MemberUsage => {
   if (base.day !== day) {
     next.day = day;
     next.seasonalViewed = 0;
+    next.dailyOutfitUsed = {}; // v1.19.0：每日推荐套数随日窗口重置
   }
   if (base.month !== month) {
     next.month = month;

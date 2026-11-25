@@ -1,19 +1,23 @@
-/** 云同步云函数（v1.15.0，R-5 M1）
+/** 云同步云函数（v1.15.0，R-5 M1；v1.19.0 单端互踢 + 用量计数入快照）
  * 入参：{ action: 'ping' | 'login' | 'pull' | 'push' | 'deleteCloud' | 'photoStat', ... }
  * 出参（均 { code, ... }）：
- *   login      → { code:'OK', openid, tier, dataVersion, hasRemote, photoBytes, maxWardrobes, photoQuotaMB }
- *   pull       → { code:'OK', dataVersion, updatedAt, data }（data = null 表示云端无快照）
- *   push       → { code:'OK'|'CONFLICT', dataVersion?, remoteVersion?, remoteData?, conflictId? }
+ *   login      → { code:'OK', openid, tier, dataVersion, hasRemote, photoBytes, maxWardrobes, photoQuotaMB, activeDeviceId }
+ *   pull       → { code:'OK'|'KICKED', dataVersion, updatedAt, data }（data = null 表示云端无快照）
+ *   push       → { code:'OK'|'CONFLICT'|'KICKED', dataVersion?, remoteVersion?, remoteData?, conflictId? }
  *   deleteCloud→ { code:'OK' }
- *   photoStat  → { code:'OK', photoBytes }
+ *   photoStat  → { code:'OK'|'KICKED', photoBytes }
  * 说明：
  *   1. 登录方式为微信授权静默登录：服务端经 cloud.getWXContext().OPENID 识别微信号身份，全程无弹窗；
  *   2. 会员档位以服务端为准：members 集合订单校验；微信支付未开通的测试期，若服务端为 free
  *      且客户端上报 vip/svip（本地测试开通），采用客户端上报值写入 users.tier（支付接入后移除该回落）；
  *   3. 快照为单用户全量文档（同步范围见设计方案 4.4：所选衣橱 + 衣物 + 日记 + 自定义项/场景 +
- *      喜爱品牌 + 备选条目 + 身体数据 + 编号计数器；明日穿搭勾选/推荐缓存/推荐产物不上云）；
+ *      喜爱品牌 + 备选条目 + 身体数据 + 编号计数器 + 会员用量计数（v1.19.0）；
+ *      明日穿搭勾选/推荐缓存/推荐产物不上云）；
  *   4. push 快照版本冲突时写入 sync_conflicts 副本（统一保留 30 天，M3 做过期清理），不覆盖任何一方；
- *   5. 需在云开发控制台创建集合：users、wardrobe_snapshots、sync_conflicts（权限：仅管理端可读写）。 */
+ *   5. 需在云开发控制台创建集合：users、wardrobe_snapshots、sync_conflicts（权限：仅管理端可读写）；
+ *   6. 单端互踢（v1.19.0，需求方确认）：login 上报 deviceId 写入 users.activeDeviceId（新登录顶掉旧设备）；
+ *      pull/push/photoStat 携带 deviceId 与 activeDeviceId 不一致时返回 KICKED，旧设备停止云端读写；
+ *      未携带 deviceId 的旧客户端跳过校验（向后兼容）。 */
 const cloud = require('wx-server-sdk');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
@@ -60,6 +64,13 @@ function stripId(doc) {
   return copy;
 }
 
+/** 单端互踢（v1.19.0）：校验请求方设备是否仍是当前活跃设备；
+ * 未携带 deviceId（旧客户端）视为有效，跳过校验。 */
+function isDeviceActive(user, deviceId) {
+  if (!deviceId) return true;
+  return !user || !user.activeDeviceId || user.activeDeviceId === deviceId;
+}
+
 async function getSnapshot(openid) {
   try {
     const res = await db.collection('wardrobe_snapshots').doc(openid).get();
@@ -77,7 +88,7 @@ function inGrace(user) {
 
 exports.main = async (event = {}) => {
   const action = event.action || 'login';
-  console.log(`[userSync] v1.17.0 action=${action}`);
+  console.log(`[userSync] v1.19.0 action=${action}`);
 
   if (action === 'ping') {
     return {
@@ -114,9 +125,11 @@ exports.main = async (event = {}) => {
     }
 
     // 宽限期内登录：清除删除标记自动恢复
+    // v1.19.0：登记当前活跃设备（单端互踢）——新设备登录顶掉旧设备
     const patch = {
       tier,
       updatedAt: now,
+      ...(event.deviceId ? { activeDeviceId: event.deviceId, deviceLoginAt: now } : {}),
       ...(user.deletedAt && inGrace(user) ? { deletedAt: null } : {})
     };
     if (reset) patch.deletedAt = null;
@@ -138,7 +151,8 @@ exports.main = async (event = {}) => {
       hasRemote,
       photoBytes: reset ? 0 : user.photoBytes || 0,
       maxWardrobes: limits.maxWardrobes,
-      photoQuotaMB: limits.photoQuotaMB
+      photoQuotaMB: limits.photoQuotaMB,
+      activeDeviceId: event.deviceId || ''
     };
   }
 
@@ -169,6 +183,11 @@ exports.main = async (event = {}) => {
   if (action === 'pull') {
     const user = await getUser(OPENID);
     if (!user) return { code: 'OK', dataVersion: 0, updatedAt: 0, data: null };
+    // v1.19.0：单端互踢——非活跃设备停止下行
+    if (!isDeviceActive(user, event.deviceId)) {
+      console.log(`[userSync] pull 被拒：设备 ${event.deviceId} 非活跃设备`);
+      return { code: 'KICKED', message: '账号已在其他设备登录，本设备已停止同步' };
+    }
     const snap = await getSnapshot(OPENID);
     if (!snap || !snap.data) return { code: 'OK', dataVersion: 0, updatedAt: 0, data: null };
     return {
@@ -196,6 +215,11 @@ exports.main = async (event = {}) => {
       }
     }
     const serverVersion = user.dataVersion || 0;
+    // v1.19.0：单端互踢——非活跃设备停止上行（不写冲突副本，本地数据保留）
+    if (!isDeviceActive(user, event.deviceId)) {
+      console.log(`[userSync] push 被拒：设备 ${event.deviceId} 非活跃设备`);
+      return { code: 'KICKED', message: '账号已在其他设备登录，本设备已停止同步' };
+    }
     const accepted = force || baseVersion === serverVersion;
     if (!accepted) {
       // 快照级冲突：写副本（仅保留差异侧由客户端三选一时对比，M1 双侧均存）
@@ -286,6 +310,10 @@ exports.main = async (event = {}) => {
     try {
       const user = await getUser(OPENID);
       const base = user || { tier: 'free', dataVersion: 0, photoBytes: 0, createdAt: Date.now() };
+      // v1.19.0：单端互踢——非活跃设备不上报容量计量
+      if (!isDeviceActive(user, event.deviceId)) {
+        return { code: 'KICKED', message: '账号已在其他设备登录，本设备已停止同步' };
+      }
       const next = Math.max(0, (base.photoBytes || 0) + delta);
       await db.collection('users').doc(OPENID).set({
         data: stripId({ ...base, photoBytes: next, updatedAt: Date.now() })

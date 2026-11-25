@@ -3,12 +3,15 @@
  *   1. 微信授权静默登录（userSync 云函数，openid 维度，失败指数退避重试，不阻塞本地功能）；
  *   2. 全量快照上下行（pull / push，乐观锁 baseVersion）；
  *   3. 实体合并（设计方案 5.5：按 id 合并、updatedAt 新者胜、计数器取 max、集合取并集、合并原子化）；
- *   4. 同步范围裁剪（4.4：所选衣橱 + 衣物/日记/备选/身体数据/计数器 + 全局自定义项/品牌/场景；
- *      明日穿搭勾选、推荐缓存、推荐产物、城市、会员用量不上云）；
+ *   4. 同步范围裁剪（4.4：所选衣橱 + 衣物/日记/备选/身体数据/计数器 + 全局自定义项/品牌/场景 + 会员用量计数；
+ *      明日穿搭勾选、推荐缓存、推荐产物、城市不上云；v1.19.0 起用量计数（含每日推荐套数）上云）；
  *   5. 3s 防抖上行（commit 打脏后自动触发）；
  *   6. 照片上传（仅衣物/日记照片，分批 5 张、路径去重、容量按档位约束、fileID 回填不打脏）；
  *   7. 快照冲突策略（v1.16.0，需求方确认）：如遇冲突，云端覆盖本地——同步范围自动以云端为准，不再三选一；
- *   8. 会员档位上行（v1.17.0）：启动 login 上报 + 会话内档位变更实时 setTier 上行（档位不入快照）。
+ *   8. 会员档位上行（v1.17.0）：启动 login 上报 + 会话内档位变更实时 setTier 上行（档位不入快照）；
+ *   9. 单端互踢（v1.19.0，需求方确认）：登录上报 deviceId，服务端登记唯一活跃设备；
+ *      pull/push/photoStat 被判非活跃设备时返回 KICKED → 本机进入 kicked 态，暂停云端读写（本地数据保留），
+ *      「立即同步」重新登录后接管（顶掉另一设备）。
  * 仅微信端可用（CLOUD_READY）；H5 端所有入口静默返回，不阻塞本地功能。
  * 云同步开关默认关闭：开启后才发起任何云端数据请求（登录本身除外，仅返回身份与档位）。 */
 import Taro from '@tarojs/taro';
@@ -16,7 +19,7 @@ import { create } from 'zustand';
 import { CLOUD_READY } from '@/config/cloud';
 import { USER_SYNC_FN_NAME } from '@/config/cloud';
 import { useWardrobeStore, LdwData } from '@/store/useWardrobeStore';
-import { tierOf, MemberTier } from '@/services/entitlement';
+import { tierOf, MemberTier, MemberUsage, rolledUsage } from '@/services/entitlement';
 import {
   Wardrobe,
   ClothingItem,
@@ -35,6 +38,7 @@ export type SyncStatus =
   | 'ready' // 已同步（无待上行变更）
   | 'pending' // 有变更待上行（防抖/重试中）
   | 'syncing' // 同步中
+  | 'kicked' // v1.19.0：账号已在其他设备登录，本机暂停云同步（本地数据保留，可手动「立即同步」接管）
   | 'error'; // 登录或同步失败（可重试；v1.16.0 起冲突自动以云端覆盖本地，不再有待处理冲突态）
 
 /** 云端快照数据结构（同步范围，见设计方案 4.4；与服务端 wardrobe_snapshots.data 一致） */
@@ -49,6 +53,8 @@ export interface SnapshotData {
   favoriteBrands: string[];
   bodyProfiles: Record<string, BodyProfile>;
   counters: Record<string, number>;
+  /** v1.19.0：会员用量计数（当季图组/出差/批量导入/时尚推荐 + 每日推荐套数），跨端取 max 合并 */
+  memberUsage: MemberUsage;
   currentWardrobeId: string;
 }
 
@@ -89,12 +95,38 @@ const MAX_RETRY = 5;
 const RETRY_BASE_MS = 2000;
 const PHOTO_BATCH = 5;
 const PHOTO_UPLOAD_MAP_KEY = 'ldw_photo_upload_map';
+/** v1.19.0：设备标识持久化 key（单端互踢判定依据） */
+const DEVICE_ID_KEY = 'ldw_device_id';
 
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let retryCount = 0;
 let syncing = false;
 let watcherRegistered = false;
+
+/** v1.19.0：设备标识（本地生成并持久化；登录上报服务端登记为唯一活跃设备） */
+const getDeviceId = (): string => {
+  try {
+    const stored = Taro.getStorageSync(DEVICE_ID_KEY);
+    if (stored) return stored;
+    const id = `d_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    Taro.setStorageSync(DEVICE_ID_KEY, id);
+    return id;
+  } catch (e) {
+    return 'd_unknown';
+  }
+};
+
+/** v1.19.0：被其他设备顶下线——清理定时器、进入 kicked 态；本地数据保留，仅暂停云端读写 */
+const handleKicked = (): void => {
+  if (pushTimer) {
+    clearTimeout(pushTimer);
+    pushTimer = null;
+  }
+  setSyncState({ status: 'kicked', errorMsg: '' });
+  Taro.showToast({ title: '账号已在其他设备登录，本机已暂停云同步', icon: 'none', duration: 2500 });
+  console.warn('[Sync] 已被其他设备顶下线，本机暂停云同步（「立即同步」可重新接管）');
+};
 
 /** 空快照兜底（远端旧数据/异常数据缺字段时不崩溃） */
 const normalizeSnapshot = (raw: Partial<SnapshotData> | null | undefined): SnapshotData | null => {
@@ -110,8 +142,34 @@ const normalizeSnapshot = (raw: Partial<SnapshotData> | null | undefined): Snaps
     favoriteBrands: Array.isArray(raw.favoriteBrands) ? raw.favoriteBrands : [],
     bodyProfiles: raw.bodyProfiles && typeof raw.bodyProfiles === 'object' ? raw.bodyProfiles : {},
     counters: raw.counters && typeof raw.counters === 'object' ? raw.counters : {},
+    // v1.19.0：旧快照无 memberUsage 时以本地 rolledUsage 兜底（缺字段不崩溃）
+    memberUsage: rolledUsage(
+      raw.memberUsage && typeof raw.memberUsage === 'object'
+        ? (raw.memberUsage as MemberUsage)
+        : undefined
+    ),
     currentWardrobeId: typeof raw.currentWardrobeId === 'string' ? raw.currentWardrobeId : ''
   };
+};
+
+/** 用量计数合并（v1.19.0）：窗口（day/month）一致时各计数取 max（单调递增，防止换端重复用额度），
+ * 窗口不一致以本地为准（跨天后 rolledUsage 本就会重置）。 */
+const mergeMemberUsage = (local: MemberUsage, remote: MemberUsage): MemberUsage => {
+  const merged: MemberUsage = { ...local };
+  if (remote.day === local.day) {
+    merged.seasonalViewed = Math.max(local.seasonalViewed || 0, remote.seasonalViewed || 0);
+    const used: Record<string, number> = { ...(local.dailyOutfitUsed || {}) };
+    Object.entries(remote.dailyOutfitUsed || {}).forEach(([wid, v]) => {
+      used[wid] = Math.max(used[wid] || 0, v);
+    });
+    merged.dailyOutfitUsed = used;
+  }
+  if (remote.month === local.month) {
+    merged.tripUsed = Math.max(local.tripUsed || 0, remote.tripUsed || 0);
+    merged.batchImportUsed = Math.max(local.batchImportUsed || 0, remote.batchImportUsed || 0);
+    merged.fashionUsed = Math.max(local.fashionUsed || 0, remote.fashionUsed || 0);
+  }
+  return merged;
 };
 
 /** 实体最后修改时间（updatedAt 优先，旧数据以 createdAt 兜底，见设计方案 5.5 第 2 条） */
@@ -152,6 +210,8 @@ export const buildSnapshotData = (s: LdwData, wardrobeIds?: string[]): SnapshotD
     favoriteBrands: s.favoriteBrands || [],
     bodyProfiles,
     counters,
+    // v1.19.0：会员用量计数随快照上云（全局数据，不按衣橱裁剪； rolledUsage 保证窗口新鲜）
+    memberUsage: rolledUsage(s.memberUsage),
     currentWardrobeId
   };
 };
@@ -346,6 +406,8 @@ export const mergeSnapshot = (
       favoriteBrands,
       counters,
       bodyProfiles,
+      // v1.19.0：用量计数跨端取 max（含每日推荐套数）
+      memberUsage: mergeMemberUsage(rolledUsage(local.memberUsage), remote.memberUsage),
       currentWardrobeId,
       ...patchSync
     },
@@ -409,7 +471,7 @@ export const loginAndSync = async (): Promise<void> => {
   try {
     const res = await Taro.cloud.callFunction({
       name: USER_SYNC_FN_NAME,
-      data: { action: 'login', tier: store.memberTier }
+      data: { action: 'login', tier: store.memberTier, deviceId: getDeviceId() }
     });
     const result = res.result as { code: string; message?: string } & Record<string, any>;
     if (result.code !== 'OK') {
@@ -514,6 +576,8 @@ const applyRemoteOverwrite = (remote: SnapshotData | null, remoteVersion: number
     favoriteBrands: Array.from(new Set([...(s.favoriteBrands || []), ...remote.favoriteBrands])),
     bodyProfiles: { ...s.bodyProfiles, ...remote.bodyProfiles },
     counters,
+    // v1.19.0：用量计数窗口一致取 max（单调递增），不随云端覆盖回退
+    memberUsage: mergeMemberUsage(rolledUsage(s.memberUsage), remote.memberUsage),
     currentWardrobeId: ids.has(s.currentWardrobeId)
       ? s.currentWardrobeId
       : remoteCurrent && ids.has(remoteCurrent)
@@ -545,10 +609,16 @@ const pushSnapshot = async (force = false): Promise<boolean> => {
       baseVersion: meta.lastSyncedVersion,
       dataVersion: meta.dataVersion,
       data,
-      force
+      force,
+      deviceId: getDeviceId()
     }
   });
   const result = res.result as { code: string; message?: string } & Record<string, any>;
+  if (result.code === 'KICKED') {
+    // v1.19.0：单端互踢——本机已被顶下线，停止上行（本地数据保留）
+    handleKicked();
+    return false;
+  }
   if (result.code === 'OK') {
     markSynced(result.dataVersion || meta.dataVersion);
     setSyncState({ status: 'ready', hasRemote: true });
@@ -576,9 +646,14 @@ const pushSnapshot = async (force = false): Promise<boolean> => {
 const pullAndMerge = async (): Promise<void> => {
   const res = await Taro.cloud.callFunction({
     name: USER_SYNC_FN_NAME,
-    data: { action: 'pull' }
+    data: { action: 'pull', deviceId: getDeviceId() }
   });
   const result = res.result as { code: string; data?: Partial<SnapshotData>; dataVersion?: number };
+  if (result.code === 'KICKED') {
+    // v1.19.0：单端互踢——本机已被顶下线，停止下行
+    handleKicked();
+    return;
+  }
   if (result.code !== 'OK' || !result.data) return;
   const remote = normalizeSnapshot(result.data);
   if (!remote || remote.wardrobes.length === 0) return;
@@ -608,18 +683,32 @@ export const syncOnce = async (): Promise<boolean> => {
     return false;
   }
   if (!s.syncMeta.openid || !s.cloudSyncEnabled) return false;
+  // v1.19.0：kicked 态不发同步（先经 syncNow/loginAndSync 重新接管）
+  if (useSyncStore.getState().status === 'kicked') return false;
   syncing = true;
   setSyncState({ status: 'syncing' });
   try {
     await pullAndMerge();
+    // pull 阶段被顶下线时不再继续上传/上行
+    if (useSyncStore.getState().status === 'kicked') {
+      syncing = false;
+      return false;
+    }
     await uploadPendingPhotos();
     await pushSnapshot();
+    // v1.19.0：push 阶段被顶下线时保持 kicked 态（不被 ready 覆盖）
+    if (useSyncStore.getState().status === 'kicked') {
+      syncing = false;
+      return false;
+    }
     retryCount = 0;
     syncing = false;
     setSyncState({ status: 'ready' });
     return true;
   } catch (e: any) {
     syncing = false;
+    // v1.19.0：kicked 态不被 error 覆盖
+    if (useSyncStore.getState().status === 'kicked') return false;
     console.warn('[Sync] 同步失败（稍后重试）:', e?.message || e);
     setSyncState({ status: 'error', errorMsg: e?.message || '同步失败' });
     return false;
@@ -636,6 +725,8 @@ export const schedulePush = (): void => {
     return;
   }
   if (!s.cloudSyncEnabled || !s.syncMeta.openid) return;
+  // v1.19.0：kicked 态不防抖上行
+  if (useSyncStore.getState().status === 'kicked') return;
   if (pushTimer) clearTimeout(pushTimer);
   setSyncState({ status: 'pending' });
   pushTimer = setTimeout(() => {
@@ -709,13 +800,15 @@ export const initSync = (): void => {
   void loginAndSync();
 };
 
-/** 手动同步（mine 页「立即同步」；登录失败时先重试登录） */
+/** 手动同步（mine 页「立即同步」；登录失败时先重试登录；v1.19.0 被顶下线时重新登录接管） */
 export const syncNow = async (): Promise<boolean> => {
   if (!CLOUD_READY) return false;
-  if (!useWardrobeStore.getState().syncMeta.openid) {
+  const st = useSyncStore.getState();
+  if (!useWardrobeStore.getState().syncMeta.openid || st.status === 'kicked') {
     retryCount = 0;
-    await loginAndSync();
+    await loginAndSync(); // 重新登录即接管活跃设备（顶掉另一端）
   }
+  if (useSyncStore.getState().status === 'kicked') return false; // 登录失败仍处 kicked
   return syncOnce();
 };
 
@@ -802,6 +895,8 @@ export const uploadPendingPhotos = async (): Promise<void> => {
   const s = useWardrobeStore.getState();
   // v1.15.1：档位门控——照片上传仅 VIP/SVIP（free 容量为 0，quotaBytes 校验不足够前置）
   if (!s.syncMeta.openid || !s.cloudSyncEnabled || !canSync()) return;
+  // v1.19.0：kicked 态不上传照片
+  if (useSyncStore.getState().status === 'kicked') return;
   const openid = s.syncMeta.openid;
   const selected = new Set(s.syncWardrobeIds || []);
   const uploadMap = getUploadMap();
@@ -872,7 +967,7 @@ export const uploadPendingPhotos = async (): Promise<void> => {
     try {
       await Taro.cloud.callFunction({
         name: USER_SYNC_FN_NAME,
-        data: { action: 'photoStat', delta: uploadedBytes }
+        data: { action: 'photoStat', delta: uploadedBytes, deviceId: getDeviceId() }
       });
       setSyncState({
         photoBytes: useSyncStore.getState().photoBytes + uploadedBytes

@@ -79,6 +79,9 @@ const MinePage: React.FC = () => {
         };
       case 'syncing':
         return { dot: '#409eff', text: '同步中…' };
+      case 'kicked':
+        // v1.19.0：单端互踢——账号在其他设备登录，本机暂停云同步（本地数据保留）
+        return { dot: '#e6a23c', text: '账号已在其他设备登录，本机已暂停云同步（点「立即同步」重新接管）' };
       case 'pending':
         return { dot: '#e6a23c', text: '有变更待上行（稍后自动同步）' };
       case 'ready':

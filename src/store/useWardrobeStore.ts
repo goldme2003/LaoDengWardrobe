@@ -720,18 +720,19 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
     recordSeasonalView: (count) => {
       const usage = rolledUsage(get().memberUsage);
       const next = Math.max(usage.seasonalViewed, count);
-      commit({ memberUsage: { ...usage, seasonalViewed: next } }, { localOnly: true });
+      // v1.19.0：用量计数上云——不再 localOnly，打脏后随防抖上行同步跨端
+      commit({ memberUsage: { ...usage, seasonalViewed: next } });
     },
 
     recordTripUse: () => {
       const usage = rolledUsage(get().memberUsage);
-      commit({ memberUsage: { ...usage, tripUsed: usage.tripUsed + 1 } }, { localOnly: true });
+      commit({ memberUsage: { ...usage, tripUsed: usage.tripUsed + 1 } });
     },
 
     recordBatchImportUse: () => {
       const usage = rolledUsage(get().memberUsage);
       console.info('[Store] 批量添加计次, 本月已用 =', usage.batchImportUsed + 1);
-      commit({ memberUsage: { ...usage, batchImportUsed: usage.batchImportUsed + 1 } }, { localOnly: true });
+      commit({ memberUsage: { ...usage, batchImportUsed: usage.batchImportUsed + 1 } });
     },
 
     appendDailyOutfit: (wardrobeId, entry) => {
@@ -741,15 +742,18 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       // 跨天或首次：重置当天缓存；同天：追加（调用方保证不超会员档位套数上限）
       const list = cache && cache.day === day ? cache.list : [];
       console.info('[Store] 缓存明日推荐, 衣橱 =', wardrobeId, '第', list.length + 1, '套');
-      // 推荐缓存仅本地（设计方案 4.4），不参与云同步
+      // v1.19.0：每日推荐已生成套数计入 memberUsage.dailyOutfitUsed（随用量计数上云）；
+      // 推荐缓存本体仍仅本地（设计方案 4.4），commit 打脏仅因用量计数变更
+      const usage = rolledUsage(s.memberUsage);
+      const usedCount = { ...(usage.dailyOutfitUsed || {}), [wardrobeId]: list.length + 1 };
       commit(
         {
           dailyOutfits: {
             ...s.dailyOutfits,
             [wardrobeId]: { day, list: [...list, { ...entry, id: genId() }] }
-          }
-        },
-        { localOnly: true }
+          },
+          memberUsage: { ...usage, dailyOutfitUsed: usedCount }
+        }
       );
     },
 
