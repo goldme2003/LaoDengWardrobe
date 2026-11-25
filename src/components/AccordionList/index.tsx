@@ -21,6 +21,8 @@ interface Props {
   onToggleGroup: (type: string) => void;
   onItemPress: (id: string) => void;
   onToggleFavorite: (id: string) => void;
+  /** 长按衣物卡片（v1.18.0：加入明日穿搭，可选项） */
+  onItemLongPress?: (id: string) => void;
 }
 
 /** 手风琴分组列表（v0.7.0 / PRD FR-06）：衣物按服装类型分组折叠展示，
@@ -32,7 +34,8 @@ const AccordionList: React.FC<Props> = ({
   colorHexMap,
   onToggleGroup,
   onItemPress,
-  onToggleFavorite
+  onToggleFavorite,
+  onItemLongPress
 }) => {
   return (
     <View className={`${styles.wrap} ldw-acc-wrap`}>
@@ -54,6 +57,7 @@ const AccordionList: React.FC<Props> = ({
                       colorHexMap={colorHexMap}
                       onClick={() => onItemPress(it.id)}
                       onToggleFavorite={() => onToggleFavorite(it.id)}
+                      onLongPress={onItemLongPress ? () => onItemLongPress(it.id) : undefined}
                     />
                   </View>
                 ))}

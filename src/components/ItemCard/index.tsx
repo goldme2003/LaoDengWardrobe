@@ -16,14 +16,16 @@ interface Props {
   colorHexMap: Record<string, string>;
   onClick: () => void;
   onToggleFavorite: () => void;
+  /** 长按卡片（v1.18.0：衣橱长按衣物加入明日穿搭；不传则无长按行为） */
+  onLongPress?: () => void;
 }
 
 /** 衣物卡片（列表条目）：主图 + 名称 + 属性标签 + 喜爱 */
-const ItemCard: React.FC<Props> = ({ item, colorHexMap, onClick, onToggleFavorite }) => {
+const ItemCard: React.FC<Props> = ({ item, colorHexMap, onClick, onToggleFavorite, onLongPress }) => {
   const colorDot = useMemo(() => colorHexMap[item.color] || '#C9C2B8', [colorHexMap, item.color]);
 
   return (
-    <View className={styles.card} onClick={onClick}>
+    <View className={styles.card} onClick={onClick} onLongPress={onLongPress}>
       <View className={styles.photoWrap}>
         <Image
           className={styles.photo}

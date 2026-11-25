@@ -383,6 +383,17 @@ const WardrobePage: React.FC = () => {
     [cachedEntries, itemMap]
   );
 
+  // v1.18.0：自选套——明日穿搭中不属于任何备选套的衣物聚合为一套
+  // （来源：衣橱长按加入或手动勾选；与备选套并列展示，点击卡片整体取消）
+  const customSetItems = useMemo(() => {
+    const inSets = new Set<string>();
+    cachedVMs.forEach((vm) => vm.items.forEach((it) => inSets.add(it.id)));
+    return tomorrowIds
+      .filter((id) => !inSets.has(id))
+      .map((id) => itemMap.get(id))
+      .filter((it): it is ClothingItem => !!it);
+  }, [tomorrowIds, cachedVMs, itemMap]);
+
   // v1.10.0（问题3）：普通版建议只依据衣橱主人性别、年龄与明日天气，文案简短
   const basicReason = useCallback(
     (o: RecommendOutfit) => {
@@ -876,6 +887,24 @@ const WardrobePage: React.FC = () => {
 
   const goAdd = () => Taro.navigateTo({ url: '/pages/add/index' });
   const goDetail = (id: string) => Taro.navigateTo({ url: `/pages/detail/index?id=${id}` });
+
+  // v1.18.0：衣橱长按衣物加入/移出明日穿搭（longpress 触发后不再触发 tap，与进详情不冲突）
+  const handleItemLongPress = (id: string) => {
+    const it = itemMap.get(id);
+    if (!it) return;
+    const inPlan = tomorrowIds.includes(id);
+    Taro.showModal({
+      title: '明日穿搭',
+      content: inPlan ? `将「${it.name}」移出明日穿搭？` : `将「${it.name}」加入明日穿搭？`,
+      confirmText: inPlan ? '移出' : '加入',
+      cancelText: '取消',
+      success: (res) => {
+        if (!res.confirm) return;
+        toggleTomorrowItem(id);
+        Taro.showToast({ title: inPlan ? '已移出明日穿搭' : '已加入明日穿搭', icon: 'success' });
+      }
+    });
+  };
   // v0.5：衣橱管理页已从底部标签改为普通页面，经切换器「管理」进入
   const goManage = () => Taro.navigateTo({ url: '/pages/wardrobes/index' });
 
@@ -979,7 +1008,9 @@ const WardrobePage: React.FC = () => {
           <View className={styles.planEntryInfo}>
             <Text className={styles.planEntryTitle}>明日穿搭</Text>
             <Text className={styles.planEntryDesc}>
-              {tomorrowIds.length > 0 ? `已选 ${tomorrowIds.length} 件` : '从今日备选套中挑选明天要穿的衣物'}
+              {tomorrowIds.length > 0
+                ? `已选 ${tomorrowIds.length} 件 · 衣橱长按衣物可加入`
+                : '衣橱长按衣物加入，或从备选套挑选'}
             </Text>
           </View>
           <Text className={styles.planEntryArrow}>›</Text>
@@ -1040,6 +1071,35 @@ const WardrobePage: React.FC = () => {
                   </View>
                 );
               })}
+            </View>
+          )}
+
+          {/* v1.18.0：自选套——衣橱长按/手动勾选加入的衣物聚合为一套，点击卡片整体取消 */}
+          {customSetItems.length > 0 && (
+            <View className={styles.planSets}>
+              <Text className={styles.planSectionTitle}>我的自选套（衣橱长按衣物加入）</Text>
+              <View
+                className={styles.planSetCard}
+                onClick={() => {
+                  customSetItems.forEach((it) => toggleTomorrowItem(it.id));
+                  Taro.showToast({ title: '已取消自选套', icon: 'none' });
+                }}
+              >
+                <View className={styles.planSetHeader}>
+                  <Text className={styles.planSetTitle}>自选搭配 · {customSetItems.length} 件</Text>
+                  <Text className={styles.planSetCheck}>✓ 已选 · 点击取消</Text>
+                </View>
+                <View className={styles.planGrid}>
+                  {customSetItems.map((it) => (
+                    <View key={it.id} className={styles.planItem}>
+                      <Image className={styles.planPhoto} src={it.photos[0]} mode='aspectFill' />
+                      <Text className={styles.planName} numberOfLines={1}>
+                        {it.name}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
             </View>
           )}
 
@@ -1121,6 +1181,7 @@ const WardrobePage: React.FC = () => {
                 onToggleGroup={toggleGroup}
                 onItemPress={goDetail}
                 onToggleFavorite={toggleFavorite}
+                onItemLongPress={handleItemLongPress}
               />
               {/* v1.1：侧边类型标签栏（快速定位分组，选中态随滚动/展开收起同步） */}
               <TypeSideBar
@@ -1138,6 +1199,7 @@ const WardrobePage: React.FC = () => {
                     colorHexMap={colorHexMap}
                     onClick={() => goDetail(it.id)}
                     onToggleFavorite={() => toggleFavorite(it.id)}
+                    onLongPress={() => handleItemLongPress(it.id)}
                   />
                 </View>
               ))}
