@@ -9,6 +9,8 @@ export default defineAppConfig({
     'pages/mine/index',
     'pages/member/index',
     'pages/profile/index',
+    'pages/cloud-sync/index',
+    'pages/about/index',
     'pages/add/index',
     'pages/detail/index'
   ],

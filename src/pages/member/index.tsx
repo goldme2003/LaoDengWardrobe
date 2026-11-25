@@ -92,7 +92,7 @@ const MemberPage: React.FC = () => {
         </Text>
         <Text className={styles.heroSub}>
           {memberTier === 'free'
-            ? 'VIP / SVIP 均为一次性买断，无月费年费'
+            ? 'VIP / SVIP 一次开通，永久有效'
             : `当前衣橱：${currentWardrobe?.name || '-'} · 已享 ${current.label} 全部权益`}
         </Text>
       </View>
@@ -126,7 +126,7 @@ const MemberPage: React.FC = () => {
               </View>
               <View className={styles.priceLine}>
                 <Text className={`${styles.priceNum} ${t === 'svip' ? styles.priceNumSvip : ''}`}>¥{cfg.price}</Text>
-                <Text className={styles.priceUnit}>/ 一次性买断</Text>
+                <Text className={styles.priceUnit}>/ 永久有效</Text>
               </View>
               <View
                 className={[
@@ -145,7 +145,7 @@ const MemberPage: React.FC = () => {
         })}
       </View>
       <Text className={styles.payTip}>
-        测试模式：点击「立即开通」直接切换档位体验对应权益；正式发布时接入微信支付（一次性买断）。
+        测试模式：点击「立即开通」直接切换档位体验对应权益；正式发布时接入微信支付（一次开通、永久有效）。
       </Text>
 
       {/* 三档权益矩阵 */}
@@ -184,7 +184,7 @@ const MemberPage: React.FC = () => {
       </View>
 
       <Text className={styles.footTip}>
-        会员权益说明：服装批量导入已上线（VIP 5 次/月、SVIP 无限次，按批量任务计次）；衣物属性自动识别为 VIP/SVIP 专属（普通版不自动识别）；出差推荐 VIP 2 次/月、SVIP 无限次；时尚穿搭推荐为待上线功能（VIP 2 次/月、SVIP 5 次/月，权益额度自功能上线后开始计数）；明日推荐套数每日生成后当天缓存、次日重新生成（普通版不含）；云同步已上线（登录后可在「我的 → 云同步」开启，VIP 可同步 3 个衣橱、SVIP 全部，冲突副本保留 30 天）；会员为一次性买断、长期有效。
+        会员权益说明：服装批量导入已上线（VIP 5 次/月、SVIP 无限次，按批量任务计次）；衣物属性自动识别为 VIP/SVIP 专属（普通版不自动识别）；出差推荐 VIP 2 次/月、SVIP 无限次；时尚穿搭推荐为待上线功能（VIP 2 次/月、SVIP 5 次/月，权益额度自功能上线后开始计数）；明日推荐套数每日生成后当天缓存、次日重新生成（普通版不含）；云同步已上线（登录后可在「我的 → 云同步」开启，VIP 可同步 3 个衣橱、SVIP 全部，冲突副本保留 30 天）；会员一次开通、永久有效。
       </Text>
     </View>
   );

@@ -55,7 +55,7 @@ export const TIERS: Record<MemberTier, TierConfig> = {
   vip: {
     id: 'vip',
     label: 'VIP',
-    price: 18,
+    price: 19.9,
     wardrobes: 3,
     batchImportPerMonth: 5,
     seasonalPerDay: 1,
@@ -70,7 +70,7 @@ export const TIERS: Record<MemberTier, TierConfig> = {
   svip: {
     id: 'svip',
     label: 'SVIP',
-    price: 48,
+    price: 29.9,
     wardrobes: 8,
     batchImportPerMonth: null, // v1.19.1：SVIP 批量导入无限次
     seasonalPerDay: 2,
