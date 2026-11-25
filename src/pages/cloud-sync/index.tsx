@@ -6,8 +6,9 @@ import { themeVarsOf } from '@/data/presets';
 import { tierOf } from '@/services/entitlement';
 import { useSyncStore, setCloudSync, syncNow, deleteCloudData } from '@/services/sync';
 import { exportBackup } from '@/services/exportBackup';
-// 复用「我的」页卡片样式，保证二级菜单与主页面视觉一致（会员中心同风格）
-import styles from '../mine/index.module.scss';
+// v1.20.1：改用本页独立样式模块（跨页 import mine 页 scss 会使样式被抽入 common.wxss、
+// mine/index.wxss 消失，触发开发者工具 wxss 编译错误）
+import styles from './index.module.scss';
 
 /** 云同步二级页（v1.20.0）：自「我的」页迁入——状态条 / 登录态 / 开关 / 同步衣橱选择 /
  * 立即同步 / 导出备份 / 清空云存储数据；全部同步操作在本页完成。 */

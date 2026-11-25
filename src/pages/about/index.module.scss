@@ -1,0 +1,49 @@
+@use '@/styles/variables.scss' as *;
+
+/* 关于二级页独立样式（v1.20.1 修复：不再跨页 import mine 页 scss 模块） */
+
+.page {
+  padding: $spacing-lg $page-padding;
+  background: var(--w-bg, $color-bg-page);
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.card {
+  background: var(--w-card, $color-bg-card);
+  border-radius: var(--w-radius, $radius-lg);
+  padding: $spacing-lg;
+  margin-bottom: $spacing-md;
+  box-shadow: $shadow-card;
+}
+
+.sectionTitle {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: var(--w-text, $color-text-primary);
+  margin-bottom: $spacing-md;
+}
+
+.cardTip {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  line-height: $line-height-loose;
+  margin-bottom: $spacing-md;
+}
+
+.aboutRow {
+  display: flex;
+  justify-content: space-between;
+  padding: $spacing-sm 0;
+}
+
+.aboutLabel {
+  font-size: $font-size-md;
+  color: var(--w-text2, $color-text-secondary);
+}
+
+.aboutValue {
+  font-size: $font-size-md;
+  color: var(--w-text, $color-text-primary);
+}

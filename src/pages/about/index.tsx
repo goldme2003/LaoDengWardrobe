@@ -2,8 +2,8 @@ import React from 'react';
 import { View, Text } from '@tarojs/components';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
 import { APP_VERSION, themeVarsOf } from '@/data/presets';
-// 复用「我的」页卡片样式，保证二级菜单与主页面视觉一致（会员中心同风格）
-import styles from '../mine/index.module.scss';
+// v1.20.1：改用本页独立样式模块（跨页 import mine 页 scss 会触发 wxss 编译错误）
+import styles from './index.module.scss';
 
 /** 关于二级页（v1.20.0）：版本、数据存储方式与数据说明，自「我的」页迁入。 */
 const AboutPage: React.FC = () => {
