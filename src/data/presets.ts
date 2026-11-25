@@ -1,7 +1,7 @@
 import { CustomDimension, Gender, ThemeId, BodyProfile } from '@/types';
 
 /** 当前版本号（在「我的」页展示） */
-export const APP_VERSION = 'v1.20.1';
+export const APP_VERSION = 'v1.20.2';
 
 /** 性别选项（v0.5） */
 export const GENDER_OPTIONS: { value: Gender; label: string }[] = [
@@ -365,6 +365,18 @@ export const BODY_FIELD_DEFS: BodyFieldDef[] = [
   { key: 'inseam', label: '裤长', unit: 'cm', min: 40, max: 130 },
   { key: 'thigh', label: '腿围', unit: 'cm', min: 20, max: 120 },
   { key: 'footLength', label: '脚长', unit: 'mm', min: 120, max: 350 }
+];
+
+/** v1.20.2：服装裁剪所需常见围度项（个人信息页「身体数据」仅展示这些；
+ * 体重/肩围/臂展/脚长不再展示，历史已存数据保留不删除） */
+export const BODY_TAILORING_KEYS: (keyof BodyProfile)[] = [
+  'bust',
+  'waist',
+  'hip',
+  'shoulderWidth',
+  'neck',
+  'inseam',
+  'thigh'
 ];
 
 /** 购入地点/渠道预设（v0.5） */

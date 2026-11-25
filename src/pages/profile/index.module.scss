@@ -78,6 +78,22 @@
   margin-top: $spacing-sm;
 }
 
+// v1.20.2：身材数据可伸缩标题行
+.toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  .sectionTitle {
+    margin-bottom: 0;
+  }
+}
+
+.toggleHint {
+  font-size: $font-size-xs;
+  color: var(--w-color, $color-primary);
+}
+
 .saveBtn {
   height: $button-height-md;
   border-radius: $radius-button;
