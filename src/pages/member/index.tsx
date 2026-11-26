@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
@@ -11,6 +11,9 @@ import {
 } from '@/services/entitlement';
 import { MEMBER_FN_NAME, CLOUD_READY, WX_PAY_ENABLED } from '@/config/cloud';
 import styles from './index.module.scss';
+
+/** v2.1.5：支付中订单暂存 key——支付完成后档位未即时生效时，重进本页自动查单补发货（自愈） */
+const LAST_PAY_ORDER_KEY = 'ldw_last_pay_order';
 
 /** 权益矩阵行（与 PRD 10.6 三档矩阵一致；v1.10.0 文案修正 + 新增明日推荐次数；v1.19.1 权益数值调整 + 出差推荐前置） */
 const BENEFIT_ROWS: { label: string; values: Record<MemberTier, string> }[] = [
@@ -79,6 +82,8 @@ const MemberPage: React.FC = () => {
 
   // v2.0.0：支付进行中的档位（按钮 loading 态，防重复提交）
   const [payingTier, setPayingTier] = useState<MemberTier | ''>('');
+  /** v2.1.5：进页自愈防重入 */
+  const reconcilingRef = useRef(false);
 
   /** 虚拟支付下单返回的拉起支付参数（透传 wx.requestVirtualPayment，官方 5.3） */
   interface VirtualPayData {
@@ -148,17 +153,53 @@ const MemberPage: React.FC = () => {
     return '';
   };
 
-  // 兜底查单：发货推送丢失时主动触发服务端 query_order 补发货（官方 5.4.2），随后再轮询一次
-  const reconcileOrder = async (orderId: string): Promise<void> => {
+  // 兜底查单：发货推送丢失时主动触发服务端 query_order 补发货（官方 5.4.2）；
+  // v2.1.5：返回服务端结果（含平台原始应答摘要 provider）供超时提示与日志定位
+  const reconcileOrder = async (orderId: string): Promise<Record<string, unknown> | null> => {
     try {
-      await Taro.cloud.callFunction({
+      const res = await Taro.cloud.callFunction({
         name: MEMBER_FN_NAME,
         data: { action: 'queryOrder', orderId }
       });
+      const result = (res.result || {}) as Record<string, unknown>;
+      console.info('[member] queryOrder 兜底结果:', JSON.stringify(result).slice(0, 400));
+      return result;
     } catch (e) {
       // 查单失败不阻塞，用户可稍后重进
+      return null;
     }
   };
+
+  /** v2.1.5：进页自愈——支付后档位未即时生效（推送丢失/延迟）时，重进本页自动查单补发货 */
+  useEffect(() => {
+    if (!CLOUD_READY || !WX_PAY_ENABLED) return;
+    if (memberTier !== 'free' || payingTier) return;
+    let stored = '';
+    try {
+      stored = String(Taro.getStorageSync(LAST_PAY_ORDER_KEY) || '');
+    } catch (e) {
+      return;
+    }
+    if (!stored || reconcilingRef.current) return;
+    reconcilingRef.current = true;
+    (async () => {
+      Taro.showLoading({ title: '检测未完成订单…', mask: true });
+      await reconcileOrder(stored);
+      const tier = await pollMemberTier();
+      Taro.hideLoading();
+      if (tier) {
+        try {
+          Taro.removeStorageSync(LAST_PAY_ORDER_KEY);
+        } catch (e) {
+          // 清理失败不影响
+        }
+        setMemberTier(tier);
+        Taro.showToast({ title: '检测到已支付，会员已开通', icon: 'success', duration: 2000 });
+      }
+      reconcilingRef.current = false;
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // v2.1.0：虚拟支付开通——wx.login 换 code → 服务端签名下单 → requestVirtualPayment 拉起
   // → 轮询档位生效（发货推送为主）→ 未生效时查单补发（兜底）→ 再轮询
@@ -200,6 +241,12 @@ const MemberPage: React.FC = () => {
       if (result.code === 'OK' && result.payData) {
         payData = result.payData;
         orderId = result.orderId || '';
+        // v2.1.5：暂存订单号——若支付后档位未即时生效，重进本页自动查单补发货
+        try {
+          Taro.setStorageSync(LAST_PAY_ORDER_KEY, orderId);
+        } catch (e) {
+          // 存储失败不影响支付
+        }
       } else if (result.code === 'ALREADY_MEMBER') {
         failMsg = result.message || '已开通该档位';
       } else {
@@ -245,20 +292,33 @@ const MemberPage: React.FC = () => {
     // 支付成功：确认云端档位生效（发货推送为主）；未生效则查单补发后再轮询一次
     Taro.showLoading({ title: '开通确认中…', mask: true });
     let newTier = await pollMemberTier();
+    let diag: Record<string, unknown> | null = null;
     if (!newTier && orderId) {
-      await reconcileOrder(orderId);
+      diag = await reconcileOrder(orderId);
       newTier = await pollMemberTier();
     }
     Taro.hideLoading();
     setPayingTier('');
     if (newTier) {
+      try {
+        Taro.removeStorageSync(LAST_PAY_ORDER_KEY);
+      } catch (e) {
+        // 清理失败不影响
+      }
       setMemberTier(newTier);
       Taro.showToast({ title: `${TIERS[newTier].label} 开通成功`, icon: 'success', duration: 2000 });
     } else {
-      Taro.showToast({
-        title: '支付完成，档位生效可能有延迟，请稍后重新进入查看',
-        icon: 'none',
-        duration: 3000
+      // v2.1.5：超时时弹出兜底查单的原始应答，便于定位（推送是否到达/查单失败原因）
+      const provider = (diag && (diag.provider as Record<string, unknown>)) || null;
+      Taro.showModal({
+        title: '支付完成，开通确认中',
+        content:
+          `档位生效确认超时，已记录订单（重进本页将自动补单）。` +
+          (provider
+            ? `查单应答：errcode=${provider.errcode ?? '-'} state=${diag?.state ?? '-'} ${(provider.errmsg as string) || ''} ${(provider.orderRaw as string) || ''}`.slice(0, 300)
+            : '兜底查单未返回结果，请稍后重进本页。'),
+        showCancel: false,
+        confirmText: '知道了'
       });
     }
   };

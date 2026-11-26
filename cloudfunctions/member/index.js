@@ -141,15 +141,22 @@ async function deliverOrder(order, wxOrderId) {
   return { delivered: true };
 }
 
-/** 兜底查单（官方 /xpay/query_order，pay_sig = HMAC-SHA256(AppKey, '/xpay/query_order&' + body)） */
+/** 兜底查单（官方 /xpay/query_order，pay_sig = HMAC-SHA256(AppKey, '/xpay/query_order&' + body)）
+ * v2.1.5：已支付状态匹配放宽（不同文档版本字段/取值差异：PAID/SUCCESS/PAY_SUCCESS/FINISH 等），
+ * 未判定为已支付时在返回中携带平台原始应答摘要（provider），供前端与日志定位 */
+const PAID_ORDER_STATES = new Set(['PAID', 'SUCCESS', 'PAY_SUCCESS', 'FINISH', 'TRADE_SUCCESS', 'PAID_SUCCESS']);
+
 async function queryXpayOrder(openid, outTradeNo) {
   const body = JSON.stringify({ openid, env: 0, order_id: outTradeNo });
   const paySig = hmacSha256(APP_KEY, '/xpay/query_order&' + body);
   const res = await httpJson(`/xpay/query_order?pay_sig=${paySig}`, { method: 'POST', body });
-  // 兼容字段差异：order.state / order.status / order.pay_status，命中 PAID 视为已支付
   const order = res && res.order;
-  const state = order && String(order.state || order.status || order.pay_status || '').toUpperCase();
-  return { res, paid: res && res.errcode === 0 && state === 'PAID', state };
+  const state = order
+    ? String(order.state || order.status || order.pay_status || order.order_state || '').toUpperCase()
+    : '';
+  const paid = !!(res && res.errcode === 0 && state && PAID_ORDER_STATES.has(state));
+  console.info('[member] query_order 原始应答:', JSON.stringify(res).slice(0, 500));
+  return { res, paid, state };
 }
 
 exports.main = async (event = {}) => {
@@ -285,9 +292,18 @@ exports.main = async (event = {}) => {
     }
     try {
       const { paid, state, res } = await queryXpayOrder(order.openid, order.outTradeNo);
-      console.info('[member] query_order 结果:', JSON.stringify(res).slice(0, 300));
       if (!paid) {
-        return { code: 'NOT_PAID', message: '订单未支付完成', state: state || '' };
+        // v2.1.5：携带平台原始应答摘要，便于前端定位（签名错误 / 状态未到已支付 / 字段差异）
+        return {
+          code: 'NOT_PAID',
+          message: '订单未支付完成',
+          state: state || '',
+          provider: {
+            errcode: res && res.errcode,
+            errmsg: String((res && res.errmsg) || '').slice(0, 120),
+            orderRaw: res && res.order ? JSON.stringify(res.order).slice(0, 300) : ''
+          }
+        };
       }
       const wxOrderId =
         (res.order && (res.order.mch_order_no || res.order.wx_order_id)) || '';
