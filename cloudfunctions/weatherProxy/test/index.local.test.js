@@ -18,10 +18,12 @@ function check(name, fnCase) {
 
 async function run() {
   const ping = await fn.main({ action: 'ping' });
-  check('W1 ping 返回双密钥状态', () => {
+  check('W1 ping 返回三密钥状态（华风爱科为主）', () => {
     assert.strictEqual(ping.code, 'OK');
     assert.strictEqual(typeof ping.hasMapKey, 'boolean');
-    assert.strictEqual(typeof ping.hasWeatherKey, 'boolean');
+    assert.strictEqual(typeof ping.hasWeatherCnKey, 'boolean');
+    assert.strictEqual(typeof ping.hasQWeatherKey, 'boolean');
+    assert.ok(/weathercn-pro/.test(ping.provider));
   });
 
   const badAction = await fn.main({ action: 'nope' });
@@ -52,9 +54,26 @@ async function run() {
     const d = noKey.data;
     assert.ok(d.today && d.today.cond && Number.isFinite(d.today.high) && Number.isFinite(d.today.low));
     assert.strictEqual(d.days.length, 3);
-    assert.ok(['qweather', 'weather.com.cn'].includes(noKey.source));
+    assert.ok(['weathercn-pro', 'qweather', 'weather.com.cn'].includes(noKey.source));
     console.log(`    北京 ${d.today.cond} ${d.today.low}~${d.today.high}℃ 来源=${noKey.source}`);
   });
+
+  // v1.6.0 新增测试城市：永州、哈密、桂林、齐齐哈尔
+  const testCities = ['永州', '哈密', '桂林', '齐齐哈尔'];
+  for (const city of testCities) {
+    const r = await fn.main({ action: 'weather', city });
+    check(`W7-${city} 天气字段完整`, () => {
+      if (r.code !== 'OK') {
+        console.log(`    跳过 ${city}：${r.code} ${r.message || ''}`);
+        return;
+      }
+      const d = r.data;
+      assert.ok(d.today && d.today.cond && Number.isFinite(d.today.high) && Number.isFinite(d.today.low));
+      assert.strictEqual(d.days.length, 3);
+      assert.ok(['weathercn-pro', 'qweather', 'weather.com.cn'].includes(r.source));
+      console.log(`    ${city} ${d.today.cond} ${d.today.low}~${d.today.high}℃ 来源=${r.source}`);
+    });
+  }
 
   console.log(`\nweatherProxy: ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

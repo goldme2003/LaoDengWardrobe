@@ -1,5 +1,5 @@
 /** 明日穿搭推荐（v1.5.0）
- * 入参：{ action: 'ping' | 'recommend', scene: 'all'|'日常'|'通勤'|'运动'|'正式'|'居家'|'旅行',
+ * 入参：{ action: 'ping' | 'recommend', scene: 'all'|'日常'|'通勤'|'运动'|'正式'|'居家'|'旅行'|自定义场景名(≤12字,v1.12.0),
  *        weather?: { cond?, low?, high? }, gender?: 'male'|'female'|'other', age?: number,
  *        items: [{ id, name, type, layer, color, material, occasions: string[] }],
  *        excludeIds?: string[] }
@@ -12,7 +12,8 @@ const { callHunyuanOutfit } = require('./provider/hunyuan');
 
 const SCENES = ['日常', '通勤', '运动', '正式', '居家', '旅行'];
 const MAX_ITEMS = 40;
-const MAX_LEN = 60;
+// v1.10.0：VIP/SVIP 档位 advice 更详细（60~80 / 100~150 字），放宽截断上限
+const MAX_LEN = 200;
 const TTL = 10 * 60 * 1000;
 const FALLBACK_TTL = 2 * 60 * 1000;
 const cache = new Map();
@@ -21,7 +22,9 @@ const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const isScene = (v) => SCENES.includes(v);
 
 function normalize(event) {
-  const scene = event.scene === 'all' || isScene(event.scene) ? event.scene : 'all';
+  // v1.12.0：放开自定义场景（如 相亲/约会/婚礼）——非预设场景保留原文（≤12 字）传给混元，
+  // 兜底选搭 fallbackOutfit 对未知场景按衣物适用场合推断
+  const scene = event.scene === 'all' || !event.scene ? 'all' : str(event.scene, 12) || 'all';
   const gender = ['male', 'female', 'other'].includes(event.gender) ? event.gender : 'other';
   const n = Number(event.age);
   const age = Number.isFinite(n) ? Math.min(99, Math.max(10, Math.round(n))) : 30;
@@ -51,7 +54,9 @@ function normalize(event) {
     .map((id) => str(id, 64))
     .filter(Boolean)
     .slice(0, 8);
-  return { scene, gender, age, weather, items, excludeIds };
+  // v1.9.0（F-19）：会员推荐档位——plus = 中间档（默认），full = 综合全衣橱推荐
+  const level = event.level === 'full' ? 'full' : 'plus';
+  return { scene, gender, age, weather, items, excludeIds, level };
 }
 
 function weatherSig(w) {
@@ -111,7 +116,7 @@ exports.main = async (event = {}) => {
     return {
       code: 'OK',
       hasHunyuanKey: !!process.env.HUNYUAN_API_KEY,
-      model: process.env.HUNYUAN_MODEL || 'hy4',
+      model: 'hy4-flash',
       endpoint: 'tokenhub.tencentmaas.com/v1/chat/completions'
     };
   }
@@ -134,17 +139,27 @@ exports.main = async (event = {}) => {
   try {
     const result = await callHunyuanOutfit(params);
     const validIds = new Set(params.items.map((it) => it.id));
-    const itemIds = [...new Set(result.itemIds)].filter((id) => validIds.has(id)).slice(0, 4);
+    // full 档（SVIP 综合全衣橱）允许最多 5 件
+    const maxItems = params.level === 'full' ? 5 : 4;
+    const itemIds = [...new Set(result.itemIds)].filter((id) => validIds.has(id)).slice(0, maxItems);
     if (!itemIds.length) throw new Error('INVALID_ITEM_IDS');
-    const scene = isScene(result.scene) ? result.scene : params.scene === 'all' ? fallbackOutfit(params.scene, params.items).scene : params.scene;
+    // v1.12.0：用户指定场景（含自定义）时缓存场景与请求保持一致，保证首页场景标签高亮/跳转正确
+    const scene = params.scene !== 'all'
+      ? params.scene
+      : isScene(result.scene)
+        ? result.scene
+        : fallbackOutfit(params.scene, params.items).scene;
     const advice = (result.advice || '').slice(0, MAX_LEN);
     const value = { itemIds, scene, advice };
     cache.set(key, { value, source: 'hunyuan', ts: Date.now(), ttl: TTL });
     return { code: 'OK', ...value, source: 'hunyuan', weatherUsed: !!params.weather };
   } catch (e) {
     const value = fallbackOutfit(params.scene, params.items);
-    cache.set(key, { value, source: 'fallback', ts: Date.now(), ttl: FALLBACK_TTL });
+    // v1.12.1：用户指定场景（含自定义）时兜底返回场景与请求一致——
+    // fallbackOutfit 会把未知场景推断为预设场景，导致前端缓存场景漂移、场景标签不亮、回看失效
+    const fixed = params.scene !== 'all' && value.scene !== params.scene ? { ...value, scene: params.scene } : value;
+    cache.set(key, { value: fixed, source: 'fallback', ts: Date.now(), ttl: FALLBACK_TTL });
     console.error(`[outfitRecommend] 混元生成失败（耗时 ${Date.now() - startedAt}ms），使用兜底选搭：`, e.message);
-    return { code: 'OK', ...value, source: 'fallback', weatherUsed: !!params.weather };
+    return { code: 'OK', ...fixed, source: 'fallback', weatherUsed: !!params.weather };
   }
 };

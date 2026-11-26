@@ -15,8 +15,9 @@ export interface RecommendOutfit {
   sceneLabel: string;
 }
 
-/** 搭配场景（v1.4.1）：只开放预设选项，不支持自由输入；取值与衣物「适用场合」预设一致 */
-export type SceneId = 'all' | '日常' | '通勤' | '运动' | '正式' | '居家' | '旅行';
+/** 搭配场景（v1.4.1）：预设与衣物「适用场合」一致；
+ * v1.12.0：放开自定义场景（`(string & {})` 保留预设的自动补全，同时允许「相亲/约会/婚礼」等手输场景） */
+export type SceneId = 'all' | '日常' | '通勤' | '运动' | '正式' | '居家' | '旅行' | (string & {});
 
 export interface SceneOption {
   id: SceneId;
@@ -193,8 +194,14 @@ export const buildOutfits = (
   const band = bandOf(avg);
   const meta = BAND_META[band];
   // 场景仅在该衣橱确有匹配衣物时生效，避免「选了运动但衣柜没有运动装」时给出误导性理由
+  // v1.12.0：自定义场景（非预设且非 all）无关键词/场合可匹配，按「不限」参与打分，但理由与缓存场景仍标注自定义名称
+  const customScene = scene !== 'all' && !SCENE_OPTIONS.some((s) => s.id === scene) ? scene : '';
   const effectiveScene: SceneId =
-    scene !== 'all' && items.some((it) => sceneScore(it, scene) > 0) ? scene : 'all';
+    customScene || scene === 'all'
+      ? 'all'
+      : items.some((it) => sceneScore(it, scene) > 0)
+        ? scene
+        : 'all';
 
   // 每个槽位：按关键词筛出候选并打分排序（分数高在前，同分取最近新增）
   const picked = PLANS[band].map((slot) => ({
@@ -225,12 +232,17 @@ export const buildOutfits = (
     const sig = combo.map((c) => c.id).sort().join(',');
     if (combo.length > 0 && !seen.has(sig)) {
       seen.add(sig);
-      const sceneOfOutfit = inferScene(combo, effectiveScene);
+      // v1.12.0：自定义场景直接以场景名作为该套搭配的场景与标签（理由文案同步标注）
+      // v1.12.1：用户显式选择场景（预设或自定义）时输出场景一律采用用户所选——
+      // 修复「衣橱无该场景匹配衣物 → 打分回退 all → inferScene 推断出其他场景」导致缓存场景漂移、
+      // 场景标签不亮、再点该场景误报已达上限（表现为自定义场景推荐失败）
+      const sceneOfOutfit: SceneId = scene !== 'all' ? scene : inferScene(combo, effectiveScene);
+      const sceneLabel = scene !== 'all' ? customScene || labelOfScene(scene) : labelOfScene(sceneOfOutfit);
       outfits.push({
         items: combo,
         scene: sceneOfOutfit,
-        sceneLabel: labelOfScene(sceneOfOutfit),
-        reason: buildReason(weather, day, dayLabel, meta, labelOfScene(sceneOfOutfit), combo)
+        sceneLabel,
+        reason: buildReason(weather, day, dayLabel, meta, sceneLabel, combo)
       });
     }
   }

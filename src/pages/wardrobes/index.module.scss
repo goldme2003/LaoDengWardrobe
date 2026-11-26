@@ -22,6 +22,28 @@
   margin-bottom: $spacing-md;
 }
 
+// v1.20.3：标题行 + 档位额度（如 VIP 2/3，达上限变红）
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  .sectionTitle {
+    margin-bottom: 0;
+  }
+}
+
+.quotaText {
+  font-size: $font-size-sm;
+  color: var(--w-text2, $color-text-secondary);
+}
+
+.quotaTextFull {
+  font-size: $font-size-sm;
+  color: #f53f3f;
+  font-weight: 600;
+}
+
 .nameInput {
   width: 100%;
   height: 88rpx;

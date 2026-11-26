@@ -1,4 +1,4 @@
-﻿@use '@/styles/variables.scss' as *;
+@use '@/styles/variables.scss' as *;
 
 .section {
   margin-bottom: $spacing-lg;
@@ -86,6 +86,41 @@
   margin-bottom: $spacing-xs;
 }
 
+// v1.11.0：网格布局（每行固定个数，如颜色 4 个/行）
+// v1.11.1 修复：minmax(0,1fr) 固定轨道宽度，长文本（自定义颜色名）不再把轨道撑出卡片边界
+.chipsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  column-gap: $spacing-sm;
+}
+
+// v1.11.0：网格模式下选项占满整格并居中
+// v1.11.1 修复：min-width:0 允许网格项收缩，超长文本省略号截断，不超出边界
+.chipBlock {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  justify-content: center;
+  margin-right: 0;
+  box-sizing: border-box;
+}
+
+// v1.11.1 修复：网格模式下文本超长省略号截断（自定义颜色名最长 6 字 + 色点，1fr 内可容纳；
+// 超出时截断而非撑破轨道）
+.chipBlock .chipLabel {
+  max-width: 100%;
+  min-width: 0;
+}
+
+// v1.11.2：颜色网格文字缩小一号（32rpx → 28rpx），保证选项名完整显示
+.chipBlock .chipText {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: $font-size-md;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -110,6 +145,12 @@
   border: 2rpx solid var(--w-color, $color-primary);
   transform: scale(1.06);
   box-shadow: 0 0 0 4rpx color-mix(in srgb, var(--w-color, $color-primary) 25%, transparent);
+}
+
+// v1.11.4：网格模式收窄水平内边距（32→16rpx）——4 列网格单格仅约 143rpx，
+// 原内边距挤压文字导致 2 字颜色名即被截断；收窄后「色点 + 2 字」完整显示
+.chip.chipBlock {
+  padding: 0 $spacing-sm;
 }
 
 .dotWrap {

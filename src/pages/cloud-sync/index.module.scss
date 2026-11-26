@@ -1,0 +1,183 @@
+@use '@/styles/variables.scss' as *;
+
+/* 云同步二级页独立样式（v1.20.1 修复：不再跨页 import mine 页 scss 模块——
+ * 多页共享同一 module 会被 webpack 抽进 common.wxss、令 mine/index.wxss 消失，
+ * 触发开发者工具「编译 .wxss 文件错误」） */
+
+.page {
+  padding: $spacing-lg $page-padding;
+  background: var(--w-bg, $color-bg-page);
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.card {
+  background: var(--w-card, $color-bg-card);
+  border-radius: var(--w-radius, $radius-lg);
+  padding: $spacing-lg;
+  margin-bottom: $spacing-md;
+  box-shadow: $shadow-card;
+}
+
+.sectionTitle {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: var(--w-text, $color-text-primary);
+  margin-bottom: $spacing-md;
+}
+
+/* v1.21.0：同步范围独立区块——标题加大加粗、正文较原 cardTip 提升一级字号并提高对比度 */
+.syncScopeBlock {
+  padding: $spacing-md;
+  background: $color-bg-page;
+  border-radius: var(--w-radius, $radius-md);
+}
+
+.syncScopeTitle {
+  display: block;
+  font-size: $font-size-md;
+  font-weight: $font-weight-semibold;
+  color: var(--w-text, $color-text-primary);
+  margin-bottom: $spacing-xs;
+}
+
+.syncScopeDesc {
+  display: block;
+  font-size: $font-size-sm;
+  color: var(--w-text2, $color-text-secondary);
+  line-height: $line-height-loose;
+}
+
+.infoHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: $spacing-sm;
+}
+
+.infoEditHint {
+  font-size: $font-size-xs;
+  color: var(--w-color, $color-primary);
+}
+
+.wardrobeEntry {
+  display: flex;
+  align-items: center;
+  padding: $spacing-md;
+  background: $color-bg-page;
+  border-radius: var(--w-radius, $radius-md);
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.entryTitle {
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+  color: var(--w-text, $color-text-primary);
+  margin-bottom: 4rpx;
+}
+
+.entryDesc {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+.syncStatusBar {
+  display: flex;
+  align-items: center;
+  padding: $spacing-sm $spacing-md;
+  background: $color-bg-page;
+  border-radius: var(--w-radius, $radius-md);
+  margin-bottom: $spacing-md;
+}
+
+.syncDot {
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: $radius-round;
+  margin-right: $spacing-sm;
+  flex-shrink: 0;
+}
+
+.syncStatusText {
+  font-size: $font-size-sm;
+  color: var(--w-text2, $color-text-secondary);
+  flex: 1;
+  line-height: $line-height-normal;
+}
+
+.syncSwitchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-md;
+  background: $color-bg-page;
+  border-radius: var(--w-radius, $radius-md);
+  margin-bottom: $spacing-md;
+}
+
+.syncSwitchInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin-right: $spacing-md;
+}
+
+.syncChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-sm;
+  padding: $spacing-sm 0 $spacing-md;
+}
+
+.syncChip {
+  padding: 10rpx 28rpx;
+  border-radius: $radius-round;
+  background: $color-bg-page;
+  border: 1rpx solid $color-divider;
+  font-size: $font-size-sm;
+  color: var(--w-text2, $color-text-secondary);
+
+  &:active {
+    opacity: 0.8;
+  }
+}
+
+.syncChipActive {
+  background: var(--w-primary, $color-primary);
+  border-color: var(--w-primary, $color-primary);
+  color: #fff;
+}
+
+.syncActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-sm;
+  margin-bottom: $spacing-sm;
+}
+
+.syncActionBtn {
+  padding: 14rpx 30rpx;
+  border-radius: var(--w-radius, $radius-md);
+  background: $color-bg-page;
+  border: 1rpx solid $color-divider;
+  font-size: $font-size-sm;
+  color: var(--w-text, $color-text-primary);
+
+  &:active {
+    opacity: 0.8;
+  }
+}
+
+.syncActionBtnDanger {
+  color: #c0392b;
+  border-color: rgba(192, 57, 43, 0.4);
+}
+
+.syncSectionLabel {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  padding-top: $spacing-xs;
+}

@@ -8,7 +8,9 @@ import {
   AGE_MAX,
   WARDROBE_NAME_MAX_LEN,
   BODY_FIELD_DEFS,
+  BODY_TAILORING_KEYS,
   CLOTHING_SIZE_FIELD_DEFS,
+  TOP_SIZE_OPTIONS,
   themeVarsOf
 } from '@/data/presets';
 import { BodyProfile, Gender } from '@/types';
@@ -18,6 +20,9 @@ const UNFILLED = '未填写';
 /** 身高合理区间（cm），与 BODY_FIELD_DEFS 中身高定义一致 */
 const HEIGHT_MIN = 50;
 const HEIGHT_MAX = 250;
+/** 体重合理区间（kg），与 BODY_FIELD_DEFS 中体重定义一致（v1.20.4 移入基本信息） */
+const WEIGHT_MIN = 10;
+const WEIGHT_MAX = 300;
 
 /** 数字拨盘选项：['未填写', min..max] */
 const buildNumberRange = (min: number, max: number): string[] => {
@@ -39,7 +44,7 @@ const ProfilePage: React.FC = () => {
 
   // 草稿态（保存时统一提交）
   const [draftName, setDraftName] = useState(currentWardrobe?.name || '');
-  const [draftGender, setDraftGender] = useState<Gender>(currentWardrobe?.gender || 'female');
+  const [draftGender, setDraftGender] = useState<Gender>(currentWardrobe?.gender || 'male');
   const [draftAge, setDraftAge] = useState<number | null>(currentWardrobe?.age ?? null);
   const [draftBody, setDraftBody] = useState<BodyProfile>({ ...bodyProfile });
   // 身高文本框草稿（独立维护，保存时校验并入 draftBody）
@@ -49,6 +54,8 @@ const ProfilePage: React.FC = () => {
 
   // 拨盘选项（年龄 + 身体数据，均为「未填写」+ 数字区间；身高改为文本框，不在拨盘之列）
   const ageRange = useMemo(() => buildNumberRange(AGE_MIN, AGE_MAX), []);
+  // v1.20.4：基本信息体重拨盘
+  const weightRange = useMemo(() => buildNumberRange(WEIGHT_MIN, WEIGHT_MAX), []);
   const bodyRanges = useMemo(() => {
     const map: Record<string, string[]> = {};
     BODY_FIELD_DEFS.forEach((f) => {
@@ -57,6 +64,16 @@ const ProfilePage: React.FC = () => {
     });
     return map;
   }, []);
+  // v1.20.2：身体数据改为可伸缩——默认收起，点击展开详细围度修改
+  const [bodyExpanded, setBodyExpanded] = useState(false);
+  // v1.20.2：身体数据仅展示服装裁剪常见项（体重/肩围/臂展/脚长不再展示，历史数据保留）
+  const tailoringFields = useMemo(
+    () =>
+      BODY_TAILORING_KEYS.map((key) => BODY_FIELD_DEFS.find((f) => f.key === key)!).filter(Boolean),
+    []
+  );
+  // 已填围度数（收起态摘要展示）
+  const filledBodyCount = BODY_TAILORING_KEYS.filter((k) => draftBody[k] !== undefined && draftBody[k] !== '').length;
 
   const genderIndex = GENDER_OPTIONS.findIndex((g) => g.value === draftGender);
 
@@ -143,7 +160,7 @@ const ProfilePage: React.FC = () => {
             </View>
           </Picker>
         </View>
-        {/* v0.7.0 用户意见 5：身高改为文本框直接填写 */}
+        {/* v0.7.0 用户意见 5：身高文本框直接填写；v1.20.4：体重保留在基本信息（拨盘） */}
         <View className={styles.row}>
           <Text className={styles.label}>身高（cm）</Text>
           <Input
@@ -155,75 +172,135 @@ const ProfilePage: React.FC = () => {
             onInput={(e) => setHeightInput(e.detail.value)}
           />
         </View>
-      </View>
-
-      {/* 身体数据（缝纫/尺码参考，均为选填） */}
-      <View className={styles.card}>
-        <Text className={styles.sectionTitle}>身体数据</Text>
-        {BODY_FIELD_DEFS.filter((f) => f.key !== 'height').map((f) => {
-          const range = bodyRanges[f.key];
-          const cur = draftBody[f.key] as number | undefined;
-          const valueIdx = cur === undefined ? 0 : Math.max(0, Math.min(range.length - 1, cur - f.min + 1));
-          return (
-            <View key={f.key} className={styles.row}>
-              <Text className={styles.label}>
-                {f.label}（{f.unit}）
+        <View className={styles.row}>
+          <Text className={styles.label}>体重（kg）</Text>
+          <Picker
+            mode='selector'
+            range={weightRange}
+            value={
+              draftBody.weight === undefined
+                ? 0
+                : Math.max(0, Math.min(weightRange.length - 1, draftBody.weight - WEIGHT_MIN + 1))
+            }
+            onChange={(e) => {
+              const idx = Number(e.detail.value);
+              setDraftBody((prev) => ({
+                ...prev,
+                weight: idx === 0 ? undefined : WEIGHT_MIN + idx - 1
+              }));
+            }}
+          >
+            <View className={styles.picker}>
+              <Text className={styles.value}>
+                {draftBody.weight === undefined ? UNFILLED : `${draftBody.weight} kg`}
               </Text>
-              <Picker
-                mode='selector'
-                range={range}
-                value={valueIdx}
-                onChange={(e) => {
-                  const idx = Number(e.detail.value);
-                  setDraftBody((prev) => ({
-                    ...prev,
-                    [f.key]: idx === 0 ? undefined : f.min + idx - 1
-                  }));
-                }}
-              >
-                <View className={styles.picker}>
-                  <Text className={styles.value}>{cur === undefined ? UNFILLED : `${cur} ${f.unit}`}</Text>
-                  <Text className={styles.arrow}>▾</Text>
-                </View>
-              </Picker>
+              <Text className={styles.arrow}>▾</Text>
             </View>
-          );
-        })}
+          </Picker>
+        </View>
       </View>
 
-      {/* v0.7.0 用户意见 5：常用衣物尺寸（上衣/裤装/鞋码） */}
+      {/* v1.20.2：常用衣物尺寸移到身材数据之前，改为手动填写 */}
       <View className={styles.card}>
-        <Text className={styles.sectionTitle}>常用衣物尺寸</Text>
+        <Text className={styles.sectionTitle}>服装尺寸数据</Text>
         {CLOTHING_SIZE_FIELD_DEFS.map((f) => {
           const cur = draftBody[f.key];
-          const options = [UNFILLED, ...f.options];
-          const valueIdx = cur === undefined || cur === '' ? 0 : Math.max(0, options.indexOf(cur));
+          // v1.20.4：上衣尺码改为拨盘选择（字母码 XXS–XXXL + 身高码 90–190 两口径均可选）
+          if (f.key === 'topSize') {
+            const options = [UNFILLED, ...TOP_SIZE_OPTIONS];
+            const valueIdx = cur === undefined || cur === '' ? 0 : Math.max(0, options.indexOf(String(cur)));
+            return (
+              <View key={f.key} className={styles.row}>
+                <Text className={styles.label}>{f.label}</Text>
+                <Picker
+                  mode='selector'
+                  range={options}
+                  value={valueIdx}
+                  onChange={(e) => {
+                    const idx = Number(e.detail.value);
+                    setDraftBody((prev) => ({ ...prev, topSize: idx === 0 ? undefined : options[idx] }));
+                  }}
+                >
+                  <View className={styles.picker}>
+                    <Text className={styles.value}>{cur === undefined || cur === '' ? UNFILLED : cur}</Text>
+                    <Text className={styles.arrow}>▾</Text>
+                  </View>
+                </Picker>
+              </View>
+            );
+          }
+          const placeholderMap: Record<string, string> = {
+            pantsSize: '如 30（腰围档）',
+            shoeSize: '如 38、40'
+          };
           return (
             <View key={f.key} className={styles.row}>
               <Text className={styles.label}>{f.label}</Text>
-              <Picker
-                mode='selector'
-                range={options}
-                value={valueIdx}
-                onChange={(e) => {
-                  const idx = Number(e.detail.value);
-                  setDraftBody((prev) => ({
-                    ...prev,
-                    [f.key]: idx === 0 ? undefined : options[idx]
-                  }));
+              <Input
+                className={styles.textInput}
+                value={cur === undefined ? '' : String(cur)}
+                placeholder={placeholderMap[f.key] || '手动填写'}
+                onInput={(e) => {
+                  const v = e.detail.value.trim();
+                  setDraftBody((prev) => ({ ...prev, [f.key]: v === '' ? undefined : v }));
                 }}
-              >
-                <View className={styles.picker}>
-                  <Text className={styles.value}>{cur === undefined || cur === '' ? UNFILLED : cur}</Text>
-                  <Text className={styles.arrow}>▾</Text>
-                </View>
-              </Picker>
+              />
             </View>
           );
         })}
         <Text className={styles.tip}>
-          上衣尺码支持 M/L 等字母码与 170/175 等身高码；裤装为 24–40 腰围档位；鞋码如 38、40。均为选填。
+          上衣尺码可选字母码（XXS–XXXL）或身高码（90–190）；裤装、鞋码手动填写。均为选填。
         </Text>
+      </View>
+
+      {/* v1.20.2：身体数据——仅保留服装裁剪常见围度；可伸缩，默认收起，点击展开详细修改 */}
+      <View className={styles.card}>
+        <View className={styles.toggleRow} onClick={() => setBodyExpanded((v) => !v)}>
+          <Text className={styles.sectionTitle}>身材数据</Text>
+          <Text className={styles.toggleHint}>
+            {bodyExpanded
+              ? '收起 ▴'
+              : filledBodyCount > 0
+                ? `已填 ${filledBodyCount} 项 · 点击修改详细身材数据 ›`
+                : '点击修改详细身材数据 ›'}
+          </Text>
+        </View>
+        {bodyExpanded && (
+          <View>
+            {tailoringFields.map((f) => {
+              const range = bodyRanges[f.key];
+              const cur = draftBody[f.key] as number | undefined;
+              const valueIdx = cur === undefined ? 0 : Math.max(0, Math.min(range.length - 1, cur - f.min + 1));
+              return (
+                <View key={f.key} className={styles.row}>
+                  <Text className={styles.label}>
+                    {f.label}（{f.unit}）
+                  </Text>
+                  <Picker
+                    mode='selector'
+                    range={range}
+                    value={valueIdx}
+                    onChange={(e) => {
+                      const idx = Number(e.detail.value);
+                      setDraftBody((prev) => ({
+                        ...prev,
+                        [f.key]: idx === 0 ? undefined : f.min + idx - 1
+                      }));
+                    }}
+                  >
+                    <View className={styles.picker}>
+                      <Text className={styles.value}>{cur === undefined ? UNFILLED : `${cur} ${f.unit}`}</Text>
+                      <Text className={styles.arrow}>▾</Text>
+                    </View>
+                  </Picker>
+                </View>
+              );
+            })}
+            <Text className={styles.tip}>
+              保留服装裁剪所需常见项：胸围/腰围/臀围/肩宽/领围/裤长/腿围，均为选填，供缝纫与尺码参考。
+            </Text>
+          </View>
+        )}
       </View>
 
       <View className={styles.saveBtn} onClick={save}>

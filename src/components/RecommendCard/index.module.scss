@@ -17,6 +17,9 @@
 }
 
 .sceneChip {
+  position: relative;
+  display: flex;
+  align-items: center;
   padding: 4rpx $spacing-sm;
   border-radius: $radius-round;
   background: var(--bg-secondary, #f5f2ee);
@@ -40,6 +43,98 @@
 .sceneChipTextActive {
   color: var(--w-color, $color-primary);
   font-weight: $font-weight-medium;
+}
+
+/* v1.12.0：已推荐场景高亮（右上角绿点，与「混元生成」角标同色系） */
+.sceneChipDot {
+  position: absolute;
+  top: -4rpx;
+  right: -2rpx;
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: #1f8a5b;
+  box-shadow: 0 0 0 2rpx var(--bg-card, #ffffff);
+}
+
+/* v1.12.0：自定义场景删除 × */
+.sceneChipDelete {
+  margin-left: 6rpx;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  padding: 0 2rpx;
+}
+
+/* v1.12.0：「＋ 场景」自定义入口 chip（虚线边框弱化样式） */
+.sceneChipAdd {
+  display: flex;
+  align-items: center;
+  padding: 4rpx $spacing-sm;
+  border-radius: $radius-round;
+  border: 1px dashed var(--border-color, rgba(0, 0, 0, 0.2));
+  background: transparent;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.sceneChipAddText {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+/* v1.12.0：自定义场景内联输入行 */
+.sceneAddForm {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  margin-bottom: $spacing-sm;
+}
+
+.sceneAddInput {
+  flex: 1;
+  height: 56rpx;
+  padding: 0 $spacing-sm;
+  border-radius: $radius-md;
+  background: var(--bg-secondary, #f5f2ee);
+  font-size: $font-size-sm;
+  color: $color-text-primary;
+}
+
+.sceneAddBtn {
+  height: 56rpx;
+  padding: 0 $spacing-sm;
+  border-radius: $radius-md;
+  background: var(--primary, $color-primary);
+  display: flex;
+  align-items: center;
+}
+
+.sceneAddBtnText {
+  font-size: $font-size-sm;
+  color: $color-text-white;
+}
+
+.sceneAddCancel {
+  height: 56rpx;
+  padding: 0 $spacing-sm;
+  border-radius: $radius-md;
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.12));
+  display: flex;
+  align-items: center;
+}
+
+.sceneAddCancelText {
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+}
+
+.sceneAddErr {
+  display: block;
+  margin: -8rpx 0 $spacing-sm;
+  font-size: $font-size-xs;
+  color: #d94141;
 }
 
 /* v1.4.2：选择风格 / 切换城市后的显性加载态 */
@@ -84,6 +179,19 @@
   margin-bottom: $spacing-xs;
 }
 
+/* v1.10.0：标题右侧今日生成进度 + 来源角标 */
+.titleRight {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  flex-shrink: 0;
+}
+
+.progressText {
+  font-size: 20rpx;
+  color: $color-text-tertiary;
+}
+
 .title {
   font-size: $font-size-md;
   font-weight: $font-weight-medium;
@@ -103,21 +211,49 @@
   background: rgba(31, 138, 91, 0.12);
 }
 
-.sourceRed {
-  color: #c0392b;
-  background: rgba(192, 57, 43, 0.12);
-}
-
 .reason {
   font-size: $font-size-sm;
   color: $color-text-tertiary;
   line-height: 1.5;
 }
 
-.items {
+/* v1.7.0：空衣橱建议模式——建议文案下方的添加衣物引导行 */
+.adviceHint {
+  margin-top: $spacing-sm;
+  padding: $spacing-xs $spacing-sm;
+  border-radius: $radius-md;
+  background: var(--bg-secondary, #f5f2ee);
+}
+
+/* v1.16.0：空衣橱建议模式操作行（生成建议消耗推荐额度 / 添加衣物） */
+.adviceActions {
   display: flex;
   gap: $spacing-sm;
+  margin-top: $spacing-sm;
+
+  .adoptBtn,
+  .shuffleBtn {
+    flex: 1;
+  }
+}
+
+.adviceHintText {
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  line-height: 1.5;
+}
+
+.items {
+  display: flex;
+  // v1.8.1：允许换行——AI 推荐可返回 5–6 件，单行固定 140rpx 宽会溢出裁切导致「方案显示不完整」
+  flex-wrap: wrap;
+  gap: $spacing-sm;
   margin-bottom: $spacing-md;
+}
+
+/* v1.10.0：多套方案 Swiper 容器（图片 140rpx + 名称两行 + 指示点高度） */
+.outfitSwiper {
+  height: 300rpx;
 }
 
 .item {
@@ -139,6 +275,11 @@
   max-width: 140rpx;
   font-size: $font-size-xs;
   color: $color-text-secondary;
+  // v1.8.1：名称放宽到两行，避免长名称被截断导致方案信息不完整
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .actions {
@@ -164,6 +305,11 @@
 .shuffleText {
   font-size: $font-size-md;
   color: $color-text-secondary;
+}
+
+/* v1.10.0：今日套数用尽后「换一件」置灰 */
+.shuffleBtnDisabled {
+  opacity: 0.45;
 }
 
 .adoptBtn {

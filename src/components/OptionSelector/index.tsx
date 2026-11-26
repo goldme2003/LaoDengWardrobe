@@ -14,6 +14,8 @@ interface Props {
   value: string | string[];
   /** 色值映射（颜色维度展示色点） */
   colorHexMap?: Record<string, string>;
+  /** v1.11.0：每行选项个数（如颜色 4 个/行，网格布局）；不传则按内容流式排列 */
+  columns?: number;
   /** 允许新增自定义选项 */
   allowCustom?: boolean;
   /** 自定义选项列表（allowCustom 时传入） */
@@ -42,6 +44,7 @@ const OptionSelector: React.FC<Props> = ({
   options,
   value,
   colorHexMap,
+  columns,
   allowCustom,
   customValues,
   usedValues,
@@ -111,7 +114,7 @@ const OptionSelector: React.FC<Props> = ({
     const canDelete = isCustom && !active && !(usedValues || []).includes(opt);
     const dot = colorHexMap && colorHexMap[opt];
     return (
-      <View key={opt} className={classnames(styles.chip, active && styles.chipActive)}>
+      <View key={opt} className={classnames(styles.chip, columns && styles.chipBlock, active && styles.chipActive)}>
         <View className={styles.chipLabel} onClick={() => tapOption(opt)}>
           {dot ? (
             <View className={styles.dotWrap}>
@@ -160,9 +163,11 @@ const OptionSelector: React.FC<Props> = ({
         </Picker>
       )}
 
-      {/* 色卡 / 勾选多选 */}
+      {/* 色卡 / 勾选多选（columns：网格布局，每行固定个数，v1.11.0 颜色 4 个/行；minmax(0,1fr) 防长文本撑破容器） */}
       {(mode === 'chips' || mode === 'multi') && (
-        <View className={styles.chips}>{allOptions.map((opt) => renderChip(opt, (customValues || []).includes(opt)))}</View>
+        <View className={classnames(styles.chips, columns ? styles.chipsGrid : '')} style={columns ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` } : undefined}>
+          {allOptions.map((opt) => renderChip(opt, (customValues || []).includes(opt)))}
+        </View>
       )}
 
       {/* 未使用的自定义选项删除区（转盘模式下展示） */}

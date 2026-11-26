@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { View, Text, Image, Input, Textarea, Picker } from '@tarojs/components';
+import { View, Text, Image, Input, Textarea, Picker, Switch } from '@tarojs/components';
 import Taro, { useRouter } from '@tarojs/taro';
 import OptionSelector from '@/components/OptionSelector';
 import BrandPicker from '@/components/BrandPicker';
@@ -9,9 +9,11 @@ import {
   recognizeAvailable,
   isAutoRecognizeOn,
   setAutoRecognize,
-  checkBudget
+  checkBudget,
+  ensurePrivacyOk
 } from '@/services/recognize';
 import { RecognizeResult } from '@/services/recognize';
+import { canAutoRecognize, batchImportQuota } from '@/services/entitlement';
 import {
   LAYER_OPTIONS,
   COLOR_PRESETS,
@@ -23,9 +25,7 @@ import {
   PURCHASE_PLACE_PRESETS,
   MAX_PHOTOS,
   REMARK_MAX_LEN,
-  ITEM_NAME_MAX_LEN,
   COLOR_HEX_MAP,
-  samplePhoto,
   getTypePresetsByGender,
   suggestSize,
   themeVarsOf
@@ -55,6 +55,9 @@ const DEFAULT_SIZE = 'M';
 type AttrKey = 'type' | 'layer' | 'color' | 'material' | 'seasons' | 'size' | 'brand';
 const ATTR_KEYS: AttrKey[] = ['type', 'layer', 'color', 'material', 'seasons', 'size', 'brand'];
 
+/** v1.11.0：批量添加单次任务照片上限（每张照片存为一件衣物） */
+const BATCH_MAX_PHOTOS = 9;
+
 /** 添加/编辑衣物（PRD FR-02/FR-03/FR-05 / v0.5）：照片组 + 属性控件 + 购入信息 + 备注 */
 const AddItemPage: React.FC = () => {
   const router = useRouter();
@@ -77,6 +80,10 @@ const AddItemPage: React.FC = () => {
   const removeCustomOption = useWardrobeStore((s) => s.removeCustomOption);
   const isCustomOptionUsed = useWardrobeStore((s) => s.isCustomOptionUsed);
   const toggleFavoriteBrand = useWardrobeStore((s) => s.toggleFavoriteBrand);
+  // v1.11.0：会员档位（自动识别 / 批量添加权益门控）与批量添加计次
+  const memberTier = useWardrobeStore((s) => s.memberTier);
+  const memberUsage = useWardrobeStore((s) => s.memberUsage);
+  const recordBatchImportUse = useWardrobeStore((s) => s.recordBatchImportUse);
 
   const editing = useMemo(() => items.find((it) => it.id === editId), [items, editId]);
   const fromTryout = useMemo(
@@ -103,10 +110,14 @@ const AddItemPage: React.FC = () => {
   const [purchasePhoto, setPurchasePhoto] = useState('');
   const [remark, setRemark] = useState('');
   const [name, setName] = useState('');
+  // v1.11.0：「衣物详细信息」折叠区（内外穿/材质/尺码/品牌/场合/购入信息/备注），默认收起
+  const [detailOpen, setDetailOpen] = useState(false);
 
   // v1.2 识别功能（PRD 9.3）：自动识别状态与手动入口
   const [recognizing, setRecognizing] = useState(false);
   const [recognTip, setRecognTip] = useState('');
+  // v1.11.3：自动识别开关改为 Switch 样式，需响应式状态镜像存储值（isAutoRecognizeOn 为同步读存储）
+  const [autoOn, setAutoOn] = useState(() => isAutoRecognizeOn());
   const recogTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // v1.4.3：用户手动改过的字段集合——识别结果不覆盖这些字段
   const touchedRef = useRef<Set<AttrKey>>(new Set());
@@ -118,8 +129,15 @@ const AddItemPage: React.FC = () => {
   };
   const isUntouched = (key: AttrKey) => !touchedRef.current.has(key);
 
-  // v1.2：自动识别主图（仅新增模式 + 功能可用 + 开关开启）；800ms 防抖 + 同图结果缓存；
-  // 失败/超时不自动重试（避免浪费调用），提供「重新识别」手动入口（方案 2.3/2.4，Q4 自动触发）
+  // v1.11.6：远程图片判定——仅拦截已上传云存储的 http(s) 下载地址（域名带点）。
+  // 此前 /^https?:/ 会误拦微信开发者工具的本地临时路径 http://tmp/xxx（工具内识别必现
+  // 「请先拍照或选择本地照片」/静默跳过），真机 wxfile:// 不受影响，故改为按域名区分
+  const isRemotePhoto = (p: string) => /^https?:\/\/[^/]+\.[^/]+/i.test(p);
+
+  // v1.2：自动识别主图（v1.11.0 起：仅 VIP 及以上 + 新增模式 + 功能可用 + 开关开启）；
+  // 800ms 防抖 + 同图结果缓存；失败/超时不自动重试（避免浪费调用），提供「重新识别」手动入口
+  // 普通版（free）不自动识别：不发起请求、不展示开关与重新识别入口（PRD 9.3 v1.11.0 权益调整）
+  const isVipPlus = canAutoRecognize(memberTier);
   const mainPhoto = photos[0] || '';
   // v1.4.3：主图快照同步——识别返回时若主图已变，丢弃过期结果
   useEffect(() => {
@@ -127,8 +145,9 @@ const AddItemPage: React.FC = () => {
   }, [mainPhoto]);
   useEffect(() => {
     if (editing || fromTryoutId) return; // 编辑/备选转正式已有预填，不自动触发
+    if (!isVipPlus) return; // v1.11.0：普通版不自动识别
     if (!recognizeAvailable() || !isAutoRecognizeOn()) return;
-    if (!mainPhoto || /^https?:/.test(mainPhoto)) return; // 示例图为网络图，不上传识别
+    if (!mainPhoto || isRemotePhoto(mainPhoto)) return;
     if (checkBudget() === 'exceeded') {
       setRecognTip('本月识别额度已用尽，下月自动恢复');
       return;
@@ -243,7 +262,7 @@ const AddItemPage: React.FC = () => {
 
   // v1.2：手动重新识别（用户点按触发，受熔断限制但不受自动开关限制）
   const manualRecognize = () => {
-    if (!mainPhoto || /^https?:/.test(mainPhoto)) {
+    if (!mainPhoto || isRemotePhoto(mainPhoto)) {
       Taro.showToast({ title: '请先拍照或选择本地照片', icon: 'none' });
       return;
     }
@@ -302,8 +321,6 @@ const AddItemPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const sampleIndex = useState({ n: 0 })[0];
-
   const addPhoto = async (source: 'camera' | 'album') => {
     const remain = MAX_PHOTOS - photos.length;
     if (remain <= 0) {
@@ -324,15 +341,92 @@ const AddItemPage: React.FC = () => {
     }
   };
 
-  const addSamplePhoto = () => {
-    if (photos.length >= MAX_PHOTOS) {
-      Taro.showToast({ title: `最多 ${MAX_PHOTOS} 张照片`, icon: 'none' });
+  // v1.11.0：批量添加（VIP 会员功能，PRD 8.6/10.6）——每张照片独立存为一件衣物，
+  // 类型/颜色/穿着季节由自动识别填充，其余属性取默认值；处理期间展示「正在处理 x/y，请稍候」
+  const handleBatchAdd = () => {
+    if (editing || fromTryoutId) {
+      Taro.showToast({ title: '批量添加仅用于新增衣物', icon: 'none' });
       return;
     }
-    const url = samplePhoto(sampleIndex.n);
-    sampleIndex.n += 1;
-    setPhotos((prev) => [...prev, url]);
-    console.info('[Add] 添加示例照片, url =', url);
+    const quota = batchImportQuota(memberTier);
+    if (quota.kind === 'blocked') {
+      // 普通版：入口可见但受限，点击弹窗引导开通
+      Taro.showModal({
+        title: '批量添加为会员功能',
+        content: '批量添加为 VIP/SVIP 专属权益：一次选择多张照片，每张照片自动存为一件衣物，并自动识别服装类型、颜色、穿着季节（VIP 5 次/月，SVIP 无限次）。',
+        confirmText: '去开通',
+        cancelText: '取消',
+        success: (r) => {
+          if (r.confirm) Taro.navigateTo({ url: '/pages/member/index' });
+        }
+      });
+      return;
+    }
+    if (quota.kind === 'counted' && (memberUsage.batchImportUsed || 0) >= quota.limit) {
+      Taro.showToast({ title: `本月批量添加额度已用尽（${quota.limit} 次/月），下月恢复`, icon: 'none' });
+      return;
+    }
+    Taro.chooseImage({
+      count: BATCH_MAX_PHOTOS,
+      sizeType: ['compressed'],
+      sourceType: ['album']
+    })
+      .then((res) => runBatchImport(res.tempFilePaths || []))
+      .catch(() => console.info('[Add] 批量添加选图取消'));
+  };
+
+  const runBatchImport = async (paths: string[]) => {
+    if (paths.length === 0) return;
+    // 云识别可用时先完成隐私确认（蒙层展示期间无法弹窗，需前置完成）
+    const canRecog = recognizeAvailable() && isVipPlus;
+    if (canRecog) {
+      const privacyOk = await ensurePrivacyOk();
+      if (!privacyOk) {
+        Taro.showToast({ title: '已取消批量添加（需同意照片识别说明）', icon: 'none' });
+        return;
+      }
+    }
+    console.info('[Add] 批量添加开始, 张数 =', paths.length, '自动识别 =', canRecog);
+    Taro.showLoading({ title: `正在处理 1/${paths.length} 请稍候`, mask: true });
+    let recognized = 0;
+    for (let i = 0; i < paths.length; i++) {
+      Taro.showLoading({ title: `正在处理 ${i + 1}/${paths.length} 请稍候`, mask: true });
+      // 默认值（其他属性均为默认）：类型/颜色/季节由识别结果覆盖（识别成功时）
+      let type = DEFAULT_TYPE;
+      let color = DEFAULT_COLOR;
+      let seasons = [currentSeason()];
+      if (canRecog) {
+        const outcome = await recognizePhoto(paths[i]);
+        if (outcome.code === 'OK') {
+          recognized++;
+          const d = outcome.data;
+          if (d.category) type = d.category;
+          if (d.color || (d.colors && d.colors[0])) color = d.color || (d.colors && d.colors[0]) || color;
+          if (d.seasons && d.seasons.length > 0) seasons = d.seasons.slice(0, 2);
+        } else {
+          console.warn('[Add] 批量识别失败, 以默认属性入库, path =', paths[i], 'code =', outcome.code);
+        }
+      }
+      const created = addItem({
+        photos: [paths[i]],
+        type,
+        layer: DEFAULT_LAYER,
+        color,
+        material: DEFAULT_MATERIAL,
+        seasons,
+        size: suggestSize(currentWardrobe?.gender, bodyProfile?.height) || DEFAULT_SIZE,
+        brand: DEFAULT_BRAND,
+        occasions: [DEFAULT_OCCASION],
+        remark: ''
+      });
+      console.info('[Add] 批量添加入库, name =', created.name, 'type =', type, 'color =', color);
+    }
+    Taro.hideLoading();
+    // 按次计数：单次批量任务 = 1 次
+    recordBatchImportUse();
+    const quotaTip = canRecog ? `（识别成功 ${recognized} 件）` : '';
+    Taro.showToast({ title: `已添加 ${paths.length} 件衣物${quotaTip}`, icon: 'none', duration: 2000 });
+    setTimeout(() => Taro.navigateBack(), 1200);
   };
 
   const removePhoto = (index: number) => {
@@ -393,9 +487,16 @@ const AddItemPage: React.FC = () => {
   const validate = (): string | null => {
     if (photos.length === 0) return '请至少添加 1 张照片';
     if (!type) return '请选择服装类型';
-    if (!layer) return '请选择内外穿';
+    if (!layer) {
+      // v1.11.0：内外穿在折叠区内，校验失败自动展开
+      setDetailOpen(true);
+      return '请选择内外穿（衣物详细信息）';
+    }
     if (!color) return '请选择颜色';
-    if (!material) return '请选择材质';
+    if (!material) {
+      setDetailOpen(true);
+      return '请选择材质（衣物详细信息）';
+    }
     if (seasons.length === 0) return '请选择穿着季节（至少 1 项）';
     return null;
   };
@@ -483,32 +584,52 @@ const AddItemPage: React.FC = () => {
           <View className={styles.actionBtn} onClick={() => addPhoto('album')}>
             <Text className={styles.actionBtnText}>从相册选择</Text>
           </View>
-          <View className={styles.actionBtn} onClick={addSamplePhoto}>
-            <Text className={styles.actionBtnText}>添加示例照片</Text>
+          {/* v1.11.0：批量添加（VIP 会员功能），替代原「添加示例照片」入口；
+              v1.11.2：已开通 VIP 及以上时不再展示 VIP 角标 */}
+          <View className={styles.actionBtn} onClick={handleBatchAdd}>
+            <Text className={styles.actionBtnText}>批量添加多件衣物</Text>
+            {!isVipPlus && (
+              <View className={styles.vipBadge}>
+                <Text className={styles.vipBadgeText}>VIP</Text>
+              </View>
+            )}
           </View>
         </View>
         <Text className={styles.remarkCount}>
-          点击照片设为主图，第 1 张为列表展示图；属性已预填默认值，识别只更新你未手动修改的字段
+          点击照片设为主图，第 1 张为列表展示图；批量添加时每张照片将存为一件衣物，自动识别类型、颜色、季节
         </Text>
 
-        {/* v1.2（PRD 9.3）：自动识别状态行（仅微信端且已配置云环境时展示） */}
-        {recognizeAvailable() && (
+        {/* v1.11.0（PRD 9.3）：自动识别为 VIP 及以上专属功能，普通版不自动识别 */}
+        {recognizeAvailable() && !isVipPlus && (
+          <View className={styles.recognRow}>
+            <Text className={styles.recognTip}>衣物属性自动识别为 VIP/SVIP 专属功能，普通版请手动选择属性</Text>
+            <View
+              className={styles.recognAction}
+              onClick={() => Taro.navigateTo({ url: '/pages/member/index' })}
+            >
+              <Text className={styles.recognActionText}>去开通</Text>
+            </View>
+          </View>
+        )}
+        {recognizeAvailable() && isVipPlus && (
           <View className={styles.recognRow}>
             <Text className={styles.recognTip}>
               {recognizing
                 ? '正在识别衣物属性…（可继续填写，已改字段不会被覆盖）'
-                : recognTip || '已开启自动识别（主图）'}
+                : recognTip || (autoOn ? '已开启自动识别（主图）' : '已关闭自动识别（主图）')}
             </Text>
-            <View
-              className={styles.recognAction}
-              onClick={() => {
-                const next = !isAutoRecognizeOn();
+            {/* v1.11.3：开关由文字按钮改为 Switch 样式 */}
+            <Switch
+              className={styles.recognSwitch}
+              checked={autoOn}
+              color='#b08d4f'
+              onChange={(e) => {
+                const next = e.detail.value;
+                setAutoOn(next);
                 setAutoRecognize(next);
                 setRecognTip(next ? '' : '已关闭自动识别，可点「重新识别」手动触发');
               }}
-            >
-              <Text className={styles.recognActionText}>{isAutoRecognizeOn() ? '关闭自动' : '开启自动'}</Text>
-            </View>
+            />
             {!recognizing && (
               <View className={styles.recognAction} onClick={manualRecognize}>
                 <Text className={styles.recognActionText}>重新识别</Text>
@@ -519,23 +640,6 @@ const AddItemPage: React.FC = () => {
       </View>
 
       <View className={styles.formCard}>
-        <View className={styles.namePreview}>
-          <Text className={styles.namePreviewLabel}>名称</Text>
-          {editing ? (
-            <Input
-              className={styles.nameInput}
-              value={name}
-              maxlength={ITEM_NAME_MAX_LEN}
-              placeholder={`名称（≤${ITEM_NAME_MAX_LEN}字），留空则保持原名`}
-              onInput={(e) => setName(e.detail.value)}
-            />
-          ) : (
-            <Text className={styles.namePreviewValue}>
-              保存后按「类型-编号」自动生成（如：上装-007）
-            </Text>
-          )}
-        </View>
-
         <OptionSelector
           label='服装类型'
           required
@@ -562,6 +666,45 @@ const AddItemPage: React.FC = () => {
         />
 
         <OptionSelector
+          label='颜色'
+          required
+          mode='chips'
+          columns={4}
+          options={COLOR_PRESETS.map((c) => c.name)}
+          customValues={customOf('color')}
+          usedValues={usedOf('color')}
+          allowCustom
+          customMaxLength={6}
+          colorHexMap={COLOR_HEX_MAP}
+          value={color}
+          onChange={(v) => {
+            markTouched('color');
+            setColor(v as string);
+          }}
+          onAddCustom={(v) => addCustomOption('color', v)}
+          onRemoveCustom={(v) => removeCustomOption('color', v)}
+        />
+
+        <OptionSelector
+          label='穿着季节'
+          required
+          mode='multi'
+          options={['春', '夏', '秋', '冬']}
+          value={seasons}
+          onChange={(v) => {
+            markTouched('seasons');
+            setSeasons(v as string[]);
+          }}
+        />
+
+        {/* v1.11.0：仅服装类型/颜色/穿着季节默认展开，其余选项收进「衣物详细信息」折叠区 */}
+        <View className={styles.detailHeader} onClick={() => setDetailOpen(!detailOpen)}>
+          <Text className={styles.detailTitle}>衣物详细信息（选填）</Text>
+          <Text className={styles.detailArrow}>{detailOpen ? '▴ 收起' : '▾ 展开'}</Text>
+        </View>
+        {detailOpen && (
+          <>
+        <OptionSelector
           label='内外穿'
           required
           mode='picker'
@@ -580,25 +723,6 @@ const AddItemPage: React.FC = () => {
         />
 
         <OptionSelector
-          label='颜色'
-          required
-          mode='chips'
-          options={COLOR_PRESETS.map((c) => c.name)}
-          customValues={customOf('color')}
-          usedValues={usedOf('color')}
-          allowCustom
-          customMaxLength={6}
-          colorHexMap={COLOR_HEX_MAP}
-          value={color}
-          onChange={(v) => {
-            markTouched('color');
-            setColor(v as string);
-          }}
-          onAddCustom={(v) => addCustomOption('color', v)}
-          onRemoveCustom={(v) => removeCustomOption('color', v)}
-        />
-
-        <OptionSelector
           label='材质'
           required
           mode='picker'
@@ -614,24 +738,6 @@ const AddItemPage: React.FC = () => {
           }}
           onAddCustom={(v) => addCustomOption('material', v)}
           onRemoveCustom={(v) => removeCustomOption('material', v)}
-        />
-
-        <OptionSelector
-          label='穿着季节'
-          required
-          mode='multi'
-          options={['春', '夏', '秋', '冬']}
-          customValues={customOf('season')}
-          usedValues={usedOf('season')}
-          allowCustom
-          customMaxLength={6}
-          value={seasons}
-          onChange={(v) => {
-            markTouched('seasons');
-            setSeasons(v as string[]);
-          }}
-          onAddCustom={(v) => addCustomOption('season', v)}
-          onRemoveCustom={(v) => removeCustomOption('season', v)}
         />
 
         <OptionSelector
@@ -781,6 +887,8 @@ const AddItemPage: React.FC = () => {
         <Text className={styles.remarkCount}>
           {remark.length}/{REMARK_MAX_LEN}
         </Text>
+          </>
+        )}
       </View>
 
       <View className={styles.bottomBar}>

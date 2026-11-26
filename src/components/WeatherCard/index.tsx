@@ -1,40 +1,46 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Input } from '@tarojs/components';
+import { View, Text, Input } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { weatherIcon } from '@/data/presets';
 import { WeatherInfo } from '@/types';
-import { CityGroup } from '@/data/cities';
+import { TRIP_CITIES } from '@/data/cities';
 import styles from './index.module.scss';
+
+export type WeatherMode = 'local' | 'trip';
 
 interface Props {
   weather: WeatherInfo | null;
   loading: boolean;
   failed: boolean;
-  cityGroups: CityGroup[];
+  /** 当前模式 */
+  mode: WeatherMode;
+  /** 模式切换（当展示切换 tab 时由卡片内部调用外部 onSwitchMode） */
+  onSwitchMode: (m: WeatherMode) => void;
   activeCity: string;
+  /** v1.8.0（F-17）：当前城市是否来自自动定位（当地模式下在城市名旁显示 📍） */
+  located?: boolean;
   onSelectCity: (city: string) => void;
   onRetry: () => void;
 }
 
 /** 天气卡片（PRD FR-09）：城市、今日天气与气温、未来 3 日简报
- * v1.3.0：城市切换由转盘 Picker 改为底部弹层列表——按拼音首字母分组排序，
- * 面板高度不超过屏幕 1/3，带右侧字母索引条 */
+ * v1.6.1：新增当地/出差模式切换 tab；城市选择弹层精简为顶部输入框 + 底部常用 15 城平铺，
+ * 面板高度固定 1/3 屏，无滚动条无字母索引条。 */
 const WeatherCard: React.FC<Props> = ({
   weather,
   loading,
   failed,
-  cityGroups,
+  mode,
+  onSwitchMode,
   activeCity,
+  located,
   onSelectCity,
   onRetry
 }) => {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [scrollInto, setScrollInto] = useState('');
-  // v1.4.3：城市列表外支持手动输入
   const [cityDraft, setCityDraft] = useState('');
 
   const openSheet = () => {
-    setScrollInto('');
     setCityDraft('');
     setSheetOpen(true);
   };
@@ -43,7 +49,6 @@ const WeatherCard: React.FC<Props> = ({
     setCityDraft('');
     if (city !== activeCity) onSelectCity(city);
   };
-  // v1.4.3：手动输入城市（2–10 字），与列表点击走同一套切换逻辑
   const confirmCity = () => {
     const city = cityDraft.trim();
     if (!city) {
@@ -54,16 +59,34 @@ const WeatherCard: React.FC<Props> = ({
       Taro.showToast({ title: '城市名称需为 2–10 个字', icon: 'none' });
       return;
     }
-    console.info('[WeatherCard] 手动输入城市, city =', city);
     pick(city);
   };
 
+  const isTrip = mode === 'trip';
+
   return (
     <View className={styles.card}>
-      {/* 第一行：城市 + 状态/重试 + 右上角「切换城市 / 切换衣橱」 */}
+      {/* v1.6.1：顶部模式切换 tab（当地天气 / 出差天气） */}
+      <View className={styles.modeTab}>
+        <View
+          className={`${styles.modeItem} ${!isTrip ? styles.modeItemActive : ''}`}
+          onClick={() => isTrip && onSwitchMode('local')}
+        >
+          <Text className={`${styles.modeText} ${!isTrip ? styles.modeTextActive : ''}`}>当地天气</Text>
+        </View>
+        <View
+          className={`${styles.modeItem} ${isTrip ? styles.modeItemActive : ''}`}
+          onClick={() => !isTrip && onSwitchMode('trip')}
+        >
+          <Text className={`${styles.modeText} ${isTrip ? styles.modeTextActive : ''}`}>出差天气</Text>
+        </View>
+      </View>
+
+      {/* 第一行：城市 + 状态/重试 + 右上角城市选择按钮 */}
       <View className={styles.header}>
+        {/* v1.8.1（F-17 修复）：定位图标放城市名前——仅自动定位城市显示（参考支付宝闪购定位样式），手动选城不显示 */}
+        {located && <Text className={styles.locateIcon}>📍</Text>}
         <Text className={styles.city}>{weather ? weather.city : '天气'}</Text>
-        {/* v1.2.1：模拟数据角标——云端不可用回退时可见，便于真机判断云函数链路是否生效 */}
         {weather?.mock && !loading && (
           <Text className={styles.mockBadge}>模拟{weather.notice ? `·${weather.notice}` : ''}</Text>
         )}
@@ -74,14 +97,13 @@ const WeatherCard: React.FC<Props> = ({
           </Text>
         )}
         <View className={styles.citySwitch} onClick={openSheet}>
-          <Text className={styles.citySwitchText}>切换城市</Text>
+          <Text className={styles.citySwitchText}>{isTrip ? '出差城市' : '切换城市'}</Text>
           <Text className={styles.citySwitchArrow}>▾</Text>
         </View>
       </View>
 
       {weather && !failed && (
         <View className={styles.bodyRow}>
-          {/* 第二行：今日天气（左） + 未来 3 日简报（右），横向并排压缩高度 */}
           <View className={styles.today}>
             <Text className={styles.todayIcon}>{weatherIcon(weather.today.cond)}</Text>
             <View className={styles.todayInfo}>
@@ -105,17 +127,17 @@ const WeatherCard: React.FC<Props> = ({
         </View>
       )}
 
-      {/* v1.3.0：城市选择弹层（≤1/3 屏高，拼音首字母分组 + 右侧索引条） */}
+      {/* v1.6.1：精简城市弹层——顶部输入框 + 底部常用 15 城，1/3 屏高，无滚动条 */}
       {sheetOpen && (
         <View className={styles.sheetMask} onClick={() => setSheetOpen(false)}>
           <View className={styles.sheet} onClick={(e) => e.stopPropagation()}>
             <View className={styles.sheetHeader}>
-              <Text className={styles.sheetTitle}>选择城市</Text>
+              <Text className={styles.sheetTitle}>{isTrip ? '选择出差城市' : '选择城市'}</Text>
               <Text className={styles.sheetClose} onClick={() => setSheetOpen(false)}>
                 完成
               </Text>
             </View>
-            {/* v1.4.3：手动输入城市（列表外的城市可直接填写） */}
+            {/* 手动输入 */}
             <View className={styles.cityInputRow}>
               <Input
                 className={styles.cityInput}
@@ -130,42 +152,17 @@ const WeatherCard: React.FC<Props> = ({
                 <Text className={styles.cityInputBtnText}>确定</Text>
               </View>
             </View>
-            <View className={styles.sheetBody}>
-              <ScrollView
-                className={styles.sheetScroll}
-                scrollY
-                enhanced
-                showScrollbar={false}
-                scrollIntoView={scrollInto}
-              >
-                {cityGroups.map((g) => (
-                  <View key={g.letter} id={`city-group-${g.letter}`} className={styles.group}>
-                    <Text className={styles.groupLetter}>{g.letter}</Text>
-                    <View className={styles.groupGrid}>
-                      {g.cities.map((c) => (
-                        <Text
-                          key={c}
-                          className={`${styles.cityCell} ${c === activeCity ? styles.cityCellActive : ''}`}
-                          onClick={() => pick(c)}
-                        >
-                          {c}
-                        </Text>
-                      ))}
-                    </View>
-                  </View>
-                ))}
-              </ScrollView>
-              <View className={styles.indexBar}>
-                {cityGroups.map((g) => (
-                  <Text
-                    key={g.letter}
-                    className={styles.indexLetter}
-                    onClick={() => setScrollInto(`city-group-${g.letter}`)}
-                  >
-                    {g.letter}
-                  </Text>
-                ))}
-              </View>
+            {/* 常用 15 城平铺，无滚动 */}
+            <View className={styles.tripList}>
+              {TRIP_CITIES.map((c) => (
+                <Text
+                  key={c}
+                  className={`${styles.tripCell} ${c === activeCity ? styles.tripCellActive : ''}`}
+                  onClick={() => pick(c)}
+                >
+                  {c}
+                </Text>
+              ))}
             </View>
           </View>
         </View>

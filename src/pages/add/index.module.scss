@@ -1,4 +1,4 @@
-﻿@use '@/styles/variables.scss' as *;
+@use '@/styles/variables.scss' as *;
 
 .page {
   padding: $spacing-lg $page-padding 200rpx;
@@ -77,30 +77,72 @@
   line-height: 1;
 }
 
+// v1.11.4：三个按钮强制一排（不换行），收窄内边距保证「批量添加多件衣物」同排放下
 .photoActions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .actionBtn {
   height: 72rpx;
-  padding: 0 $spacing-lg;
+  padding: 0 $spacing-sm;
   margin-right: $spacing-sm;
   margin-bottom: $spacing-sm;
   border-radius: $radius-button;
   background: $color-bg-hover;
   display: flex;
   align-items: center;
-  justify-content: center;
 
   &:active {
-    opacity: 0.85;
+    opacity: 0.7;
   }
+}
+
+// v1.11.0：批量添加按钮的 VIP 徽标（会员专属功能标识）
+// v1.11.4：收窄角标内边距，保证三按钮同排时总宽不超容器
+.vipBadge {
+  margin-left: 4rpx;
+  padding: 2rpx 8rpx;
+  border-radius: $radius-round;
+  background: rgba(201, 169, 110, 0.18);
+  border: 1rpx solid #c9a96e;
+}
+
+.vipBadgeText {
+  font-size: 20rpx;
+  font-weight: 600;
+  color: #b08d4f;
+}
+
+// v1.11.0：「衣物详细信息」折叠区头部
+.detailHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-md 0 $spacing-sm;
+  margin-top: $spacing-sm;
+  border-top: 1rpx solid $color-border;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.detailTitle {
+  font-size: $font-size-sm;
+  font-weight: 600;
+  color: $color-text-primary;
+}
+
+.detailArrow {
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
 }
 
 .actionBtnText {
   font-size: $font-size-md;
   color: $color-text-secondary;
+  white-space: nowrap;
 }
 
 .formCard {
@@ -109,36 +151,6 @@
   padding: $spacing-lg;
   margin-bottom: $spacing-md;
   box-shadow: $shadow-card;
-}
-
-.namePreview {
-  display: flex;
-  align-items: center;
-  padding: $spacing-md;
-  background: color-mix(in srgb, var(--w-color, $color-primary) 8%, transparent);
-  border-radius: $radius-md;
-  margin-bottom: $spacing-lg;
-}
-
-.namePreviewLabel {
-  font-size: $font-size-sm;
-  color: $color-text-tertiary;
-  margin-right: $spacing-sm;
-}
-
-.namePreviewValue {
-  font-size: $font-size-md;
-  font-weight: $font-weight-medium;
-  color: var(--w-color, $color-primary);
-  @include text-ellipsis;
-}
-
-.nameInput {
-  flex: 1;
-  height: 64rpx;
-  font-size: $font-size-md;
-  font-weight: $font-weight-medium;
-  color: var(--w-color, $color-primary);
 }
 
 .brandLabel {
@@ -364,6 +376,11 @@
 .recognActionText {
   font-size: $font-size-xs;
   color: $color-text-secondary;
+}
+
+// v1.11.3：自动识别开关改为 Switch 样式
+.recognSwitch {
+  flex: none;
 }
 
 

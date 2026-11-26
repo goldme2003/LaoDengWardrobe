@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "openapi": []
+  },
+  "name": "userSync",
+  "version": "1.0.0",
+  "description": "云端同步（R-5 M1）：微信静默登录、全量快照上下行、冲突副本、删除云端数据、照片容量计量",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

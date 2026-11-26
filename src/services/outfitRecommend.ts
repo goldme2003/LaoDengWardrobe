@@ -24,6 +24,8 @@ interface Params {
   gender?: string;
   age?: number | null;
   excludeIds?: string[];
+  /** v1.9.0（F-19）：会员档位（plus = 中间档，full = 综合全衣橱推荐；缺省按 plus 处理） */
+  level?: 'plus' | 'full';
 }
 
 /** 调用混元穿搭云函数；不可用/失败时返回 null，由首页回退到本地规则引擎 */
@@ -41,6 +43,7 @@ export const requestOutfitRecommend = async (params: Params): Promise<AiOutfitRe
         scene: params.scene,
         gender: params.gender,
         age: params.age ?? undefined,
+        level: params.level === 'full' ? 'full' : 'plus',
         weather: day
           ? { cond: day.cond, low: day.low, high: day.high }
           : undefined,
@@ -69,12 +72,15 @@ export const requestOutfitRecommend = async (params: Params): Promise<AiOutfitRe
       return null;
     }
     const source: OutfitSource = result.source === 'hunyuan' ? 'hunyuan' : 'fallback';
+    // v1.12.1：用户显式选择场景（含自定义）时响应场景一律采用请求场景——
+    // 修复云端兜底/未部署新版的云函数把自定义场景归为预设或 all 导致的缓存场景漂移
+    // （场景标签不亮、再点该场景误报已达上限）
     const scene: SceneId =
-      result.scene && isSceneId(result.scene)
-        ? result.scene
-        : params.scene === 'all'
-          ? '日常'
-          : params.scene;
+      params.scene !== 'all'
+        ? params.scene
+        : result.scene && isSceneId(result.scene)
+          ? result.scene
+          : '日常';
     console.info(`[OutfitAI] 推荐来源 = ${source}，场景 = ${scene}，件数 = ${itemIds.length}`);
     return { itemIds, scene, advice: result.advice || '', source };
   } catch (e) {

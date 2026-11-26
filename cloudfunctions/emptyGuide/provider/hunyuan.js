@@ -1,12 +1,12 @@
 /** 腾讯混元文本模型调用封装（PRD 9.1.2 空衣橱引导）
  * 密钥从云函数环境变量 HUNYUAN_API_KEY 读取，本地联调可放 cloudfunctions/emptyGuide/private.config.json（已 gitignore）。
- * 端点与模型与 recognizeClothing 保持一致，复用同一套密钥配置（专项计划 D-4）。 */
+ * 端点与 recognizeClothing 一致（v1.11.5 起文本任务使用模型 hy4-flash，实测 2.6–2.9s、价格为 hy4 的 1/12），复用同一套密钥配置（专项计划 D-4）。 */
 const https = require('https');
 const path = require('path');
 
 const HOST = 'tokenhub.tencentmaas.com';
-/** 单次请求硬超时：socket 空闲超时 + 总耗时上限（避免上游慢速回包拖到平台 60s 强杀，表现为 ret=-3） */
-const TOTAL_TIMEOUT = 25000;
+/** 单次请求硬超时：socket 空闲超时 + 总耗时上限（v1.11.5 起 hy4-flash 实测 2.6–2.9s，25s→12s；避免上游慢速回包拖到平台 60s 强杀，表现为 ret=-3） */
+const TOTAL_TIMEOUT = 12000;
 /** 连接复用：容器热启动期间复用 TLS 连接，减少重复建连开销 */
 const agent = new https.Agent({ keepAlive: true, maxSockets: 4 });
 
@@ -105,7 +105,7 @@ function weatherText(w) {
 /** 精简提示词：单条消息承载全部上下文与输出约束，尽量降低 token 消耗 */
 function buildPrompt(gender, age, weather) {
   const wt = weatherText(weather);
-  return `穿搭顾问。${GENDER_TEXT[gender] || '不限'}，${age}岁，衣橱为空。${wt ? `天气${wt}。` : ''}给1条≤50字的入门单品建议，侧重${ageStyle(age)}。只输出JSON：{"tips":["建议"]}`;
+  return `穿搭顾问。${GENDER_TEXT[gender] || '不限'}，${age}岁，衣橱为空。${wt ? `天气${wt}。` : ''}给1条≤150字的入门单品建议，侧重${ageStyle(age)}。只输出JSON：{"tips":["建议"]}`;
 }
 
 /**
@@ -119,10 +119,10 @@ async function callHunyuanGuide(gender, age, weather) {
   }
   const startedAt = Date.now();
   const res = await httpsPostJson('/v1/chat/completions', apiKey, {
-    model: process.env.HUNYUAN_MODEL || 'hy4',
+    model: 'hy4-flash',
     messages: [{ role: 'user', content: buildPrompt(gender, age, weather) }],
     temperature: 0.7
-    // 不设 max_tokens：与 recognizeClothing 保持一致；实测限制 200 时 hy4 可能
+    // 不设 max_tokens：与 recognizeClothing 保持一致；实测限制 200 时模型可能
     // 将输出写入 reasoning 字段或被截断，导致 content 为空（BAD_MODEL_OUTPUT）
   });
   const message =

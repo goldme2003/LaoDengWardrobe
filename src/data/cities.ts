@@ -29,3 +29,10 @@ export const CITY_GROUPS: CityGroup[] = [
 
 /** 平铺城市列表（保持拼音分组顺序） */
 export const CITY_ALL: string[] = CITY_GROUPS.flatMap((g) => g.cities);
+
+/** v1.6.1：出差模式常用 15 城（底下列出，固定顺序，无分组无滚动条） */
+export const TRIP_CITIES: string[] = [
+  '北京', '上海', '广州', '深圳', '杭州',
+  '成都', '重庆', '西安', '武汉', '南京',
+  '长沙', '青岛', '厦门', '三亚', '哈尔滨'
+];

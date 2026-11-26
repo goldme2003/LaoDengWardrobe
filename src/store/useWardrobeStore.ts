@@ -10,9 +10,21 @@ import {
   DiaryEntry,
   CustomDimension,
   CustomOption,
-  NewItemInput
+  NewItemInput,
+  CitySource,
+  SyncMeta
 } from '@/types';
 import { genId, pad3 } from '@/utils/format';
+import {
+  MemberTier,
+  MemberUsage,
+  DailyOutfitCache,
+  DailyOutfitEntry,
+  initialUsage,
+  rolledUsage,
+  todayKey
+} from '@/services/entitlement';
+import { SCENE_OPTIONS } from '@/services/recommend';
 import {
   CUSTOM_MAX_LEN,
   WARDROBE_NAME_MAX_LEN,
@@ -29,7 +41,10 @@ import {
 
 const STORAGE_KEY = 'ldw_data_v1';
 
-interface LdwData {
+/** v1.12.0：预设场景名（自定义场景与预设去重用） */
+const SCENE_PRESET_NAMES = SCENE_OPTIONS.map((s) => s.id as string);
+
+export interface LdwData {
   wardrobes: Wardrobe[];
   currentWardrobeId: string;
   items: ClothingItem[];
@@ -38,6 +53,8 @@ interface LdwData {
   counters: Record<string, number>;
   /** 天气城市（空 = 未选择） */
   city: string;
+  /** v1.8.0（F-17）：城市来源——located = 启动自动定位，manual = 手动选择，空串 = 旧数据/未定位 */
+  citySource: CitySource;
   /** 个人身体数据（v0.6：按衣橱归属，key = 衣橱id；切换衣橱联动） */
   bodyProfiles: Record<string, BodyProfile>;
   /** 喜爱品牌（v0.5，品牌下拉中前置展示） */
@@ -50,6 +67,20 @@ interface LdwData {
   tomorrowOutfits: Record<string, string[]>;
   /** 首页待应用筛选预设（v0.6：「我的」页点击喜爱衣物跳转后由首页消费） */
   wardrobeFilterPreset: 'favorite' | null;
+  /** v1.9.0（F-19）：会员档位（free / vip / svip），本地记录，云端校验待云同步落地后接入 */
+  memberTier: MemberTier;
+  /** v1.9.0（F-19）：会员权益用量（当季图组日额度、出差/批量导入/时尚推荐月额度） */
+  memberUsage: MemberUsage;
+  /** v1.10.0：明日穿搭推荐当天缓存（key = 衣橱id；day 过期由读取侧与写入侧重置） */
+  dailyOutfits: Record<string, DailyOutfitCache>;
+  /** v1.12.0：自定义搭配场景（推荐卡片「+ 新增场景」手输入库，如 相亲/约会/婚礼），全局共享 */
+  customScenes: string[];
+  /** v1.15.0（R-5）：云同步元数据（openid / 版本号 / 脏标记，见《云端同步设计方案》5.2） */
+  syncMeta: SyncMeta;
+  /** v1.15.0（R-5）：同步衣橱选择（null = 未设置，登录后按档位初始化；VIP ≤2 / SVIP 全部） */
+  syncWardrobeIds: string[] | null;
+  /** v1.15.0（R-5）：云同步开关（登录后默认关闭，用户在「我的 → 云同步」开启，状态持久化在本地） */
+  cloudSyncEnabled: boolean;
 }
 
 const initialData = (): LdwData => {
@@ -57,7 +88,7 @@ const initialData = (): LdwData => {
     id: genId(),
     name: '我的',
     color: getThemeById(DEFAULT_THEME_ID).primary,
-    gender: 'female',
+    gender: 'male',
     age: null,
     themeId: DEFAULT_THEME_ID,
     createdAt: Date.now()
@@ -69,12 +100,20 @@ const initialData = (): LdwData => {
     customOptions: [],
     counters: {},
     city: '',
+    citySource: '',
     bodyProfiles: {},
     favoriteBrands: [],
     tryoutItems: [],
     diaryEntries: [],
     tomorrowOutfits: {},
-    wardrobeFilterPreset: null
+    wardrobeFilterPreset: null,
+    memberTier: 'free',
+    memberUsage: initialUsage(),
+    dailyOutfits: {},
+    customScenes: [],
+    syncMeta: { openid: '', dataVersion: 0, lastSyncedVersion: 0, dirty: false, lastSyncedAt: 0 },
+    syncWardrobeIds: null,
+    cloudSyncEnabled: false
   };
 };
 
@@ -85,7 +124,8 @@ const migrateWardrobe = (w: Wardrobe): Wardrobe => {
     ...w,
     themeId,
     color: w.color || getThemeById(themeId).primary,
-    gender: w.gender || 'female',
+    // v1.15.0：性别默认值改为男性（旧数据缺 gender 时同样兜底为男性）
+    gender: w.gender || 'male',
     age: w.age === undefined ? null : w.age
   };
 };
@@ -106,11 +146,32 @@ const loadData = (): LdwData => {
       // v1.1：旧数据缺字段兜底，避免异常数据导致页面崩溃
       stored.customOptions = stored.customOptions || [];
       stored.counters = stored.counters || {};
+      // v1.8.0（F-17）：旧数据无城市来源字段，置空（不展示定位图标，待本次定位/手动选城后更新）
+      stored.citySource = stored.citySource || '';
       stored.favoriteBrands = stored.favoriteBrands || [];
       stored.tryoutItems = stored.tryoutItems || [];
       stored.diaryEntries = stored.diaryEntries || [];
       stored.tomorrowOutfits = stored.tomorrowOutfits || {};
       stored.wardrobeFilterPreset = null;
+      // v1.9.0（F-19）：旧数据无会员字段，默认普通版；用量按天/月窗口滚动重置
+      stored.memberTier = stored.memberTier || 'free';
+      stored.memberUsage = rolledUsage(stored.memberUsage);
+      // v1.10.0：明日推荐当天缓存——跨天后清空（次日重新生成）
+      stored.dailyOutfits = stored.dailyOutfits || {};
+      Object.keys(stored.dailyOutfits).forEach((wid) => {
+        if (stored.dailyOutfits[wid].day !== todayKey()) {
+          stored.dailyOutfits[wid] = { day: todayKey(), list: [] };
+        }
+      });
+      // v1.12.0：旧数据无自定义场景字段
+      stored.customScenes = Array.isArray(stored.customScenes) ? stored.customScenes : [];
+      // v1.15.0（R-5）：旧数据无云同步字段——未登录、无脏数据、开关默认关闭
+      stored.syncMeta =
+        stored.syncMeta && typeof stored.syncMeta === 'object'
+          ? stored.syncMeta
+          : { openid: '', dataVersion: 0, lastSyncedVersion: 0, dirty: false, lastSyncedAt: 0 };
+      stored.syncWardrobeIds = Array.isArray(stored.syncWardrobeIds) ? stored.syncWardrobeIds : null;
+      stored.cloudSyncEnabled = stored.cloudSyncEnabled === true;
       console.info('[Store] 读取本地数据成功, 衣橱数 =', stored.wardrobes.length, '衣物数 =', stored.items.length);
       return stored;
     }
@@ -192,13 +253,39 @@ export interface WardrobeStore extends LdwData {
   setWardrobeFilterPreset: (preset: 'favorite') => void;
   /** 消费首页筛选预设（首页应用后清空） */
   consumeWardrobeFilterPreset: () => void;
-  /** 设置天气城市 */
-  setCity: (city: string) => void;
+  /** 设置天气城市（v1.8.0 F-17：附带来源 located/manual，缺省视为手动选择） */
+  setCity: (city: string, source?: CitySource) => void;
+  /** v1.9.0（F-19）：设置会员档位（正式开通走云端校验；开发环境提供切换便于验证各档位） */
+  setMemberTier: (tier: MemberTier) => void;
+  /** v1.9.0（F-19）：登记今日当季推荐图组已看张数 */
+  recordSeasonalView: (count: number) => void;
+  /** v1.9.0（F-19）：登记本月出差推荐使用一次 */
+  recordTripUse: () => void;
+  /** v1.11.0：登记本月批量添加（批量导入）使用一次（单次批量任务 = 1 次） */
+  recordBatchImportUse: () => void;
+  /** v1.10.0：追加一套今日明日推荐缓存（跨天自动重置；数量上限由调用方按会员档位把关） */
+  appendDailyOutfit: (wardrobeId: string, entry: Omit<DailyOutfitEntry, 'id'>) => void;
+  /** v1.12.0：新增自定义搭配场景（≤6 字，去重），失败返回错误文案 */
+  addCustomScene: (value: string) => string | null;
+  /** v1.12.0：删除自定义搭配场景（已被今日推荐缓存引用时不可删除） */
+  removeCustomScene: (value: string) => void;
+  /** v1.15.0（R-5）：设置云同步开关（仅本地偏好，不打脏不触发上行） */
+  setCloudSyncEnabled: (enabled: boolean) => void;
+  /** v1.15.0（R-5）：设置同步衣橱选择（仅本地设置，不打脏；上限校验由调用方把关） */
+  setSyncWardrobeIds: (ids: string[]) => void;
+  /** v1.15.0（R-5）：更新同步元数据（登录/上行成功后校准版本号与脏标记，不打脏） */
+  patchSyncMeta: (patch: Partial<SyncMeta>) => void;
+  /** v1.15.0（R-5）：回填照片 fileID（照片上传成功后调用，不打脏避免同步死循环） */
+  replacePhotoPaths: (
+    replacements: { kind: 'item' | 'diary' | 'tryout'; id: string; photos: string[] }[]
+  ) => void;
+  /** v1.15.0（R-5）：原子写入云端合并结果（递增版本号 + 打脏，随下次 push 上行） */
+  applySyncMerge: (partial: Partial<LdwData>) => void;
 }
 
 export const useWardrobeStore = create<WardrobeStore>((set, get) => {
-  const commit = (partial: Partial<LdwData>) => {
-    set(partial);
+  /** v1.15.0（R-5）：全量持久化（含云同步元数据），由 commit 与 patchSyncMeta 复用 */
+  const persistAll = (): void => {
     const s = get();
     persistData({
       wardrobes: s.wardrobes,
@@ -207,13 +294,43 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       customOptions: s.customOptions,
       counters: s.counters,
       city: s.city,
+      citySource: s.citySource,
       bodyProfiles: s.bodyProfiles,
       favoriteBrands: s.favoriteBrands,
       tryoutItems: s.tryoutItems,
       diaryEntries: s.diaryEntries,
       tomorrowOutfits: s.tomorrowOutfits,
+      memberTier: s.memberTier,
+      memberUsage: s.memberUsage,
+      dailyOutfits: s.dailyOutfits,
+      customScenes: s.customScenes,
+      syncMeta: s.syncMeta,
+      syncWardrobeIds: s.syncWardrobeIds,
+      cloudSyncEnabled: s.cloudSyncEnabled,
       wardrobeFilterPreset: null
     });
+  };
+
+  /** v1.15.0（R-5）：commit 统一入口。
+   * 同步范围内数据变更（衣橱/衣物/日记/自定义项/备选/身体数据/品牌/计数器/当前衣橱/自定义场景）
+   * 默认递增 dataVersion 并打脏标记，触发云端上行；
+   * 仅本地字段（明日穿搭勾选、推荐缓存、城市、会员用量、筛选预设等）传 opts.localOnly = true 跳过。 */
+  const commit = (partial: Partial<LdwData>, opts?: { localOnly?: boolean }) => {
+    const localOnly = opts?.localOnly === true;
+    const prev = get();
+    set({
+      ...partial,
+      ...(localOnly
+        ? {}
+        : {
+            syncMeta: {
+              ...prev.syncMeta,
+              dataVersion: prev.syncMeta.dataVersion + 1,
+              dirty: true
+            }
+          })
+    });
+    persistAll();
   };
 
   return {
@@ -282,6 +399,8 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       if (patch.themeId && patch.themeId !== target.themeId) {
         next.color = getThemeById(patch.themeId).primary;
       }
+      // v1.15.0（R-5）：记录最后修改时间，云同步合并按「新者胜」裁决
+      next.updatedAt = Date.now();
       console.info('[Store] 更新衣橱设置, id =', id, 'patch =', JSON.stringify(patch));
       commit({ wardrobes: s.wardrobes.map((w) => (w.id === id ? next : w)) });
     },
@@ -363,7 +482,9 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       const updated: ClothingItem = {
         ...item,
         ...rest,
-        ...(patchName !== undefined ? { name: patchName } : {})
+        ...(patchName !== undefined ? { name: patchName } : {}),
+        // v1.15.0（R-5）：记录最后修改时间，云同步合并按「新者胜」裁决
+        updatedAt: Date.now()
       };
 
       // 用户手动改名（PRD 6.2 第 5 条）
@@ -395,7 +516,11 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       const s = get();
       const item = s.items.find((it) => it.id === id);
       if (!item) return;
-      commit({ items: s.items.map((it) => (it.id === id ? { ...it, favorite: !it.favorite } : it)) });
+      commit({
+        items: s.items.map((it) =>
+          it.id === id ? { ...it, favorite: !it.favorite, updatedAt: Date.now() } : it
+        )
+      });
     },
 
     deleteItem: (id) => {
@@ -502,7 +627,7 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
         console.warn('[Store] 备选不存在, id =', id);
         return;
       }
-      const updated: TryoutItem = { ...item, ...patch };
+      const updated: TryoutItem = { ...item, ...patch, updatedAt: Date.now() };
       if (patch.name !== undefined && patch.name.trim()) {
         updated.name = patch.name.trim();
       }
@@ -538,7 +663,8 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       const wid = s.currentWardrobeId;
       const list = s.tomorrowOutfits[wid] || [];
       const next = list.includes(itemId) ? list.filter((v) => v !== itemId) : [...list, itemId];
-      commit({ tomorrowOutfits: { ...s.tomorrowOutfits, [wid]: next } });
+      // 明日穿搭勾选为「明日穿搭记录」，仅本地（设计方案 4.4），不参与云同步
+      commit({ tomorrowOutfits: { ...s.tomorrowOutfits, [wid]: next } }, { localOnly: true });
     },
 
     adoptTomorrowItems: (itemIds) => {
@@ -554,21 +680,156 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
         return;
       }
       console.info('[Store] 一键采纳推荐到明日穿搭, 新增件数 =', next.length - list.length);
-      commit({ tomorrowOutfits: { ...s.tomorrowOutfits, [wid]: next } });
+      // 明日穿搭勾选为「明日穿搭记录」，仅本地（设计方案 4.4），不参与云同步
+      commit({ tomorrowOutfits: { ...s.tomorrowOutfits, [wid]: next } }, { localOnly: true });
     },
 
     setWardrobeFilterPreset: (preset) => {
-      commit({ wardrobeFilterPreset: preset });
+      commit({ wardrobeFilterPreset: preset }, { localOnly: true });
     },
 
     consumeWardrobeFilterPreset: () => {
       if (get().wardrobeFilterPreset !== null) {
-        commit({ wardrobeFilterPreset: null });
+        commit({ wardrobeFilterPreset: null }, { localOnly: true });
       }
     },
 
-    setCity: (city) => {
-      commit({ city });
+    setCity: (city, source) => {
+      // 城市为设备本地偏好（设计方案 4.4），不参与云同步
+      commit({ city, citySource: source || 'manual' }, { localOnly: true });
+    },
+
+    setMemberTier: (tier) => {
+      console.info('[Store] 会员档位切换, tier =', tier);
+      // v1.15.1：档位联动——切到 free（无云同步权益）时自动关闭云同步开关，保证开关与档位一致
+      const s = get();
+      const closeSync = tier === 'free' && s.cloudSyncEnabled;
+      commit(
+        {
+          memberTier: tier,
+          memberUsage: rolledUsage(s.memberUsage),
+          ...(closeSync ? { cloudSyncEnabled: false } : {})
+        },
+        { localOnly: true }
+      );
+      if (closeSync) {
+        console.info('[Store] 档位切换为 free，云同步开关已自动关闭');
+      }
+    },
+
+    recordSeasonalView: (count) => {
+      const usage = rolledUsage(get().memberUsage);
+      const next = Math.max(usage.seasonalViewed, count);
+      // v1.19.0：用量计数上云——不再 localOnly，打脏后随防抖上行同步跨端
+      commit({ memberUsage: { ...usage, seasonalViewed: next } });
+    },
+
+    recordTripUse: () => {
+      const usage = rolledUsage(get().memberUsage);
+      commit({ memberUsage: { ...usage, tripUsed: usage.tripUsed + 1 } });
+    },
+
+    recordBatchImportUse: () => {
+      const usage = rolledUsage(get().memberUsage);
+      console.info('[Store] 批量添加计次, 本月已用 =', usage.batchImportUsed + 1);
+      commit({ memberUsage: { ...usage, batchImportUsed: usage.batchImportUsed + 1 } });
+    },
+
+    appendDailyOutfit: (wardrobeId, entry) => {
+      const s = get();
+      const day = todayKey();
+      const cache = s.dailyOutfits[wardrobeId];
+      // 跨天或首次：重置当天缓存；同天：追加（调用方保证不超会员档位套数上限）
+      const list = cache && cache.day === day ? cache.list : [];
+      console.info('[Store] 缓存明日推荐, 衣橱 =', wardrobeId, '第', list.length + 1, '套');
+      // v1.19.0：每日推荐已生成套数计入 memberUsage.dailyOutfitUsed（随用量计数上云）；
+      // 推荐缓存本体仍仅本地（设计方案 4.4），commit 打脏仅因用量计数变更
+      const usage = rolledUsage(s.memberUsage);
+      const usedCount = { ...(usage.dailyOutfitUsed || {}), [wardrobeId]: list.length + 1 };
+      commit(
+        {
+          dailyOutfits: {
+            ...s.dailyOutfits,
+            [wardrobeId]: { day, list: [...list, { ...entry, id: genId() }] }
+          },
+          memberUsage: { ...usage, dailyOutfitUsed: usedCount }
+        }
+      );
+    },
+
+    addCustomScene: (value) => {
+      const trimmed = value.trim();
+      if (!trimmed) return '场景名称不能为空';
+      if (trimmed.length > 6) return '场景名称最多 6 个字';
+      const s = get();
+      if (
+        s.customScenes.includes(trimmed) ||
+        SCENE_PRESET_NAMES.includes(trimmed)
+      ) {
+        return '该场景已存在';
+      }
+      if (s.customScenes.length >= 8) return '自定义场景最多 8 个';
+      console.info('[Store] 新增自定义场景, name =', trimmed);
+      commit({ customScenes: [...s.customScenes, trimmed] });
+      return null;
+    },
+
+    removeCustomScene: (value) => {
+      const s = get();
+      const used = Object.values(s.dailyOutfits).some((c) =>
+        (c.list || []).some((e) => e.scene === value)
+      );
+      if (used) {
+        console.warn('[Store] 自定义场景已被今日推荐引用，不可删除');
+        return;
+      }
+      console.info('[Store] 删除自定义场景, name =', value);
+      commit({ customScenes: s.customScenes.filter((v) => v !== value) });
+    },
+
+    setCloudSyncEnabled: (enabled) => {
+      console.info('[Store] 云同步开关切换, enabled =', enabled);
+      commit({ cloudSyncEnabled: enabled }, { localOnly: true });
+    },
+
+    setSyncWardrobeIds: (ids) => {
+      console.info('[Store] 同步衣橱选择更新, 数量 =', ids.length);
+      commit({ syncWardrobeIds: ids }, { localOnly: true });
+    },
+
+    patchSyncMeta: (patch) => {
+      set({ syncMeta: { ...get().syncMeta, ...patch } });
+      persistAll();
+    },
+
+    replacePhotoPaths: (replacements) => {
+      if (replacements.length === 0) return;
+      const s = get();
+      const itemMap = new Map(replacements.filter((r) => r.kind === 'item').map((r) => [r.id, r.photos]));
+      const diaryMap = new Map(replacements.filter((r) => r.kind === 'diary').map((r) => [r.id, r.photos]));
+      // v1.21.0：试穿照片 fileID 回填（此前仅衣物/日记，试穿照片从未上传云存储）
+      const tryoutMap = new Map(replacements.filter((r) => r.kind === 'tryout').map((r) => [r.id, r.photos]));
+      set({
+        items: s.items.map((it) => {
+          const photos = itemMap.get(it.id);
+          return photos ? { ...it, photos } : it;
+        }),
+        diaryEntries: s.diaryEntries.map((d) => {
+          const photos = diaryMap.get(d.id);
+          return photos ? { ...d, photos } : d;
+        }),
+        tryoutItems: s.tryoutItems.map((t) => {
+          const photos = tryoutMap.get(t.id);
+          return photos ? { ...t, photos } : t;
+        })
+      });
+      persistAll();
+    },
+
+    applySyncMerge: (partial) => {
+      // 合并结果一次性 commit（设计方案 5.5 第 5 条：合并原子化，递增版本号并打脏，随下次 push 上行）
+      console.info('[Store] 云端合并写入, dataVersion =', get().syncMeta.dataVersion + 1);
+      commit(partial);
     }
   };
 });
