@@ -116,6 +116,23 @@ const MemberPage: React.FC = () => {
       Taro.showToast({ title: '请在微信端开通会员', icon: 'none' });
       return;
     }
+    // v2.0.1：iOS 端微信限制小程序虚拟支付（requestPayment 报「小程序对应支付能力已被限制」），
+    // 支付前置检测，直接给出指引而不是让用户走到支付失败一步
+    try {
+      const { platform } = Taro.getSystemInfoSync();
+      if (platform === 'ios' || platform === 'mac') {
+        Taro.showModal({
+          title: 'iOS 端暂不支持小程序内开通',
+          content:
+            '微信平台限制 iOS 端小程序虚拟支付。请使用 Android 手机在本页开通，权益一次买断，开通后在 iOS 登录同一微信即可正常使用。',
+          showCancel: false,
+          confirmText: '知道了'
+        });
+        return;
+      }
+    } catch (e) {
+      // 系统信息获取失败不阻断支付流程
+    }
     setPayingTier(tier);
     Taro.showLoading({ title: '正在发起支付…', mask: true });
     let payment: WxPayParams | null = null;
@@ -149,9 +166,20 @@ const MemberPage: React.FC = () => {
     try {
       await Taro.requestPayment(payment);
     } catch (e) {
-      // 用户取消或支付失败
+      // 用户取消或支付失败；v2.0.1：识别平台支付限制类错误并给出明确指引
       setPayingTier('');
-      Taro.showToast({ title: '支付未完成', icon: 'none' });
+      const raw = String((e as { errMsg?: string })?.errMsg || (e as Error)?.message || '');
+      if (/限制|limit/i.test(raw)) {
+        Taro.showModal({
+          title: '支付能力受平台限制',
+          content:
+            '当前设备/环境的支付能力被微信平台限制（常见于 iOS 端小程序虚拟支付限制）。请使用 Android 手机完成开通；若 Android 同样受限，请确认小程序后台已开通微信支付且商户号绑定正常。',
+          showCancel: false,
+          confirmText: '知道了'
+        });
+      } else {
+        Taro.showToast({ title: '支付未完成', icon: 'none' });
+      }
       return;
     }
     // 支付成功：确认云端档位生效
