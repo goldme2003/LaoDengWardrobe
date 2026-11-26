@@ -15,7 +15,7 @@
  *   5. 需在云开发控制台创建集合：seasonal_images、seasonal_usage（权限：仅管理端可读写）。 */
 const cloud = require('wx-server-sdk');
 const crypto = require('crypto');
-const { callHunyuanImage, downloadImage, MODEL } = require('./provider/hunyuanImage');
+const { callGlmImage, downloadImage, MODEL } = require('./provider/glmImage');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
@@ -143,13 +143,14 @@ async function recordUsage(monthKey, count) {
   }
 }
 
-/** v1.14.0：版本标识（启动日志与 ping 均输出，用于确认云端部署的是否为最新代码） */
-const VERSION = 'v1.14.0';
+/** v1.14.0：版本标识（启动日志与 ping 均输出，用于确认云端部署的是否为最新代码）
+ * GLM 分支：生图模型由混元 Hy-Image-3.5-Preview 切换为智谱 GLM-IMAGE（glm-image） */
+const VERSION = 'v2.0.0-glm';
 
 async function generateStyle({ dateKey, seasonKey, gender, ageGroup, styleKey, label, customText }) {
   const prompt = buildPrompt({ seasonKey, gender, ageGroup, styleKey, customText });
-  // session 按日期+风格固定：同组合重复请求路由到同一推理实例（官方文档建议用法）
-  const url = await callHunyuanImage(prompt, `seasonal-${dateKey}-${styleKey}`);
+  // GLM-IMAGE 为同步接口，无需 session 一致性调度参数
+  const url = await callGlmImage(prompt);
   // v1.13.2：生图已计费（单张 10s+），下载失败重试 1 次，避免偶发网络错误浪费已生成的结果
   let buffer;
   try {
@@ -187,9 +188,9 @@ exports.main = async (event = {}) => {
     return {
       code: 'OK',
       version: VERSION,
-      hasHunyuanKey: !!process.env.HUNYUAN_API_KEY,
+      hasGlmKey: !!process.env.GLM_API_KEY,
       model: MODEL,
-      endpoint: 'tokenhub.tencentmaas.com/v1/wand/hunyuan-image/v35-generation',
+      endpoint: 'open.bigmodel.cn/api/paas/v4/images/generations',
       budgetPerMonth: MONTHLY_BUDGET
     };
   }

@@ -4,7 +4,7 @@
   },
   "name": "seasonalImages",
   "version": "1.0.0",
-  "description": "当季推荐图组（混元生图 + 云存储缓存，按季节/性别/年龄段/会员档位差异化）",
+  "description": "当季推荐图组（GLM 分支：智谱 GLM-IMAGE 生图 + 云存储缓存，按季节/性别/年龄段/会员档位差异化）",
   "main": "index.js",
   "dependencies": {
     "wx-server-sdk": "~2.6.3"
