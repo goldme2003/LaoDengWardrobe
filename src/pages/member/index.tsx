@@ -80,16 +80,55 @@ const MemberPage: React.FC = () => {
   // v2.0.0：支付进行中的档位（按钮 loading 态，防重复提交）
   const [payingTier, setPayingTier] = useState<MemberTier | ''>('');
 
-  /** cloudPay.unifiedOrder 返回的拉起支付参数（透传 wx.requestPayment） */
-  interface WxPayParams {
-    timeStamp: string;
-    nonceStr: string;
-    package: string;
-    signType: 'MD5' | 'HMAC-SHA256' | 'RSA';
-    paySign: string;
+  /** 虚拟支付下单返回的拉起支付参数（透传 wx.requestVirtualPayment，官方 5.3） */
+  interface VirtualPayData {
+    signData: string;
+    mode: string;
+    paySig: string;
+    signature: string;
   }
 
-  // 支付成功后轮询云端档位生效（支付回调写入 members 可能有秒级延迟，最多 5 次 × 1.5s）
+  /** 调起虚拟支付（Taro 未内置类型，运行时取 wx.requestVirtualPayment） */
+  const requestVirtualPayment = (payData: VirtualPayData): Promise<void> =>
+    new Promise((resolve, reject) => {
+      const g = globalThis as { wx?: { requestVirtualPayment?: (o: unknown) => void } };
+      const fn = g.wx?.requestVirtualPayment;
+      if (!fn) {
+        reject(new Error('当前微信版本过低，请更新微信后重试'));
+        return;
+      }
+      fn({
+        ...payData,
+        success: () => resolve(),
+        fail: (err: { errMsg?: string }) => reject(new Error(err?.errMsg || 'requestVirtualPayment:fail'))
+      });
+    });
+
+  /** iOS 端虚拟支付要求微信 ≥ 8.0.68（官方要求），不满足时提示更新（其他平台直接放行） */
+  const checkIosWechatVersion = (): boolean => {
+    try {
+      const sys = Taro.getSystemInfoSync();
+      if (sys.platform !== 'ios') return true;
+      const cur = String(sys.version || '')
+        .split('.')
+        .map((n) => Number(n));
+      const base = [8, 0, 68];
+      for (let i = 0; i < 3; i++) {
+        if ((cur[i] || 0) > base[i]) return true;
+        if ((cur[i] || 0) < base[i]) break;
+      }
+      Taro.showModal({
+        title: '提示',
+        content: 'iOS 端支付需将微信更新至 8.0.68 及以上版本',
+        showCancel: false
+      });
+      return false;
+    } catch (e) {
+      return true;
+    }
+  };
+
+  // 支付成功后轮询云端档位生效（发货推送写入 members 可能有秒级延迟，最多 5 次 × 1.5s）
   const pollMemberTier = async (): Promise<MemberTier | ''> => {
     for (let i = 0; i < 5; i++) {
       await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -109,57 +148,58 @@ const MemberPage: React.FC = () => {
     return '';
   };
 
-  // v2.0.0：微信支付开通——下单 → 拉起支付 → 云端确认档位（失败给出明确文案）
+  // 兜底查单：发货推送丢失时主动触发服务端 query_order 补发货（官方 5.4.2），随后再轮询一次
+  const reconcileOrder = async (orderId: string): Promise<void> => {
+    try {
+      await Taro.cloud.callFunction({
+        name: MEMBER_FN_NAME,
+        data: { action: 'queryOrder', orderId }
+      });
+    } catch (e) {
+      // 查单失败不阻塞，用户可稍后重进
+    }
+  };
+
+  // v2.1.0：虚拟支付开通——wx.login 换 code → 服务端签名下单 → requestVirtualPayment 拉起
+  // → 轮询档位生效（发货推送为主）→ 未生效时查单补发（兜底）→ 再轮询
   const handlePay = async (tier: 'vip' | 'svip') => {
     if (payingTier) return;
     if (!CLOUD_READY) {
       Taro.showToast({ title: '请在微信端开通会员', icon: 'none' });
       return;
     }
-    // v2.0.2：个人主体收款受限——开关关闭时不发起支付，说明原因
+    // v2.1.0：开关关闭 = MP 后台虚拟支付尚未配置完成（OfferID/AppKey/道具），不发起支付
     if (!WX_PAY_ENABLED) {
       Taro.showModal({
         title: '会员开通暂未开放',
         content:
-          '当前小程序为个人主体，微信平台限制其收款能力（会员属虚拟商品，需企业/个体工商户主体并开通微信支付与虚拟支付后才能收款）。支付链路已开发完成，主体升级后即开放，敬请期待。',
+          '虚拟支付开通配置中（小程序后台「虚拟支付」开通、道具上架与凭据配置完成后即开放），敬请期待。',
         showCancel: false,
         confirmText: '知道了'
       });
       return;
     }
-    // v2.0.1：iOS 端微信限制小程序虚拟支付（requestPayment 报「小程序对应支付能力已被限制」），
-    // 支付前置检测，直接给出指引而不是让用户走到支付失败一步
-    try {
-      const { platform } = Taro.getSystemInfoSync();
-      if (platform === 'ios' || platform === 'mac') {
-        Taro.showModal({
-          title: 'iOS 端暂不支持小程序内开通',
-          content:
-            '微信平台限制 iOS 端小程序虚拟支付。请使用 Android 手机在本页开通，权益一次买断，开通后在 iOS 登录同一微信即可正常使用。',
-          showCancel: false,
-          confirmText: '知道了'
-        });
-        return;
-      }
-    } catch (e) {
-      // 系统信息获取失败不阻断支付流程
-    }
+    if (!checkIosWechatVersion()) return;
     setPayingTier(tier);
     Taro.showLoading({ title: '正在发起支付…', mask: true });
-    let payment: WxPayParams | null = null;
+    let payData: VirtualPayData | null = null;
+    let orderId = '';
     let failMsg = '下单失败，请稍后重试';
     try {
+      const { code } = await Taro.login();
       const res = await Taro.cloud.callFunction({
         name: MEMBER_FN_NAME,
-        data: { action: 'createOrder', tier }
+        data: { action: 'createOrder', tier, jsCode: code }
       });
       const result = (res.result || {}) as {
         code?: string;
         message?: string;
-        payment?: WxPayParams;
+        orderId?: string;
+        payData?: VirtualPayData;
       };
-      if (result.code === 'OK' && result.payment) {
-        payment = result.payment;
+      if (result.code === 'OK' && result.payData) {
+        payData = result.payData;
+        orderId = result.orderId || '';
       } else if (result.code === 'ALREADY_MEMBER') {
         failMsg = result.message || '已开通该档位';
       } else {
@@ -169,22 +209,22 @@ const MemberPage: React.FC = () => {
       failMsg = '网络异常，请稍后重试';
     }
     Taro.hideLoading();
-    if (!payment) {
+    if (!payData) {
       setPayingTier('');
       Taro.showToast({ title: failMsg, icon: 'none', duration: 2500 });
       return;
     }
     try {
-      await Taro.requestPayment(payment);
+      await requestVirtualPayment(payData);
     } catch (e) {
-      // 用户取消或支付失败；v2.0.1：识别平台支付限制类错误并给出明确指引
+      // 用户取消或支付失败；平台限制类错误说明 MP 后台虚拟支付配置未完成
       setPayingTier('');
       const raw = String((e as { errMsg?: string })?.errMsg || (e as Error)?.message || '');
       if (/限制|limit/i.test(raw)) {
         Taro.showModal({
           title: '支付能力受平台限制',
           content:
-            '当前设备/环境的支付能力被微信平台限制（常见于 iOS 端小程序虚拟支付限制）。请使用 Android 手机完成开通；若 Android 同样受限，请确认小程序后台已开通微信支付且商户号绑定正常。',
+            '微信平台未放行本小程序的虚拟支付：请确认小程序后台已开通「虚拟支付」、道具已创建并发布，且云函数凭据（OfferID/AppKey）配置正确。',
           showCancel: false,
           confirmText: '知道了'
         });
@@ -193,9 +233,13 @@ const MemberPage: React.FC = () => {
       }
       return;
     }
-    // 支付成功：确认云端档位生效
+    // 支付成功：确认云端档位生效（发货推送为主）；未生效则查单补发后再轮询一次
     Taro.showLoading({ title: '开通确认中…', mask: true });
-    const newTier = await pollMemberTier();
+    let newTier = await pollMemberTier();
+    if (!newTier && orderId) {
+      await reconcileOrder(orderId);
+      newTier = await pollMemberTier();
+    }
     Taro.hideLoading();
     setPayingTier('');
     if (newTier) {
@@ -285,8 +329,8 @@ const MemberPage: React.FC = () => {
       </View>
       <Text className={styles.payTip}>
         {WX_PAY_ENABLED
-          ? '微信支付 · 一次开通、永久有效；支付完成后档位自动生效，更换设备登录同一微信即可恢复权益。'
-          : '会员开通暂未开放（微信对个人主体小程序限制收款能力）；云同步等会员权益已上线，开通入口将在主体升级后开放。'}
+          ? '微信虚拟支付 · 一次开通、永久有效；支付完成后档位自动生效，更换设备登录同一微信即可恢复权益（iOS 端由 Apple 渠道代收，费率略有差异）。'
+          : '会员开通暂未开放：虚拟支付开通配置中（小程序后台虚拟支付 + 道具上架 + 凭据配置完成后即开放）。'}
       </Text>
 
       {/* 三档权益矩阵 */}

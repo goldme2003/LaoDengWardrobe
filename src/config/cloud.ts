@@ -18,11 +18,11 @@ export const OUTFIT_RECOMMEND_FN_NAME = 'outfitRecommend';
 /** v1.9.0（F-19）：会员中心（getMember / createOrder 微信支付统一下单；支付回调 payCallback，v2.0.0 正式接入） */
 export const MEMBER_FN_NAME = 'member';
 /**
- * v2.0.2：微信支付开放开关。
- * 根因：当前小程序主体为「个人」，微信平台限制个人主体收款能力（虚拟支付/微信支付均不可开通），
- * 客户端调起 requestPayment 必报「小程序对应支付能力已被限制」——与代码/商户号/集合权限无关。
- * 置 false 时会员页购买按钮显示「暂未开放」并给出说明；小程序升级/迁移为企业（或个体工商户）主体
- * 并开通微信支付 + 虚拟支付后，改回 true 即恢复支付链路（代码与云函数均已就绪，无需其他改动）。
+ * v2.1.0：虚拟支付开放开关。
+ * 支付通道 v2.1.0 起为微信小程序「虚拟支付」（个人主体官方通道，道具直购 short_series_goods，
+ * wx.requestVirtualPayment），条件：MP 后台开通虚拟支付 + 创建 VIP/SVIP 道具（1990/2990 分）+
+ * 云函数凭据 VP_OFFER_ID / VP_APP_KEY / WX_APP_SECRET / VP_PRODUCT_* 配置完成。
+ * 置 false 时会员页购买按钮显示「暂未开放」；以上配置完成后改回 true 即开放（代码无需其他改动）。
  */
 export const WX_PAY_ENABLED = false;
 /** v1.13.0：当季推荐图组（混元生图 + 云存储缓存，按季节/性别/年龄段/会员档位差异化） */
