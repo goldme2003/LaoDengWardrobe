@@ -119,17 +119,18 @@ exports.main = async (event = {}) => {
     // 非发货推送（其他消息误路由）：应答成功避免无意义重试
     if (eventName && eventName !== 'xpay_goods_deliver_notify') {
       console.warn('[payCallback] 非发货推送事件:', eventName);
-      return { errcode: 0, errmsg: '' };
+      return '<xml><ErrCode>0</ErrCode><ErrMsg><![CDATA[success]]></ErrMsg></xml>';
     }
     if (!outTradeNo) {
       console.error('[payCallback] 缺少 OutTradeNo');
-      return { errcode: 1, errmsg: 'MISSING_OUT_TRADE_NO' };
+      return '<xml><ErrCode>1</ErrCode><ErrMsg><![CDATA[MISSING_OUT_TRADE_NO]]></ErrMsg></xml>';
     }
     await deliver(openid, outTradeNo, wxOrderId, productId);
-    return { errcode: 0, errmsg: '' };
+    // 官方要求应答 XML（<ErrCode>0</ErrCode> = 成功；非 0 平台最多重试 15 次）
+    return '<xml><ErrCode>0</ErrCode><ErrMsg><![CDATA[success]]></ErrMsg></xml>';
   } catch (e) {
     console.error('[payCallback] 处理失败:', e.message);
     // 返回非 0 触发平台重试（最多 15 次）；推送丢失仍有 query_order 查单兜底
-    return { errcode: 1, errmsg: 'INTERNAL_ERROR' };
+    return '<xml><ErrCode>1</ErrCode><ErrMsg><![CDATA[INTERNAL_ERROR]]></ErrMsg></xml>';
   }
 };
