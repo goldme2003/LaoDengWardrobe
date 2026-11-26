@@ -220,11 +220,20 @@ const MemberPage: React.FC = () => {
       // 用户取消或支付失败；平台限制类错误说明 MP 后台虚拟支付配置未完成
       setPayingTier('');
       const raw = String((e as { errMsg?: string })?.errMsg || (e as Error)?.message || '');
+      console.error('[member] requestVirtualPayment fail:', raw);
       if (/限制|limit/i.test(raw)) {
         Taro.showModal({
           title: '支付能力受平台限制',
           content:
             '微信平台未放行本小程序的虚拟支付：请确认小程序后台已开通「虚拟支付」、道具已创建并发布，且云函数凭据（OfferID/AppKey）配置正确。',
+          showCancel: false,
+          confirmText: '知道了'
+        });
+      } else if (raw && !/cancel|取消/i.test(raw)) {
+        // v2.1.3：展示具体错误信息便于定位（AppKey/道具/签名/版本等问题）
+        Taro.showModal({
+          title: '支付未完成',
+          content: raw.slice(0, 300),
           showCancel: false,
           confirmText: '知道了'
         });
