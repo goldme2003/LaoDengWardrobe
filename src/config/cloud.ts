@@ -24,7 +24,7 @@ export const MEMBER_FN_NAME = 'member';
  * 云函数凭据 VP_OFFER_ID / VP_APP_KEY / WX_APP_SECRET / VP_PRODUCT_* 配置完成。
  * 置 false 时会员页购买按钮显示「暂未开放」；以上配置完成后改回 true 即开放（代码无需其他改动）。
  */
-export const WX_PAY_ENABLED = false;
+export const WX_PAY_ENABLED = true;
 /** v1.13.0：当季推荐图组（混元生图 + 云存储缓存，按季节/性别/年龄段/会员档位差异化） */
 export const SEASONAL_FN_NAME = 'seasonalImages';
 /** v1.15.0（R-5 M1）：云同步（微信静默登录 / 快照上下行 / 冲突副本 / 删除云端数据 / 照片容量计量） */
