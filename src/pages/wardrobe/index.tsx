@@ -1123,7 +1123,7 @@ const WardrobePage: React.FC = () => {
             </View>
           )}
 
-          {/* v1.20.5：手动勾选区已移除——衣物选择统一在首页长按完成 */}
+          {/* v1.20.5：手动勾选区已移除——衣物选择统一在首页长按完成；v1.20.8：「完成」按钮移除，经顶部「‹ 返回」退出 */}
           {customSetItems.length === 0 && cachedVMs.length === 0 && (
             <View className={styles.planSets}>
               <Text className={styles.planSectionTitle}>暂无已选衣物</Text>
@@ -1132,9 +1132,6 @@ const WardrobePage: React.FC = () => {
               </Text>
             </View>
           )}
-          <View className={styles.planDone} onClick={() => setPlanMode(false)}>
-            <Text className={styles.planDoneText}>完成（已选 {tomorrowIds.length} 件）</Text>
-          </View>
         </>
       ) : (
         <>

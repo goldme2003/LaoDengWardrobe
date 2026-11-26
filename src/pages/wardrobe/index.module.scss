@@ -435,24 +435,3 @@
   color: $color-text-white;
   line-height: 1;
 }
-
-.planDone {
-  height: $button-height-md;
-  border-radius: $radius-button;
-  background: var(--w-color, $color-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: $spacing-md 0 $spacing-lg;
-
-  &:active {
-    opacity: 0.9;
-    transform: scale(0.98);
-  }
-}
-
-.planDoneText {
-  font-size: $font-size-md;
-  color: $color-text-white;
-  font-weight: $font-weight-medium;
-}
