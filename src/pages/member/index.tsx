@@ -9,7 +9,7 @@ import {
   weatherLevelLabel,
   MemberTier
 } from '@/services/entitlement';
-import { MEMBER_FN_NAME, CLOUD_READY } from '@/config/cloud';
+import { MEMBER_FN_NAME, CLOUD_READY, WX_PAY_ENABLED } from '@/config/cloud';
 import styles from './index.module.scss';
 
 /** 权益矩阵行（与 PRD 10.6 三档矩阵一致；v1.10.0 文案修正 + 新增明日推荐次数；v1.19.1 权益数值调整 + 出差推荐前置） */
@@ -114,6 +114,17 @@ const MemberPage: React.FC = () => {
     if (payingTier) return;
     if (!CLOUD_READY) {
       Taro.showToast({ title: '请在微信端开通会员', icon: 'none' });
+      return;
+    }
+    // v2.0.2：个人主体收款受限——开关关闭时不发起支付，说明原因
+    if (!WX_PAY_ENABLED) {
+      Taro.showModal({
+        title: '会员开通暂未开放',
+        content:
+          '当前小程序为个人主体，微信平台限制其收款能力（会员属虚拟商品，需企业/个体工商户主体并开通微信支付与虚拟支付后才能收款）。支付链路已开发完成，主体升级后即开放，敬请期待。',
+        showCancel: false,
+        confirmText: '知道了'
+      });
       return;
     }
     // v2.0.1：iOS 端微信限制小程序虚拟支付（requestPayment 报「小程序对应支付能力已被限制」），
@@ -223,9 +234,19 @@ const MemberPage: React.FC = () => {
           const active = memberTier === t;
           // v1.10.0：SVIP 为最高档——开通后所有付费档按钮均不可用（VIP 档显示「已含于 SVIP」）
           const locked = memberTier === 'svip';
-          const disabled = active || locked || payingTier !== '';
+          // v2.0.2：个人主体收款受限——支付未开放时按钮显示「暂未开放」（点击说明原因）
+          const payClosed = !WX_PAY_ENABLED;
+          const disabled = active || locked || payingTier !== '' || payClosed;
           const btnText =
-            payingTier === t ? '支付中…' : active ? '当前等级' : locked ? '已含于 SVIP' : '立即开通';
+            payClosed && !active
+              ? '暂未开放'
+              : payingTier === t
+                ? '支付中…'
+                : active
+                  ? '当前等级'
+                  : locked
+                    ? '已含于 SVIP'
+                    : '立即开通';
           return (
             <View
               key={t}
@@ -263,7 +284,9 @@ const MemberPage: React.FC = () => {
         })}
       </View>
       <Text className={styles.payTip}>
-        微信支付 · 一次开通、永久有效；支付完成后档位自动生效，更换设备登录同一微信即可恢复权益。
+        {WX_PAY_ENABLED
+          ? '微信支付 · 一次开通、永久有效；支付完成后档位自动生效，更换设备登录同一微信即可恢复权益。'
+          : '会员开通暂未开放（微信对个人主体小程序限制收款能力）；云同步等会员权益已上线，开通入口将在主体升级后开放。'}
       </Text>
 
       {/* 三档权益矩阵 */}
