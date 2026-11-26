@@ -18,7 +18,9 @@
  *   5. 发货：以平台发货推送（payCallback 云函数，xpay_goods_deliver_notify）为主，
  *      推送丢失由 queryOrder（/xpay/query_order 查单）兜底；前端支付回调不作为发货依据。
  * v2.1.7：修复兜底查单三处缺陷（缺 access_token / status 数字枚举按字符串匹配 / wx_order_id 字段名），
- *      已支付未发货订单（平台 status=2）重进会员页即可自动补发货。 */
+ *      已支付未发货订单（平台 status=2）重进会员页即可自动补发货。
+ * v2.1.8：queryOrder 支持缺省 orderId 自动定位最近一笔未完成订单（7 天内），响应携带订单档位
+ *      tier 配合前端按目标档位轮询生效——修复「已开通 VIP 后购买 SVIP 被已有 VIP 误判为开通成功」竞态。 */
 const cloud = require('wx-server-sdk');
 const crypto = require('crypto');
 const https = require('https');
@@ -295,25 +297,39 @@ exports.main = async (event = {}) => {
   }
 
   // ---------- 兜底查单：发货推送丢失时前端调用，查到已支付即补发货 ----------
+  // v2.1.8：orderId 缺省时自动定位该用户最近一笔未完成订单（7 天内）——覆盖暂存单号被误清、
+  // 换设备等场景；响应携带订单档位 tier，供前端以该档位为门槛轮询生效（修复 SVIP 被
+  // 已有 VIP 误判为开通成功的竞态）
   if (action === 'queryOrder') {
     if (!OFFER_ID || !APP_KEY) {
       return { code: 'NOT_CONFIGURED', message: '虚拟支付开通配置中' };
     }
-    if (!event.orderId) {
-      return { code: 'BAD_PARAM', message: '缺少订单号' };
-    }
     let order = null;
     try {
-      const res = await db.collection('orders').doc(event.orderId).get();
-      order = res.data;
+      if (event.orderId) {
+        const res = await db.collection('orders').doc(event.orderId).get();
+        order = res.data;
+        if (order && order.openid !== OPENID) order = null;
+      } else {
+        const res = await db
+          .collection('orders')
+          .where({ openid: OPENID, status: 'created' })
+          .orderBy('createdAt', 'desc')
+          .limit(1)
+          .get();
+        const candidate = res.data && res.data[0];
+        if (candidate && Date.now() - candidate.createdAt <= 7 * 24 * 3600 * 1000) {
+          order = candidate;
+        }
+      }
     } catch (e) {
       return { code: 'BAD_PARAM', message: '订单不存在' };
     }
-    if (!order || order.openid !== OPENID) {
+    if (!order) {
       return { code: 'BAD_PARAM', message: '订单不存在' };
     }
     if (order.status === 'paid') {
-      return { code: 'OK', delivered: false, message: '订单已完成' };
+      return { code: 'OK', delivered: false, tier: order.tier, message: '订单已完成' };
     }
     try {
       const { paid, status, res } = await queryXpayOrder(order.openid, order.outTradeNo);
@@ -322,6 +338,7 @@ exports.main = async (event = {}) => {
         return {
           code: 'NOT_PAID',
           message: '订单未支付完成',
+          tier: order.tier,
           status: isNaN(status) ? '' : status,
           provider: {
             errcode: res && res.errcode,
@@ -332,7 +349,7 @@ exports.main = async (event = {}) => {
       }
       const wxOrderId = (res.order && res.order.wx_order_id) || '';
       const { delivered } = await deliverOrder(order, wxOrderId);
-      return { code: 'OK', delivered, message: delivered ? '已补发货' : '订单已完成' };
+      return { code: 'OK', delivered, tier: order.tier, message: delivered ? '已补发货' : '订单已完成' };
     } catch (e) {
       console.error('[member] 查单失败：', e.message);
       return { code: 'QUERY_ERROR', message: '查单失败，请稍后重试' };

@@ -134,7 +134,11 @@ const MemberPage: React.FC = () => {
   };
 
   // 支付成功后轮询云端档位生效（发货推送写入 members 可能有秒级延迟，最多 5 次 × 1.5s）
-  const pollMemberTier = async (): Promise<MemberTier | ''> => {
+  // v2.1.8：携带最低档位门槛——已开通 VIP 后购买 SVIP 时，必须等到 svip 生效才算成功，
+  // 不能把已有的 vip 误判为本次开通成功（此前该竞态导致 SVIP 支付后被误报「VIP 开通成功」
+  // 并误清自愈单号，订单永久失去补发货机会）
+  const TIER_RANK: Record<MemberTier, number> = { free: 0, vip: 1, svip: 2 };
+  const pollMemberTier = async (minRank = 1): Promise<MemberTier | ''> => {
     for (let i = 0; i < 5; i++) {
       await new Promise((resolve) => setTimeout(resolve, 1500));
       try {
@@ -143,7 +147,7 @@ const MemberPage: React.FC = () => {
           data: { action: 'getMember' }
         });
         const result = (res.result || {}) as { code?: string; tier?: MemberTier };
-        if (result.code === 'OK' && result.tier && result.tier !== 'free') {
+        if (result.code === 'OK' && result.tier && TIER_RANK[result.tier] >= minRank) {
           return result.tier;
         }
       } catch (e) {
@@ -170,32 +174,37 @@ const MemberPage: React.FC = () => {
     }
   };
 
-  /** v2.1.5：进页自愈——支付后档位未即时生效（推送丢失/延迟）时，重进本页自动查单补发货 */
+  /** v2.1.5：进页自愈——支付后档位未即时生效（推送丢失/延迟）时，重进本页自动查单补发货
+   * v2.1.8：不再限于 free 档（VIP 用户购买 SVIP 未生效时同样自愈）；暂存单号被误清时由服务端
+   * 自动定位最近一笔未完成订单；仅在查单确认已支付后再按订单档位门槛轮询生效 */
   useEffect(() => {
     if (!CLOUD_READY || !WX_PAY_ENABLED) return;
-    if (memberTier !== 'free' || payingTier) return;
+    if (payingTier) return;
     let stored = '';
     try {
       stored = String(Taro.getStorageSync(LAST_PAY_ORDER_KEY) || '');
     } catch (e) {
-      return;
+      stored = '';
     }
-    if (!stored || reconcilingRef.current) return;
+    if (reconcilingRef.current) return;
     reconcilingRef.current = true;
     (async () => {
       Taro.showLoading({ title: '检测未完成订单…', mask: true });
-      await reconcileOrder(stored);
-      const tier = await pollMemberTier();
-      Taro.hideLoading();
-      if (tier) {
-        try {
-          Taro.removeStorageSync(LAST_PAY_ORDER_KEY);
-        } catch (e) {
-          // 清理失败不影响
+      const diag = await reconcileOrder(stored);
+      if (diag && diag.code === 'OK') {
+        const orderTier = String(diag.tier || '') as MemberTier;
+        const tier = await pollMemberTier(TIER_RANK[orderTier] || 1);
+        if (tier) {
+          try {
+            Taro.removeStorageSync(LAST_PAY_ORDER_KEY);
+          } catch (e) {
+            // 清理失败不影响
+          }
+          setMemberTier(tier);
+          Taro.showToast({ title: '检测到已支付，会员已开通', icon: 'success', duration: 2000 });
         }
-        setMemberTier(tier);
-        Taro.showToast({ title: '检测到已支付，会员已开通', icon: 'success', duration: 2000 });
       }
+      Taro.hideLoading();
       reconcilingRef.current = false;
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -290,12 +299,17 @@ const MemberPage: React.FC = () => {
       return;
     }
     // 支付成功：确认云端档位生效（发货推送为主）；未生效则查单补发后再轮询一次
+    // v2.1.8：轮询与查单均以本次购买档位为最低门槛（购买 SVIP 须等到 svip 生效），
+    // 且仅在查单确认已支付后才进行二次轮询
+    const minRank = tier === 'svip' ? 2 : 1;
     Taro.showLoading({ title: '开通确认中…', mask: true });
-    let newTier = await pollMemberTier();
+    let newTier = await pollMemberTier(minRank);
     let diag: Record<string, unknown> | null = null;
     if (!newTier && orderId) {
       diag = await reconcileOrder(orderId);
-      newTier = await pollMemberTier();
+      if (diag && diag.code === 'OK') {
+        newTier = await pollMemberTier(minRank);
+      }
     }
     Taro.hideLoading();
     setPayingTier('');
@@ -315,7 +329,7 @@ const MemberPage: React.FC = () => {
         content:
           `档位生效确认超时，已记录订单（重进本页将自动补单）。` +
           (provider
-            ? `查单应答：errcode=${provider.errcode ?? '-'} state=${diag?.state ?? '-'} ${(provider.errmsg as string) || ''} ${(provider.orderRaw as string) || ''}`.slice(0, 300)
+            ? `查单应答：errcode=${provider.errcode ?? '-'} status=${diag?.status ?? '-'} ${(provider.errmsg as string) || ''} ${(provider.orderRaw as string) || ''}`.slice(0, 300)
             : '兜底查单未返回结果，请稍后重进本页。'),
         showCancel: false,
         confirmText: '知道了'
