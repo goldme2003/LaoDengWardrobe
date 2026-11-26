@@ -16,7 +16,9 @@
  *   4. 签名（官方 5.5）：paySig = HMAC-SHA256(AppKey, 'requestVirtualPayment&' + signData)；
  *      signature = HMAC-SHA256(session_key, signData)；signData 为固定键序 JSON 串（不得格式化）；
  *   5. 发货：以平台发货推送（payCallback 云函数，xpay_goods_deliver_notify）为主，
- *      推送丢失由 queryOrder（/xpay/query_order 查单）兜底；前端支付回调不作为发货依据。 */
+ *      推送丢失由 queryOrder（/xpay/query_order 查单）兜底；前端支付回调不作为发货依据。
+ * v2.1.7：修复兜底查单三处缺陷（缺 access_token / status 数字枚举按字符串匹配 / wx_order_id 字段名），
+ *      已支付未发货订单（平台 status=2）重进会员页即可自动补发货。 */
 const cloud = require('wx-server-sdk');
 const crypto = require('crypto');
 const https = require('https');
@@ -142,22 +144,44 @@ async function deliverOrder(order, wxOrderId) {
   return { delivered: true };
 }
 
-/** 兜底查单（官方 /xpay/query_order，pay_sig = HMAC-SHA256(AppKey, '/xpay/query_order&' + body)）
- * v2.1.5：已支付状态匹配放宽（不同文档版本字段/取值差异：PAID/SUCCESS/PAY_SUCCESS/FINISH 等），
+/** 获取接口调用凭证（官方 /cgi-bin/stable_token；同一 grant_type 有效期内重复调用返回同一 token，
+ * 无需持久缓存；WX_APP_SECRET 与 code2Session 共用） */
+async function getAccessToken() {
+  const body = JSON.stringify({
+    grant_type: 'client_credential',
+    appid: process.env.WX_APPID || 'wxe42fe1ecc2645be1',
+    secret: WX_APP_SECRET
+  });
+  const res = await httpJson('/cgi-bin/stable_token', { method: 'POST', body });
+  if (!res || !res.access_token) {
+    throw new Error('STABLE_TOKEN_FAILED: ' + JSON.stringify(res).slice(0, 160));
+  }
+  return res.access_token;
+}
+
+/** 兜底查单（官方 POST /xpay/query_order?access_token=ACCESS_TOKEN&pay_sig=PAY_SIG，
+ * pay_sig = HMAC-SHA256(AppKey, '/xpay/query_order&' + body)）
+ * v2.1.7 根因修复：
+ *   1. 此前缺少必填的 access_token 查询参数，请求直接被拒（errcode≠0），查单永远判「未支付」；
+ *   2. 返回的 order.status 为数字枚举（2=已支付待发货 3=发货中 4=已发货），此前按字符串
+ *      PAID/SUCCESS 匹配永远不中——MP 后台显示「未发货」即 status=2，必须视为已支付并补发货；
+ *   3. 微信内部单号字段为 wx_order_id（此前误取不存在的 mch_order_no）。
  * 未判定为已支付时在返回中携带平台原始应答摘要（provider），供前端与日志定位 */
-const PAID_ORDER_STATES = new Set(['PAID', 'SUCCESS', 'PAY_SUCCESS', 'FINISH', 'TRADE_SUCCESS', 'PAID_SUCCESS']);
+const PAID_ORDER_STATUS = new Set([2, 3, 4]);
 
 async function queryXpayOrder(openid, outTradeNo) {
+  const accessToken = await getAccessToken();
   const body = JSON.stringify({ openid, env: 0, order_id: outTradeNo });
   const paySig = hmacSha256(APP_KEY, '/xpay/query_order&' + body);
-  const res = await httpJson(`/xpay/query_order?pay_sig=${paySig}`, { method: 'POST', body });
+  const res = await httpJson(
+    `/xpay/query_order?access_token=${encodeURIComponent(accessToken)}&pay_sig=${paySig}`,
+    { method: 'POST', body }
+  );
   const order = res && res.order;
-  const state = order
-    ? String(order.state || order.status || order.pay_status || order.order_state || '').toUpperCase()
-    : '';
-  const paid = !!(res && res.errcode === 0 && state && PAID_ORDER_STATES.has(state));
+  const status = order && order.status !== undefined && order.status !== null ? Number(order.status) : NaN;
+  const paid = !!(res && res.errcode === 0 && !isNaN(status) && PAID_ORDER_STATUS.has(status));
   console.info('[member] query_order 原始应答:', JSON.stringify(res).slice(0, 500));
-  return { res, paid, state };
+  return { res, paid, status };
 }
 
 exports.main = async (event = {}) => {
@@ -292,13 +316,13 @@ exports.main = async (event = {}) => {
       return { code: 'OK', delivered: false, message: '订单已完成' };
     }
     try {
-      const { paid, state, res } = await queryXpayOrder(order.openid, order.outTradeNo);
+      const { paid, status, res } = await queryXpayOrder(order.openid, order.outTradeNo);
       if (!paid) {
-        // v2.1.5：携带平台原始应答摘要，便于前端定位（签名错误 / 状态未到已支付 / 字段差异）
+        // v2.1.5：携带平台原始应答摘要，便于前端定位（签名错误 / 状态未到已支付 / 凭据错误）
         return {
           code: 'NOT_PAID',
           message: '订单未支付完成',
-          state: state || '',
+          status: isNaN(status) ? '' : status,
           provider: {
             errcode: res && res.errcode,
             errmsg: String((res && res.errmsg) || '').slice(0, 120),
@@ -306,8 +330,7 @@ exports.main = async (event = {}) => {
           }
         };
       }
-      const wxOrderId =
-        (res.order && (res.order.mch_order_no || res.order.wx_order_id)) || '';
+      const wxOrderId = (res.order && res.order.wx_order_id) || '';
       const { delivered } = await deliverOrder(order, wxOrderId);
       return { code: 'OK', delivered, message: delivered ? '已补发货' : '订单已完成' };
     } catch (e) {
