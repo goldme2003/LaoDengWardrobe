@@ -65,8 +65,8 @@
 
 | 分支 | 用途 | 说明 |
 | --- | --- | --- |
-| `untested` | 日常开发与预览版本 | v0.1.0-alpha 起，含 `src/`、`config/`、`cloudfunctions/` 全部源码；当前最新版本 v1.5.6；推送到此 |
-| `main` | 文档基线 + 版本快照 | `docs/`、`.gitignore`、`AGENTS.md`；经用户确认后可将 `untested` 完整同步为版本快照（当前 v1.5.1）；日常开发仍在 `untested` |
+| `untested` | 日常开发与预览版本 | v0.1.0-alpha 起，含 `src/`、`config/`、`cloudfunctions/` 全部源码；当前最新版本 v2.0.0（正式发布版）；推送到此 |
+| `main` | 文档基线 + 版本快照 | `docs/`、`.gitignore`、`AGENTS.md`；经用户确认后可将 `untested` 完整同步为版本快照（当前 v2.0.0，2026-11-26 已并入）；日常开发仍在 `untested` |
 
 ## 网络与环境
 

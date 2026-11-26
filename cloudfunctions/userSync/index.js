@@ -8,8 +8,8 @@
  *   photoStat  → { code:'OK'|'KICKED', photoBytes }
  * 说明：
  *   1. 登录方式为微信授权静默登录：服务端经 cloud.getWXContext().OPENID 识别微信号身份，全程无弹窗；
- *   2. 会员档位以服务端为准：members 集合订单校验；微信支付未开通的测试期，若服务端为 free
- *      且客户端上报 vip/svip（本地测试开通），采用客户端上报值写入 users.tier（支付接入后移除该回落）；
+ *   2. 会员档位（v2.0.0）：members 集合订单校验为唯一权威——微信支付支付回调（payCallback）写入
+ *      members 后 login 自动返回已购档位；客户端上报回落与 setTier 通道已随测试模式移除，档位不可由客户端改写；
  *   3. 快照为单用户全量文档（同步范围见设计方案 4.4：所选衣橱 + 衣物 + 日记 + 自定义项/场景 +
  *      喜爱品牌 + 备选条目 + 身体数据 + 编号计数器 + 会员用量计数（v1.19.0）；
  *      明日穿搭勾选/推荐缓存/推荐产物不上云）；
@@ -116,22 +116,10 @@ exports.main = async (event = {}) => {
       user = { _id: OPENID, tier: 'free', dataVersion: 0, photoBytes: 0, createdAt: now };
     }
 
-    // 档位判定（v1.22.0 修复 VIP 未同步）：members 订单校验 > users.tier 已登记档位 > 客户端上报。
-    // 此前仅查 members（测试期无订单恒为 free），客户端上报 free 会把云端已登记的 vip/svip
-    // 直接覆盖回 free——换设备/重装/清缓存后登录即丢档位，且与另一端互相覆盖。
-    // 支付接入后移除客户端上报回落。
-    const serverTier = await tierFromOrders(OPENID);
-    const storedTier = ['vip', 'svip'].includes(user.tier) ? user.tier : 'free';
-    const clientTier = ['vip', 'svip'].includes(event.tier) ? event.tier : 'free';
-    let tier;
-    if (serverTier !== 'free') {
-      tier = serverTier;
-    } else if (storedTier !== 'free') {
-      // 云端已登记过 vip/svip：不因本地 free 上报回退（档位跨端保持）
-      tier = storedTier;
-    } else {
-      tier = clientTier;
-    }
+    // 档位判定（v2.0.0）：members 订单校验为唯一权威（微信支付回调 payCallback 写入后生效）。
+    // v1.22.0 的「users.tier 登记 > 客户端上报回落」与 setTier 通道已随测试模式移除——
+    // 发布版档位不可由客户端改写，换设备/重装/清缓存后登录自动恢复已购权益。
+    const tier = await tierFromOrders(OPENID);
 
     // 宽限期内登录：清除删除标记自动恢复
     // v1.19.0：登记当前活跃设备（单端互踢）——新设备登录顶掉旧设备
@@ -163,29 +151,6 @@ exports.main = async (event = {}) => {
       photoQuotaMB: limits.photoQuotaMB,
       activeDeviceId: event.deviceId || ''
     };
-  }
-
-  // ---------- 档位变更上行：会话内切换会员档位后实时同步云端（v1.17.0） ----------
-  // 口径与 login 一致：订单校验优先，测试期（服务端 free）接受客户端上报值
-  if (action === 'setTier') {
-    const clientTier = ['free', 'vip', 'svip'].includes(event.tier) ? event.tier : null;
-    if (!clientTier) return { code: 'BAD_PARAM', message: '无效档位' };
-    let user = await getUser(OPENID);
-    if (!user) {
-      user = { _id: OPENID, tier: 'free', dataVersion: 0, photoBytes: 0, createdAt: Date.now() };
-    }
-    const serverTier = await tierFromOrders(OPENID);
-    const tier = serverTier === 'free' ? clientTier : serverTier;
-    try {
-      await db.collection('users').doc(OPENID).set({
-        data: stripId({ ...user, tier, updatedAt: Date.now() })
-      });
-    } catch (e) {
-      console.error('[userSync] 档位写入失败：', e.message);
-      return { code: 'DB_ERROR', message: '档位写入失败: ' + e.message };
-    }
-    console.log(`[userSync] 档位已更新: ${tier}`);
-    return { code: 'OK', tier };
   }
 
   // ---------- 下行：返回云端全量快照（合并由客户端执行，见设计方案 5.5） ----------

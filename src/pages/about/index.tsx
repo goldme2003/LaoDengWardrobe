@@ -19,7 +19,7 @@ const AboutPage: React.FC = () => {
         <Text className={styles.sectionTitle}>关于</Text>
         <View className={styles.aboutRow}>
           <Text className={styles.aboutLabel}>版本</Text>
-          <Text className={styles.aboutValue}>{APP_VERSION}（开发预览）</Text>
+          <Text className={styles.aboutValue}>{APP_VERSION}</Text>
         </View>
         <View className={styles.aboutRow}>
           <Text className={styles.aboutLabel}>数据存储</Text>

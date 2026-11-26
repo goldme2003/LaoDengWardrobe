@@ -220,47 +220,7 @@
   font-weight: $font-weight-medium;
 }
 
-.devBox {
-  padding: $spacing-md;
-  margin-bottom: $spacing-md;
-  border-radius: $radius-lg;
-  background: #ffffff;
-  border: 1px dashed rgba(176, 125, 80, 0.5);
-}
-
-.devTitle {
-  font-size: $font-size-xs;
-  color: $color-text-tertiary;
-}
-
-.devRow {
-  display: flex;
-  gap: $spacing-sm;
-  margin-top: $spacing-sm;
-}
-
-.devBtn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12rpx 0;
-  border-radius: $radius-round;
-  background: var(--bg-secondary, #f5f2ee);
-}
-
-.devBtnActive {
-  background: #b07d50;
-}
-
-.devBtnText {
-  font-size: $font-size-xs;
-  color: $color-text-primary;
-}
-
-.devBtnActive .devBtnText {
-  color: #ffffff;
-}
+/* v2.0.0：测试档位切换区（devBox 系列）已随发布版移除 */
 
 .footTip {
   display: block;

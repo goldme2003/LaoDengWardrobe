@@ -10,7 +10,8 @@
  *      v1.21.0 起试穿照片随同步上传——此前仅衣物/日记上传，快照内试穿照片为本地临时路径，
  *      换设备拉取、云端覆盖回写或微信清理临时文件后路径失效，导致试穿图片无法显示）；
  *   7. 快照冲突策略（v1.16.0，需求方确认）：如遇冲突，云端覆盖本地——同步范围自动以云端为准，不再三选一；
- *   8. 会员档位上行（v1.17.0）：启动 login 上报 + 会话内档位变更实时 setTier 上行（档位不入快照）；
+ *   8. 会员档位（v2.0.0）：服务端权威（members 订单校验，微信支付回调写入），login 返回后回写本地；
+ *      客户端上报与 setTier 通道已随测试模式移除（档位不入快照）；
  *   9. 单端互踢（v1.19.0，需求方确认）：登录上报 deviceId，服务端登记唯一活跃设备；
  *      pull/push/photoStat 被判非活跃设备时返回 KICKED → 本机进入 kicked 态，暂停云端读写（本地数据保留），
  *      「立即同步」重新登录后接管（顶掉另一设备）。
@@ -453,7 +454,7 @@ const applyLoginResult = (res: {
     hasRemote: res.hasRemote,
     errorMsg: ''
   });
-  // 会员档位以服务端为准（设计方案 5.1 第 3 条；测试期服务端 free 时回落客户端上报值）
+  // 会员档位以服务端为准（设计方案 5.1 第 3 条；v2.0.0 起档位唯一权威为 members 订单，客户端不可上报）
   // v1.17.0：setSyncState 先行，避免下方 setMemberTier 触发订阅时对刚写入的档位重复上行
   if (res.tier !== store.memberTier) {
     store.setMemberTier(res.tier);
@@ -742,45 +743,15 @@ export const schedulePush = (): void => {
   }, PUSH_DEBOUNCE_MS);
 };
 
-/**
- * 档位变更上行云端（v1.17.0）：login 只覆盖启动时刻，会话内（如会员页测试切换档位）变更此前
- * 需重启才会落云端。订阅档位变化实时上报；档位不属于快照数据，不走 push 通道。
- * 服务端口径与 login 一致（订单校验优先，测试期服务端 free 时接受客户端上报值）。
- */
-const pushTierUpdate = async (tier: MemberTier): Promise<void> => {
-  if (!CLOUD_READY) return;
-  const st = useSyncStore.getState();
-  if (!st.openid || st.tier === tier) return; // 未登录由 login 兜底；档位已一致则跳过（防 login 回写造成回环）
-  try {
-    const res = await Taro.cloud.callFunction({
-      name: USER_SYNC_FN_NAME,
-      data: { action: 'setTier', tier }
-    });
-    const result = res.result as { code: string; tier?: MemberTier; message?: string };
-    if (result.code === 'OK' && result.tier) {
-      setSyncState({ tier: result.tier });
-      console.info('[Sync] 档位已同步云端, tier =', result.tier);
-      // 服务端权威档位与本地不一致（如订单校验覆盖客户端上报值）时以服务端为准回写本地
-      if (result.tier !== useWardrobeStore.getState().memberTier) {
-        useWardrobeStore.getState().setMemberTier(result.tier);
-      }
-    }
-  } catch (e: any) {
-    // 档位同步失败不阻塞本地操作，下次变更或重启登录时会对齐
-    console.warn('[Sync] 档位同步云端失败（下次变更/重启对齐）:', e?.message || e);
-  }
-};
-
-/** 监听 store 写操作（脏标记 → 防抖上行；档位变更 → 实时上行，v1.17.0）；幂等，模块首次使用时注册 */
+/** 监听 store 写操作（脏标记 → 防抖上行）；幂等，模块首次使用时注册。
+ * v2.0.0：档位上行通道（setTier）已随测试模式移除——档位以云端 members（支付回调写入）为唯一权威，
+ * 仅在 login / 会员页支付开通后回写本地，客户端不再上报。 */
 const registerWatcher = (): void => {
   if (watcherRegistered) return;
   watcherRegistered = true;
   useWardrobeStore.subscribe((state, prev) => {
     if (state.syncMeta.dirty && state.syncMeta.dataVersion !== prev.syncMeta.dataVersion) {
       schedulePush();
-    }
-    if (state.memberTier !== prev.memberTier) {
-      void pushTierUpdate(state.memberTier);
     }
   });
 };

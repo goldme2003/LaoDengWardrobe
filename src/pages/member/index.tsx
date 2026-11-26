@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
@@ -9,6 +9,7 @@ import {
   weatherLevelLabel,
   MemberTier
 } from '@/services/entitlement';
+import { MEMBER_FN_NAME, CLOUD_READY } from '@/config/cloud';
 import styles from './index.module.scss';
 
 /** 权益矩阵行（与 PRD 10.6 三档矩阵一致；v1.10.0 文案修正 + 新增明日推荐次数；v1.19.1 权益数值调整 + 出差推荐前置） */
@@ -61,8 +62,9 @@ const BENEFIT_ROWS: { label: string; values: Record<MemberTier, string> }[] = [
 ];
 
 /** 会员中心页（v1.9.0，F-19）：三档权益对比 + 一次性买断价格 + 开通入口。
- * v1.9.1：测试模式——微信支付尚未接入，开通/切换按钮直接本地生效，方便验证各档位权益与门控；
- * 正式发布时恢复走云函数 member.createOrder + 微信支付，并移除档位切换按钮。 */
+ * v2.0.0：微信支付正式接入——「立即开通」走 member.createOrder 统一下单 → requestPayment 拉起支付
+ * → 轮询 getMember 确认档位生效；档位以云端 members（支付回调 payCallback 写入）为唯一权威，
+ * 本地仅作展示缓存；测试模式（本地切换档位 / 测试档位切换区块）已随发布版移除。 */
 const MemberPage: React.FC = () => {
   const memberTier = useWardrobeStore((s) => s.memberTier);
   const setMemberTier = useWardrobeStore((s) => s.setMemberTier);
@@ -75,11 +77,98 @@ const MemberPage: React.FC = () => {
     background: 'var(--bg-page, #f7f4ef)'
   } as React.CSSProperties;
 
-  // v1.9.1：测试模式——微信支付尚未接入（正式发布时接入 member 云函数 createOrder + 支付），
-  // 点击「立即开通」直接本地切换档位，方便验证各档位权益与门控
-  const handleBuy = (tier: MemberTier) => {
-    setMemberTier(tier);
-    Taro.showToast({ title: `已切换为 ${TIERS[tier].label}（测试）`, icon: 'none' });
+  // v2.0.0：支付进行中的档位（按钮 loading 态，防重复提交）
+  const [payingTier, setPayingTier] = useState<MemberTier | ''>('');
+
+  /** cloudPay.unifiedOrder 返回的拉起支付参数（透传 wx.requestPayment） */
+  interface WxPayParams {
+    timeStamp: string;
+    nonceStr: string;
+    package: string;
+    signType: 'MD5' | 'HMAC-SHA256' | 'RSA';
+    paySign: string;
+  }
+
+  // 支付成功后轮询云端档位生效（支付回调写入 members 可能有秒级延迟，最多 5 次 × 1.5s）
+  const pollMemberTier = async (): Promise<MemberTier | ''> => {
+    for (let i = 0; i < 5; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      try {
+        const res = await Taro.cloud.callFunction({
+          name: MEMBER_FN_NAME,
+          data: { action: 'getMember' }
+        });
+        const result = (res.result || {}) as { code?: string; tier?: MemberTier };
+        if (result.code === 'OK' && result.tier && result.tier !== 'free') {
+          return result.tier;
+        }
+      } catch (e) {
+        // 网络波动：继续重试
+      }
+    }
+    return '';
+  };
+
+  // v2.0.0：微信支付开通——下单 → 拉起支付 → 云端确认档位（失败给出明确文案）
+  const handlePay = async (tier: 'vip' | 'svip') => {
+    if (payingTier) return;
+    if (!CLOUD_READY) {
+      Taro.showToast({ title: '请在微信端开通会员', icon: 'none' });
+      return;
+    }
+    setPayingTier(tier);
+    Taro.showLoading({ title: '正在发起支付…', mask: true });
+    let payment: WxPayParams | null = null;
+    let failMsg = '下单失败，请稍后重试';
+    try {
+      const res = await Taro.cloud.callFunction({
+        name: MEMBER_FN_NAME,
+        data: { action: 'createOrder', tier }
+      });
+      const result = (res.result || {}) as {
+        code?: string;
+        message?: string;
+        payment?: WxPayParams;
+      };
+      if (result.code === 'OK' && result.payment) {
+        payment = result.payment;
+      } else if (result.code === 'ALREADY_MEMBER') {
+        failMsg = result.message || '已开通该档位';
+      } else {
+        failMsg = result.message || '下单失败，请稍后重试';
+      }
+    } catch (e) {
+      failMsg = '网络异常，请稍后重试';
+    }
+    Taro.hideLoading();
+    if (!payment) {
+      setPayingTier('');
+      Taro.showToast({ title: failMsg, icon: 'none', duration: 2500 });
+      return;
+    }
+    try {
+      await Taro.requestPayment(payment);
+    } catch (e) {
+      // 用户取消或支付失败
+      setPayingTier('');
+      Taro.showToast({ title: '支付未完成', icon: 'none' });
+      return;
+    }
+    // 支付成功：确认云端档位生效
+    Taro.showLoading({ title: '开通确认中…', mask: true });
+    const newTier = await pollMemberTier();
+    Taro.hideLoading();
+    setPayingTier('');
+    if (newTier) {
+      setMemberTier(newTier);
+      Taro.showToast({ title: `${TIERS[newTier].label} 开通成功`, icon: 'success', duration: 2000 });
+    } else {
+      Taro.showToast({
+        title: '支付完成，档位生效可能有延迟，请稍后重新进入查看',
+        icon: 'none',
+        duration: 3000
+      });
+    }
   };
 
   return (
@@ -106,8 +195,9 @@ const MemberPage: React.FC = () => {
           const active = memberTier === t;
           // v1.10.0：SVIP 为最高档——开通后所有付费档按钮均不可用（VIP 档显示「已含于 SVIP」）
           const locked = memberTier === 'svip';
-          const disabled = active || locked;
-          const btnText = active ? '当前等级' : locked ? '已含于 SVIP' : '立即开通';
+          const disabled = active || locked || payingTier !== '';
+          const btnText =
+            payingTier === t ? '支付中…' : active ? '当前等级' : locked ? '已含于 SVIP' : '立即开通';
           return (
             <View
               key={t}
@@ -135,7 +225,7 @@ const MemberPage: React.FC = () => {
                   active ? (t === 'svip' ? styles.buyBtnSvipOwned : styles.buyBtnOwned) : '',
                   locked && !active ? styles.buyBtnDisabled : ''
                 ].join(' ')}
-                onClick={disabled ? undefined : () => handleBuy(t)}
+                onClick={disabled ? undefined : () => handlePay(t)}
               >
                 <Text className={styles.buyBtnText}>{btnText}</Text>
               </View>
@@ -145,7 +235,7 @@ const MemberPage: React.FC = () => {
         })}
       </View>
       <Text className={styles.payTip}>
-        测试模式：点击「立即开通」直接切换档位体验对应权益；正式发布时接入微信支付（一次开通、永久有效）。
+        微信支付 · 一次开通、永久有效；支付完成后档位自动生效，更换设备登录同一微信即可恢复权益。
       </Text>
 
       {/* 三档权益矩阵 */}
@@ -165,22 +255,6 @@ const MemberPage: React.FC = () => {
             <Text className={`${styles.td} ${styles.tdSvip}`}>{row.values.svip}</Text>
           </View>
         ))}
-      </View>
-
-      {/* 测试档位切换（v1.9.1：各环境可见，便于验证各档位门控；正式发布接入支付时移除） */}
-      <View className={styles.devBox}>
-        <Text className={styles.devTitle}>测试：切换会员档位（正式发布时移除）</Text>
-        <View className={styles.devRow}>
-          {TIER_ORDER.map((t) => (
-            <View
-              key={t}
-              className={`${styles.devBtn} ${memberTier === t ? styles.devBtnActive : ''}`}
-              onClick={() => setMemberTier(t)}
-            >
-              <Text className={styles.devBtnText}>{TIERS[t].label}</Text>
-            </View>
-          ))}
-        </View>
       </View>
 
       <Text className={styles.footTip}>
