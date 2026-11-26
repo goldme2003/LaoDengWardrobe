@@ -14,6 +14,8 @@ import autumnF2 from '@/assets/seasonal/autumn-f-2.jpg';
 import autumnF3 from '@/assets/seasonal/autumn-f-3.jpg';
 import autumnF4 from '@/assets/seasonal/autumn-f-4.jpg';
 import autumnF5 from '@/assets/seasonal/autumn-f-5.jpg';
+// v1.22.0：兜底图组按季节分组（本版春/夏/冬暂复用秋季组——图片生成服务暂不可用，
+// 待专属素材 spring-*/summer-*/winter-*.jpg 生成后恢复对应 import 并替换数组即可）
 import styles from './index.module.scss';
 
 interface Props {
@@ -31,12 +33,14 @@ interface Props {
   onShow: (n: number) => void;
 }
 
+type SeasonKey = 'spring' | 'summer' | 'autumn' | 'winter';
+
 /** 季节（按当前月份划分）：3–5 春 / 6–8 夏 / 9–11 秋 / 12–2 冬 */
-const seasonOf = (month: number): { label: string } => {
-  if (month >= 3 && month <= 5) return { label: '春季' };
-  if (month >= 6 && month <= 8) return { label: '夏季' };
-  if (month >= 9 && month <= 11) return { label: '秋季' };
-  return { label: '冬季' };
+const seasonOf = (month: number): { key: SeasonKey; label: string } => {
+  if (month >= 3 && month <= 5) return { key: 'spring', label: '春季' };
+  if (month >= 6 && month <= 8) return { key: 'summer', label: '夏季' };
+  if (month >= 9 && month <= 11) return { key: 'autumn', label: '秋季' };
+  return { key: 'winter', label: '冬季' };
 };
 
 /** 年龄段（与空衣橱引导、云函数口径一致）：<18 青少年 / ≤30 青年 / ≤50 中年 / 其余熟龄 */
@@ -66,10 +70,25 @@ const STYLE_OPTIONS: StyleOption[] = [
   { key: 'detail', label: '配饰细节', premium: true }
 ];
 
-/** 本地示例图组（v1.7.1 打包资源，仅秋季）：普通版（不生图）展示 */
-const LOCAL_IMAGES: Record<'male' | 'female', string[]> = {
-  male: [autumnM1, autumnM2, autumnM3, autumnM4, autumnM5],
-  female: [autumnF1, autumnF2, autumnF3, autumnF4, autumnF5]
+/** 本地示例/兜底图组（v1.7.1 打包资源，秋季 5 张：1 通勤简约 / 2 街头休闲 / 3 运动活力 /
+ * 4 轻正式 / 5 周末出行；v1.22.0 起按季节分组——春/夏/冬暂复用秋季组，专属素材补齐后替换） */
+const LOCAL_IMAGES: Record<SeasonKey, Record<'male' | 'female', string[]>> = {
+  spring: {
+    male: [autumnM1, autumnM2, autumnM3, autumnM4, autumnM5],
+    female: [autumnF1, autumnF2, autumnF3, autumnF4, autumnF5]
+  },
+  summer: {
+    male: [autumnM1, autumnM2, autumnM3, autumnM4, autumnM5],
+    female: [autumnF1, autumnF2, autumnF3, autumnF4, autumnF5]
+  },
+  autumn: {
+    male: [autumnM1, autumnM2, autumnM3, autumnM4, autumnM5],
+    female: [autumnF1, autumnF2, autumnF3, autumnF4, autumnF5]
+  },
+  winter: {
+    male: [autumnM1, autumnM2, autumnM3, autumnM4, autumnM5],
+    female: [autumnF1, autumnF2, autumnF3, autumnF4, autumnF5]
+  }
 };
 const LOCAL_LABELS = ['通勤简约', '街头休闲', '运动活力', '轻正式', '周末出行'];
 
@@ -106,6 +125,8 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onSho
   const [slides, setSlides] = useState<SeasonalImage[]>([]);
   const [genLoading, setGenLoading] = useState(false);
   const [genErr, setGenErr] = useState('');
+  // v1.22.0：分阶段生成提示（对齐明日穿搭文案，突出 AI 与专业穿搭身份）
+  const [genHint, setGenHint] = useState('');
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState('');
   const [addErr, setAddErr] = useState('');
@@ -123,17 +144,38 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onSho
     }
   }, [gender, age, ageGroup, onShow]);
 
-  // 本地示例图组：按日期轮换起始位，保证每天看到的示例不同
+  // v1.22.0：生成中分阶段提示（对齐明日穿搭：连接 AI 造型师 → 结合画像生成 → 兜底提示）
+  useEffect(() => {
+    if (!genLoading) {
+      setGenHint('');
+      return;
+    }
+    setGenHint('正在连接 AI 造型师…');
+    const t1 = setTimeout(
+      () => setGenHint(`AI 专业穿搭师正在生成「${genLabelRef.current}」当季搭配…`),
+      3000
+    );
+    const t2 = setTimeout(() => setGenHint('云端响应较慢，请稍候…'), 12000);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [genLoading]);
+
+  // 本地示例/兜底图组：按季节+性别取组；季节组缺失时回落秋季（素材逐步补齐）；
+  // 年龄决定起始位（青年 0 / 中年 1 / 熟龄 2），叠加日期轮换
   const localSlides = useMemo<Slide[]>(() => {
-    const imgs = LOCAL_IMAGES[gender === 'female' ? 'female' : 'male'];
+    const group = LOCAL_IMAGES[season.key] || LOCAL_IMAGES.autumn;
+    const imgs = group[gender === 'female' ? 'female' : 'male'] || group.male;
     const d = new Date();
     const dayOfYear = Math.floor((d.getTime() - new Date(d.getFullYear(), 0, 0).getTime()) / 86400000);
-    const start = dayOfYear % imgs.length;
+    const ageStart = ageGroup === '中年' ? 1 : ageGroup === '熟龄' ? 2 : 0;
+    const start = (ageStart + dayOfYear) % imgs.length;
     return LOCAL_LABELS.map((_, i) => {
       const idx = (start + i) % imgs.length;
       return { label: LOCAL_LABELS[idx], src: imgs[idx], ai: false };
     });
-  }, [gender]);
+  }, [gender, season.key, ageGroup]);
 
   /** 点击风格 / 提交自定义风格后生成 1 张（消耗当日额度） */
   const handleGenerate = useCallback(
@@ -189,17 +231,22 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onSho
     [tier]
   );
 
-  // 普通版展示本地示例（1 张）；VIP/SVIP 展示今日已生成图组（AI 生成标识）
+  // 普通版展示本地示例（1 张）；VIP/SVIP 展示今日已生成图组（AI 生成标识）；
+  // v1.22.0：AI 尚未生成时不留空——按季节/性别/年龄以本地示例图组兜底
   const displaySlides: Slide[] = isFree
     ? localSlides.slice(0, 1)
-    : slides.map((s) => ({ label: s.label, src: s.fileID, ai: true }));
+    : slides.length > 0
+      ? slides.map((s) => ({ label: s.label, src: s.fileID, ai: true }))
+      : localSlides;
 
   return (
     <View className={styles.card}>
       <View className={styles.head}>
         <View className={styles.titleRow}>
           <Text className={styles.title}>当季推荐 · {season.label}</Text>
-          {!isFree && slides.length > 0 && <Text className={styles.aiBadge}>AI 生成</Text>}
+          {!isFree && (
+            <Text className={styles.aiBadge}>{slides.length > 0 ? 'AI 生成' : '示例搭配'}</Text>
+          )}
         </View>
         <Text className={styles.sub}>
           {isFree
@@ -218,8 +265,8 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onSho
             </SwiperItem>
           ))}
         </Swiper>
-      ) : displaySlides.length > 0 ? (
-        /* 跑马灯：展示今日已生成图组；额度用尽或生成中停止自动轮播 */
+      ) : (
+        /* 跑马灯：AI 图组或兜底示例图组；额度用尽或生成中停止自动轮播 */
         <>
           <Swiper
             className={styles.swiper}
@@ -234,31 +281,27 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onSho
             {displaySlides.map((s, i) => (
               <SwiperItem key={`${s.label}-${i}`} className={styles.slide}>
                 <Image className={styles.photo} src={s.src} mode='aspectFill' />
-                {s.ai && (
-                  <View className={styles.aiTag}>
-                    <Text className={styles.aiTagText}>AI 生成</Text>
-                  </View>
-                )}
+                {/* AI 生成标识 / 示例标识（生成式内容显式区分） */}
+                <View className={styles.aiTag}>
+                  <Text className={styles.aiTagText}>{s.ai ? 'AI 生成' : '示例'}</Text>
+                </View>
                 <View className={styles.caption}>
                   <Text className={styles.captionText}>{s.label}</Text>
                 </View>
               </SwiperItem>
             ))}
           </Swiper>
-          {genLoading && (
-            <Text className={styles.genHint}>正在生成「{genLabelRef.current}」当季穿搭，约需 10–30 秒…</Text>
-          )}
+          {/* v1.22.0：AI 未生成时提示可按风格智能化生成；生成中展示分阶段 AI 提示 */}
+          {genLoading ? (
+            <Text className={styles.genHint}>{genHint}</Text>
+          ) : slides.length === 0 ? (
+            <Text className={styles.genHint}>
+              {exhausted
+                ? '今日生成额度已用尽，先看示例搭配，明天再来'
+                : '以上为示例搭配 · 点击下方风格，AI 专业穿搭师为您定制专属当季穿搭'}
+            </Text>
+          ) : null}
         </>
-      ) : genLoading ? (
-        <View className={styles.skeleton}>
-          <Text className={styles.skeletonText}>正在生成「{genLabelRef.current}」当季穿搭，约需 10–30 秒…</Text>
-        </View>
-      ) : (
-        <View className={styles.placeholder}>
-          <Text className={styles.placeholderText}>
-            {exhausted ? '今日生成额度已用尽，明天再来' : '选择下方风格，生成今日 AI 当季搭配'}
-          </Text>
-        </View>
       )}
       {/* v1.14.0：风格选择条（点击后按需生成，交互对齐明日推荐场景条） */}
       {!isFree && (

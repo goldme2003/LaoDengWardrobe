@@ -667,11 +667,16 @@ const pullAndMerge = async (): Promise<void> => {
   const { patch, stats } = mergeSnapshot(local, remote);
   // 合并原子化：一次 commit（递增版本号 + 打脏，随下次 push 上行）
   local.applySyncMerge(patch);
+  // v1.22.0 修复：合并后推进下行游标到云端版本（patchSyncMeta 不打脏）。
+  // 此前 lastSyncedVersion 停留在旧值，push 乐观锁 baseVersion 过期 → 本地变更上行必然 CONFLICT，
+  // 随后云端覆盖本地再 force push——表现为「经常出现数据冲突」且每次 pull 到新数据都触发一次。
+  useWardrobeStore.getState().patchSyncMeta({ lastSyncedVersion: remoteVersion });
   console.info(
     '[Sync] 云端合并完成, 衣橱覆盖 =', stats.wardrobes,
     '衣物覆盖 =', stats.items,
     '日记覆盖 =', stats.diary,
-    '备选覆盖 =', stats.tryout
+    '备选覆盖 =', stats.tryout,
+    '下行游标推进至 =', remoteVersion
   );
 };
 

@@ -89,40 +89,7 @@
   color: #ffffff;
 }
 
-.skeleton {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 640rpx;
-  border-radius: $radius-md;
-  background: var(--bg-secondary, #f5f2ee);
-}
-
-.skeletonText {
-  padding: 0 $spacing-md;
-  font-size: $font-size-sm;
-  color: $color-text-tertiary;
-  text-align: center;
-}
-
-/* v1.14.0：待生成占位（VIP/SVIP 当日尚未生成时，引导点击风格） */
-.placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 640rpx;
-  border-radius: $radius-md;
-  background: var(--bg-secondary, #f5f2ee);
-}
-
-.placeholderText {
-  padding: 0 $spacing-md;
-  font-size: $font-size-sm;
-  color: $color-text-tertiary;
-  text-align: center;
-}
-
-/* v1.14.0：已有图组时的生成中提示 */
+/* v1.22.0：AI 未生成时由本地示例图组兜底（原 skeleton/placeholder 占位分支已移除） */
 .genHint {
   display: block;
   margin-top: $spacing-xs;

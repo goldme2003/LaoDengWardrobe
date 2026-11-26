@@ -116,11 +116,20 @@ exports.main = async (event = {}) => {
       user = { _id: OPENID, tier: 'free', dataVersion: 0, photoBytes: 0, createdAt: now };
     }
 
-    // 档位：订单校验优先；测试期（无订单）采用客户端上报档位，支付接入后移除
+    // 档位判定（v1.22.0 修复 VIP 未同步）：members 订单校验 > users.tier 已登记档位 > 客户端上报。
+    // 此前仅查 members（测试期无订单恒为 free），客户端上报 free 会把云端已登记的 vip/svip
+    // 直接覆盖回 free——换设备/重装/清缓存后登录即丢档位，且与另一端互相覆盖。
+    // 支付接入后移除客户端上报回落。
     const serverTier = await tierFromOrders(OPENID);
-    let tier = serverTier;
+    const storedTier = ['vip', 'svip'].includes(user.tier) ? user.tier : 'free';
     const clientTier = ['vip', 'svip'].includes(event.tier) ? event.tier : 'free';
-    if (serverTier === 'free' && clientTier !== 'free') {
+    let tier;
+    if (serverTier !== 'free') {
+      tier = serverTier;
+    } else if (storedTier !== 'free') {
+      // 云端已登记过 vip/svip：不因本地 free 上报回退（档位跨端保持）
+      tier = storedTier;
+    } else {
       tier = clientTier;
     }
 
