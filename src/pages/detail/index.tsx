@@ -105,10 +105,12 @@ const DetailItemPage: React.FC = () => {
         <Swiper className={styles.swiper} indicatorDots circular>
           {item.photos.map((p, i) => (
             <SwiperItem key={`${p}_${i}`} className={styles.slide}>
+              {/* v1.21.0：点击查看大图——原生预览支持左右滑动切换同组照片 */}
               <Image
                 className={styles.slideImage}
                 src={p}
                 mode='aspectFill'
+                onClick={() => Taro.previewImage({ urls: item.photos, current: p }).catch(() => undefined)}
                 onError={() => console.error('[Detail] 照片加载失败, src =', p)}
               />
             </SwiperItem>

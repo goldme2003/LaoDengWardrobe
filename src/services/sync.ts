@@ -6,7 +6,9 @@
  *   4. 同步范围裁剪（4.4：所选衣橱 + 衣物/日记/备选/身体数据/计数器 + 全局自定义项/品牌/场景 + 会员用量计数；
  *      明日穿搭勾选、推荐缓存、推荐产物、城市不上云；v1.19.0 起用量计数（含每日推荐套数）上云）；
  *   5. 3s 防抖上行（commit 打脏后自动触发）；
- *   6. 照片上传（仅衣物/日记照片，分批 5 张、路径去重、容量按档位约束、fileID 回填不打脏）；
+ *   6. 照片上传（衣物/日记/试穿照片，分批 5 张、路径去重、容量按档位约束、fileID 回填不打脏；
+ *      v1.21.0 起试穿照片随同步上传——此前仅衣物/日记上传，快照内试穿照片为本地临时路径，
+ *      换设备拉取、云端覆盖回写或微信清理临时文件后路径失效，导致试穿图片无法显示）；
  *   7. 快照冲突策略（v1.16.0，需求方确认）：如遇冲突，云端覆盖本地——同步范围自动以云端为准，不再三选一；
  *   8. 会员档位上行（v1.17.0）：启动 login 上报 + 会话内档位变更实时 setTier 上行（档位不入快照）；
  *   9. 单端互踢（v1.19.0，需求方确认）：登录上报 deviceId，服务端登记唯一活跃设备；
@@ -887,7 +889,7 @@ const uploadOne = async (filePath: string, cloudPath: string): Promise<string> =
 };
 
 /**
- * 扫描同步范围内衣物/日记照片的本地路径，分批上传云存储并回填 fileID。
+ * 扫描同步范围内衣物/日记/试穿照片的本地路径，分批上传云存储并回填 fileID。
  * 按本地路径去重（已上传不重复传）；超出档位容量的照片跳过（提示一次，不阻断文字数据同步）。
  * 推荐产物（明日穿搭方案、当季 AI 推荐图）不上传、不占容量。
  */
@@ -903,7 +905,7 @@ export const uploadPendingPhotos = async (): Promise<void> => {
   const quotaBytes = useSyncStore.getState().photoQuotaMB * 1024 * 1024;
 
   // 收集待上传：{ kind, id, index, path }，仅同步范围内条目
-  const pending: { kind: 'item' | 'diary'; id: string; path: string; dir: string }[] = [];
+  const pending: { kind: 'item' | 'diary' | 'tryout'; id: string; path: string; dir: string }[] = [];
   s.items
     .filter((it) => selected.has(it.wardrobeId))
     .forEach((it) => {
@@ -919,6 +921,16 @@ export const uploadPendingPhotos = async (): Promise<void> => {
       d.photos.forEach((p) => {
         if (isLocalPath(p) && !uploadMap[p]) {
           pending.push({ kind: 'diary', id: d.id, path: p, dir: `user/${openid}/diary/${d.id}` });
+        }
+      });
+    });
+  // v1.21.0：试穿照片随同步上传（此前缺失导致快照内为本地临时路径，换端/临时文件清理后无法显示）
+  s.tryoutItems
+    .filter((t) => selected.has(t.wardrobeId))
+    .forEach((t) => {
+      (t.photos || []).forEach((p) => {
+        if (isLocalPath(p) && !uploadMap[p]) {
+          pending.push({ kind: 'tryout', id: t.id, path: p, dir: `user/${openid}/tryout/${t.id}` });
         }
       });
     });
@@ -947,16 +959,18 @@ export const uploadPendingPhotos = async (): Promise<void> => {
       })
     );
     // 批次结束后按条目回填 fileID（不打脏，展示优先 fileID、本地路径作离线缓存）
-    const touched = new Map<string, 'item' | 'diary'>();
+    const touched = new Map<string, 'item' | 'diary' | 'tryout'>();
     batch.forEach((t) => touched.set(`${t.kind}:${t.id}`, t.kind));
-    const replacements: { kind: 'item' | 'diary'; id: string; photos: string[] }[] = [];
+    const replacements: { kind: 'item' | 'diary' | 'tryout'; id: string; photos: string[] }[] = [];
     const cur = useWardrobeStore.getState();
     touched.forEach((kind, key) => {
       const id = key.slice(kind.length + 1);
       const entry =
         kind === 'item'
           ? cur.items.find((x) => x.id === id)
-          : cur.diaryEntries.find((x) => x.id === id);
+          : kind === 'diary'
+            ? cur.diaryEntries.find((x) => x.id === id)
+            : cur.tryoutItems.find((x) => x.id === id);
       if (!entry) return;
       replacements.push({ kind, id, photos: entry.photos.map((p) => uploadMap[p] || p) });
     });

@@ -143,16 +143,16 @@ const CloudSyncPage: React.FC = () => {
           <Text className={styles.infoEditHint}>{memberLabel}</Text>
         </View>
 
-        {/* 同步状态条 */}
-        <View className={styles.syncStatusBar}>
-          <View className={styles.syncDot} style={{ background: syncStatusInfo.dot }} />
-          <Text className={styles.syncStatusText}>{syncStatusInfo.text}</Text>
-        </View>
-
-        {/* 登录账号行（静默登录无弹窗，此处确认微信账号登录态） */}
+        {/* 登录账号行（v1.21.0：与云同步状态位置互换，登录态在上；静默登录无弹窗，此处确认微信账号登录态） */}
         <View className={styles.syncStatusBar}>
           <View className={styles.syncDot} style={{ background: syncOpenid ? '#67c23a' : '#909399' }} />
           <Text className={styles.syncStatusText}>{loginLabel}</Text>
+        </View>
+
+        {/* 云同步状态条 */}
+        <View className={styles.syncStatusBar}>
+          <View className={styles.syncDot} style={{ background: syncStatusInfo.dot }} />
+          <Text className={styles.syncStatusText}>{syncStatusInfo.text}</Text>
         </View>
 
         {/* 云同步开关（默认关闭；free 档展示开通入口而非开关，避免状态不一致） */}
@@ -212,9 +212,13 @@ const CloudSyncPage: React.FC = () => {
           )}
         </View>
 
-        <Text className={styles.cardTip}>
-          同步范围：衣橱、衣物、着装日记、自定义项、备选条目、身体数据；明日穿搭记录与推荐方案仅保存在本机，不上传云端。开关关闭时全部数据仅存本机。
-        </Text>
+        {/* v1.21.0：同步范围独立区块（标题加大加粗突出），试穿/备选条目及照片随同步上云 */}
+        <View className={styles.syncScopeBlock}>
+          <Text className={styles.syncScopeTitle}>同步范围</Text>
+          <Text className={styles.syncScopeDesc}>
+            衣橱、衣物、着装日记、试穿/备选条目（含照片）、自定义项、身体数据；明日穿搭记录与推荐方案仅保存在本机，不上传云端。开关关闭时全部数据仅存本机。
+          </Text>
+        </View>
       </View>
     </View>
   );

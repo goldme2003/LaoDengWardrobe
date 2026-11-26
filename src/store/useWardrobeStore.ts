@@ -277,7 +277,7 @@ export interface WardrobeStore extends LdwData {
   patchSyncMeta: (patch: Partial<SyncMeta>) => void;
   /** v1.15.0（R-5）：回填照片 fileID（照片上传成功后调用，不打脏避免同步死循环） */
   replacePhotoPaths: (
-    replacements: { kind: 'item' | 'diary'; id: string; photos: string[] }[]
+    replacements: { kind: 'item' | 'diary' | 'tryout'; id: string; photos: string[] }[]
   ) => void;
   /** v1.15.0（R-5）：原子写入云端合并结果（递增版本号 + 打脏，随下次 push 上行） */
   applySyncMerge: (partial: Partial<LdwData>) => void;
@@ -807,6 +807,8 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       const s = get();
       const itemMap = new Map(replacements.filter((r) => r.kind === 'item').map((r) => [r.id, r.photos]));
       const diaryMap = new Map(replacements.filter((r) => r.kind === 'diary').map((r) => [r.id, r.photos]));
+      // v1.21.0：试穿照片 fileID 回填（此前仅衣物/日记，试穿照片从未上传云存储）
+      const tryoutMap = new Map(replacements.filter((r) => r.kind === 'tryout').map((r) => [r.id, r.photos]));
       set({
         items: s.items.map((it) => {
           const photos = itemMap.get(it.id);
@@ -815,6 +817,10 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
         diaryEntries: s.diaryEntries.map((d) => {
           const photos = diaryMap.get(d.id);
           return photos ? { ...d, photos } : d;
+        }),
+        tryoutItems: s.tryoutItems.map((t) => {
+          const photos = tryoutMap.get(t.id);
+          return photos ? { ...t, photos } : t;
         })
       });
       persistAll();

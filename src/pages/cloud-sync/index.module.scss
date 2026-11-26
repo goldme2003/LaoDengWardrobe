@@ -26,12 +26,26 @@
   margin-bottom: $spacing-md;
 }
 
-.cardTip {
+/* v1.21.0：同步范围独立区块——标题加大加粗、正文较原 cardTip 提升一级字号并提高对比度 */
+.syncScopeBlock {
+  padding: $spacing-md;
+  background: $color-bg-page;
+  border-radius: var(--w-radius, $radius-md);
+}
+
+.syncScopeTitle {
   display: block;
-  font-size: $font-size-xs;
-  color: $color-text-tertiary;
+  font-size: $font-size-md;
+  font-weight: $font-weight-semibold;
+  color: var(--w-text, $color-text-primary);
+  margin-bottom: $spacing-xs;
+}
+
+.syncScopeDesc {
+  display: block;
+  font-size: $font-size-sm;
+  color: var(--w-text2, $color-text-secondary);
   line-height: $line-height-loose;
-  margin-bottom: $spacing-md;
 }
 
 .infoHeader {
