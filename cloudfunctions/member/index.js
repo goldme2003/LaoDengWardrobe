@@ -29,10 +29,11 @@ const TIERS = {
   vip: { label: 'VIP', totalFee: 1990 },
   svip: { label: 'SVIP', totalFee: 2990 }
 };
-/** 道具 ID（MP 后台虚拟支付 → 道具管理 创建后配置环境变量） */
+/** 道具 ID（MP 后台虚拟支付 → 道具管理 实际发布的 ID；可经环境变量 VP_PRODUCT_* 覆盖）
+ * v2.1.4：对齐需求方后台实际道具 ID——此前默认 vip_member/svip_member 与后台不符，导致拉起支付即失败 */
 const PRODUCT_IDS = {
-  vip: process.env.VP_PRODUCT_VIP || 'vip_member',
-  svip: process.env.VP_PRODUCT_SVIP || 'svip_member'
+  vip: process.env.VP_PRODUCT_VIP || 'VIP_Tool',
+  svip: process.env.VP_PRODUCT_SVIP || 'SVIP_Tool'
 };
 const OFFER_ID = process.env.VP_OFFER_ID || '';
 const APP_KEY = process.env.VP_APP_KEY || '';

@@ -15,10 +15,11 @@ const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const RANK = { free: 0, vip: 1, svip: 2 };
-/** 道具 ID → 档位（与 member 云函数 PRODUCT_IDS 一致；缺省按订单 tier 发货） */
+/** 道具 ID → 档位（与 member 云函数 PRODUCT_IDS 一致；缺省按订单 tier 发货）
+ * v2.1.4：对齐后台实际道具 ID（VIP_Tool / SVIP_Tool） */
 const TIER_BY_PRODUCT = {
-  vip_member: 'vip',
-  svip_member: 'svip'
+  VIP_Tool: 'vip',
+  SVIP_Tool: 'svip'
 };
 
 /** 从任意形态的推送中提取字段：对象直取；字符串按 XML 标签正则提取 */
