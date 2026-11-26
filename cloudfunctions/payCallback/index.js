@@ -7,8 +7,11 @@
  *   OpenId（发货对象）、OutTradeNo（业务单号，下单时传入）
  *   WeChatPayInfo.MchOrderNo（平台单号 wx_order_id，幂等去重以此为准）
  *   GoodsInfo.ProductId / GoodsInfo.Quantity
- * 处理：幂等（wx_order_id/订单状态去重）→ 订单置 paid → members 写入档位（仅升不降）→
- *       应答 <xml><ErrCode>0</ErrCode></xml>（非 0 平台最多重试 15 次）。
+ * 处理：幂等（wx_order_id/订单状态去重）→ 订单置 paid → members 写入档位（仅升不降）。
+ * 应答（v2.1.9 根因修复）：本函数为「云开发云函数接收」模式，官方云开发接入指引 9.3 要求
+ *   返回对象 { ErrCode: 0, ErrMsg: 'success' }（由云开发层序列化回传）；
+ *   此前 v2.1.1 误用「自建服务器 URL 模式」的 XML 字符串应答，被平台判为发货失败
+ *   （重试 15 次后放弃），导致 MP 后台所有订单停留在「未发货」。
  * 兼容：云开发推送可能为已解析对象，也可能含原始 XML 字符串，两种形态均处理。 */
 const cloud = require('wx-server-sdk');
 
@@ -117,21 +120,22 @@ exports.main = async (event = {}) => {
 
     console.info('[payCallback] 收到推送:', JSON.stringify(event).slice(0, 400));
 
-    // 非发货推送（其他消息误路由）：应答成功避免无意义重试
+    // 非发货推送（其他消息误路由）：应答成功避免无意义重试（云函数模式返回对象，下同）
     if (eventName && eventName !== 'xpay_goods_deliver_notify') {
       console.warn('[payCallback] 非发货推送事件:', eventName);
-      return '<xml><ErrCode>0</ErrCode><ErrMsg><![CDATA[success]]></ErrMsg></xml>';
+      return { ErrCode: 0, ErrMsg: 'success' };
     }
     if (!outTradeNo) {
       console.error('[payCallback] 缺少 OutTradeNo');
-      return '<xml><ErrCode>1</ErrCode><ErrMsg><![CDATA[MISSING_OUT_TRADE_NO]]></ErrMsg></xml>';
+      return { ErrCode: 1, ErrMsg: 'MISSING_OUT_TRADE_NO' };
     }
     await deliver(openid, outTradeNo, wxOrderId, productId);
-    // 官方要求应答 XML（<ErrCode>0</ErrCode> = 成功；非 0 平台最多重试 15 次）
-    return '<xml><ErrCode>0</ErrCode><ErrMsg><![CDATA[success]]></ErrMsg></xml>';
+    // 官方云开发接入指引 9.3：回调云函数返回 { ErrCode: 0 } 平台即标记已发货、不再重试；
+    // 非 0 平台最多重试 15 次
+    return { ErrCode: 0, ErrMsg: 'success' };
   } catch (e) {
     console.error('[payCallback] 处理失败:', e.message);
     // 返回非 0 触发平台重试（最多 15 次）；推送丢失仍有 query_order 查单兜底
-    return '<xml><ErrCode>1</ErrCode><ErrMsg><![CDATA[INTERNAL_ERROR]]></ErrMsg></xml>';
+    return { ErrCode: 1, ErrMsg: 'INTERNAL_ERROR' };
   }
 };
