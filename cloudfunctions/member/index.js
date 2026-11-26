@@ -24,10 +24,11 @@ const https = require('https');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 
-/** 档位价格（分，须与 MP 后台道具价格一致）与商品名 */
+/** 档位价格（分，须与 MP 后台道具价格一致）与商品名
+ * v2.1.6：需求方临时将后台两道具改为 0.01 元测试价，代码同步 1 分（上线前恢复 1990/2990 时须同步改回） */
 const TIERS = {
-  vip: { label: 'VIP', totalFee: 1990 },
-  svip: { label: 'SVIP', totalFee: 2990 }
+  vip: { label: 'VIP', totalFee: 1 },
+  svip: { label: 'SVIP', totalFee: 1 }
 };
 /** 道具 ID（MP 后台虚拟支付 → 道具管理 实际发布的 ID；可经环境变量 VP_PRODUCT_* 覆盖）
  * v2.1.4：对齐需求方后台实际道具 ID——此前默认 vip_member/svip_member 与后台不符，导致拉起支付即失败 */
