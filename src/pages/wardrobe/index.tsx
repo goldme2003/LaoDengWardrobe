@@ -25,6 +25,9 @@ const PLAN_TYPE_ORDER = ['上装', '外套', '裤装', '裙装', '连衣裙', '�
 // v1.17.1：备选套序号中文（超出后回落数字）
 const PLAN_SET_CN = ['一', '二', '三', '四', '五'];
 
+/** v2.2.5：套装签名（衣物 id 排序后拼接）——用于剔除衣物完全相同、仅场景标签不同的重复套装 */
+const outfitSig = (ids: string[]): string => [...ids].sort().join('|');
+
 /** v1.4.3：小程序启动标记（由 app.tsx useLaunch 写入），首次进入首页时自动执行穿搭推荐 */
 const APP_LAUNCH_FLAG = 'ldw_app_launched';
 
@@ -58,6 +61,8 @@ const WardrobePage: React.FC = () => {
   // v1.10.0：明日推荐当天缓存（按衣橱隔离，跨天自动重置）
   const dailyOutfitsMap = useWardrobeStore((s) => s.dailyOutfits);
   const appendDailyOutfit = useWardrobeStore((s) => s.appendDailyOutfit);
+  // v2.2.5：今日备选套装——长按移出全部衣物后记住「已移出」，避免渲染时回落成整套预览
+  const [movedOutSets, setMovedOutSets] = useState<string[]>([]);
   // v1.12.0：自定义搭配场景（「＋ 场景」手输入库，如 相亲/约会/婚礼）
   const customScenes = useWardrobeStore((s) => s.customScenes);
   const addCustomScene = useWardrobeStore((s) => s.addCustomScene);
@@ -292,6 +297,8 @@ const WardrobePage: React.FC = () => {
     lastScrollTop.current = 0;
     activeTypeRef.current = '';
     setActiveType('');
+    // v2.2.5：切换衣橱后重置「已移出」的备选套装标记
+    setMovedOutSets([]);
   }, [currentWardrobeId]);
 
   // v0.6：明日穿搭已选件数（剔除已删除衣物）
@@ -366,19 +373,32 @@ const WardrobePage: React.FC = () => {
 
   const itemMap = useMemo(() => new Map(currentItems.map((it) => [it.id, it])), [currentItems]);
 
-  const cachedVMs = useMemo<OutfitVM[]>(
-    () =>
-      cachedEntries
-        .map((e) => ({
-          id: e.id,
-          scene: e.scene as SceneId,
-          sceneLabel: e.sceneLabel,
-          reason: e.reason,
-          source: e.source,
-          items: e.itemIds.map((id) => itemMap.get(id)).filter(Boolean) as ClothingItem[]
-        }))
-        .filter((vm) => vm.items.length > 0),
-    [cachedEntries, itemMap]
+  const cachedVMs = useMemo<OutfitVM[]>(() => {
+    // v2.2.5：按衣物组合去重——同一批衣物即使场景标签不同（如「日常」与「旅行」）只保留首套，
+    // 修复「多套备选衣物完全一样」；历史缓存中已有的重复套在展示层一并剔除
+    const seen = new Set<string>();
+    return cachedEntries
+      .map((e) => ({
+        id: e.id,
+        scene: e.scene as SceneId,
+        sceneLabel: e.sceneLabel,
+        reason: e.reason,
+        source: e.source,
+        items: e.itemIds.map((id) => itemMap.get(id)).filter(Boolean) as ClothingItem[]
+      }))
+      .filter((vm) => {
+        if (vm.items.length === 0) return false;
+        const sig = outfitSig(vm.items.map((it) => it.id));
+        if (seen.has(sig)) return false;
+        seen.add(sig);
+        return true;
+      });
+  }, [cachedEntries, itemMap]);
+
+  // v2.2.5：当前仍展示的备选套装（长按移出整套后隐藏；全部移出时提示「无备选套装」）
+  const visibleSets = useMemo(
+    () => cachedVMs.filter((vm) => !movedOutSets.includes(vm.id)),
+    [cachedVMs, movedOutSets]
   );
 
   // v1.18.0：自选套——明日穿搭中不属于任何备选套的衣物聚合为一套
@@ -518,13 +538,23 @@ const WardrobePage: React.FC = () => {
       const reqId = ++genReqRef.current;
       setGenLoading(true);
       const sceneUsed = sceneOverride || scene;
+      // v2.2.5：已有套装的衣物签名——新生成的搭配若与已有完全相同（仅场景标签不同）则视为重复
+      const existingSigs = new Set(
+        cachedEntries.filter((e) => e.itemIds.length > 0).map((e) => outfitSig(e.itemIds))
+      );
+      /** 从本地规则引擎结果中取第一套与已有套装不同的搭配（衣物过少时可能没有） */
+      const firstNewLocal = (): RecommendOutfit | null => {
+        const base = buildOutfits(weather, currentItems, sceneUsed);
+        return base.find((o) => !existingSigs.has(outfitSig(o.items.map((it) => it.id)))) || null;
+      };
       try {
         if (tierCfg.weatherLevel === 'basic') {
-          const base = buildOutfits(weather, currentItems, sceneUsed);
-          const pick = base[0];
+          const pick = firstNewLocal();
           if (pick && reqId === genReqRef.current) {
             appendLocalOutfit(pick);
             jumpToLatest();
+          } else if (reqId === genReqRef.current) {
+            Taro.showToast({ title: '衣橱衣物较少，暂时无法生成新的不同搭配', icon: 'none', duration: 2500 });
           }
           return;
         }
@@ -539,6 +569,10 @@ const WardrobePage: React.FC = () => {
         });
         if (res && reqId === genReqRef.current) {
           const picked = res.itemIds.map((id) => itemMap.get(id)).filter(Boolean) as ClothingItem[];
+          // v2.2.5：AI 返回的衣物与已有套装完全相同 → 视为重复，转本地规则引擎另取一套
+          if (picked.length && existingSigs.has(outfitSig(picked.map((it) => it.id)))) {
+            throw new Error('OUTFIT_DUPLICATE');
+          }
           if (picked.length) {
             const sceneLabel = sceneLabelOf(res.scene);
             appendDailyOutfit(currentWardrobeId, {
@@ -555,18 +589,21 @@ const WardrobePage: React.FC = () => {
         }
         throw new Error('OUTFIT_EMPTY');
       } catch (e) {
-        // 云函数未返回 / 出错：本地规则引擎兜底（v1.8.1 口径，不显示「兜底推荐」角标）
-        const base = buildOutfits(weather, currentItems, sceneUsed);
-        if (base[0] && reqId === genReqRef.current) {
-          appendLocalOutfit(base[0]);
+        // 云函数未返回 / 出错 / 与已有套装重复：本地规则引擎兜底（v1.8.1 口径，不显示「兜底推荐」角标）
+        const pick = firstNewLocal();
+        if (pick && reqId === genReqRef.current) {
+          appendLocalOutfit(pick);
           jumpToLatest();
+        } else if (reqId === genReqRef.current) {
+          // v2.2.5：衣物过少、本地也生成不出不同搭配时明确提示，且不占用当日套数
+          console.warn('[Wardrobe] 明日推荐生成失败：', (e as Error).message);
+          Taro.showToast({ title: '衣橱衣物较少，暂时无法生成新的不同搭配', icon: 'none', duration: 2500 });
         }
-        else console.warn('[Wardrobe] 明日推荐生成失败：', (e as Error).message);
       } finally {
         if (reqId === genReqRef.current) setGenLoading(false);
       }
     },
-    [weather, weatherFailed, weatherStale, currentItems, scene, tierCfg.weatherLevel, gender, age, aiLevel, itemMap, appendLocalOutfit, appendDailyOutfit, currentWardrobeId, sceneLabelOf, jumpToLatest]
+    [weather, weatherFailed, weatherStale, currentItems, scene, tierCfg.weatherLevel, gender, age, aiLevel, itemMap, appendLocalOutfit, appendDailyOutfit, currentWardrobeId, sceneLabelOf, jumpToLatest, cachedEntries]
   );
   const generateRef = useRef(generateOutfit);
   useEffect(() => {
@@ -1008,7 +1045,7 @@ const WardrobePage: React.FC = () => {
             <Text className={styles.planEntryDesc}>
               {tomorrowIds.length > 0
                 ? `已选 ${tomorrowIds.length} 件 · 衣橱长按衣物可加入`
-                : '衣橱长按衣物加入，或从备选套挑选'}
+                : '衣橱长按衣物加入，或从备选套装挑选'}
             </Text>
           </View>
           <Text className={styles.planEntryArrow}>›</Text>
@@ -1035,28 +1072,47 @@ const WardrobePage: React.FC = () => {
             />
           )}
 
-          {/* v1.17.1：今日备选套（首页推荐缓存）——整套点选应用；v1.20.5：长按套内图片移出单件 */}
-          {planGroups.length > 0 && cachedVMs.length > 0 && (
+          {/* v1.17.1：今日备选套装（首页推荐缓存）——点击套装应用；v1.20.5：长按图片移出单件
+              v2.2.5：长按移出最后一件后不再回退成整套预览（原逻辑 picked 为空即回落全套，
+              表现为「删掉最后一件又变回两件」）；整套移出后隐藏卡片，全部移出显示「无备选套装」 */}
+          {planGroups.length > 0 && visibleSets.length > 0 && (
             <View className={styles.planSets}>
-              <Text className={styles.planSectionTitle}>今日备选套（点击整套应用 · 长按图片移出）</Text>
-              {cachedVMs.map((vm, idx) => {
-                // v1.20.6 修复：长按移出后套内展示跟随实际勾选（picked）——
-                // 已应用（或部分移出）时只展示仍在明日穿搭中的衣物，未应用时展示整套预览
+              <Text className={styles.planSectionTitle}>今日备选套装（点击套装应用 · 长按图片移出）</Text>
+              {visibleSets.map((vm) => {
+                const idx = cachedVMs.findIndex((v) => v.id === vm.id);
+                const setNo = PLAN_SET_CN[idx] || idx + 1;
+                // 套内展示跟随实际勾选（picked）：已应用（或部分移出）时只展示仍在明日穿搭中的衣物
                 const picked = vm.items.filter((it) => tomorrowIds.includes(it.id));
                 const active = vm.items.length > 0 && picked.length === vm.items.length;
                 const shown = picked.length > 0 ? picked : vm.items;
+                const moveOutSet = () => {
+                  setMovedOutSets((prev) => (prev.includes(vm.id) ? prev : [...prev, vm.id]));
+                  Taro.showToast({ title: `已将第${setNo}套装移出备选`, icon: 'none' });
+                };
+                const removeItem = (it: ClothingItem) => {
+                  // 未应用的套装没有可移出的衣物：长按即整套移出
+                  if (picked.length === 0) {
+                    moveOutSet();
+                    return;
+                  }
+                  toggleTomorrowItem(it.id);
+                  if (picked.filter((p) => p.id !== it.id).length === 0) moveOutSet();
+                  else Taro.showToast({ title: `已将「${it.name}」移出明日穿搭`, icon: 'none' });
+                };
                 return (
                   <View
-                    key={`${vm.scene}-${idx}`}
+                    key={vm.id}
                     className={`${styles.planSetCard} ${active ? styles.planSetCardActive : ''}`}
                     onClick={() => {
+                      // 重新应用时同时取消「已移出」标记
+                      setMovedOutSets((prev) => prev.filter((k) => k !== vm.id));
                       adoptTomorrowItems(vm.items.map((it) => it.id));
-                      Taro.showToast({ title: `已选第${PLAN_SET_CN[idx] || idx + 1}套为明日穿搭`, icon: 'success' });
+                      Taro.showToast({ title: `已选第${setNo}套装为明日穿搭`, icon: 'success' });
                     }}
                   >
                     <View className={styles.planSetHeader}>
                       <Text className={styles.planSetTitle}>
-                        第{PLAN_SET_CN[idx] || idx + 1}套备选 · {vm.sceneLabel || '推荐搭配'}
+                        第{setNo}套装 · {vm.sceneLabel || '推荐搭配'}
                       </Text>
                       {active ? (
                         <Text className={styles.planSetCheck}>✓ 已选</Text>
@@ -1069,10 +1125,7 @@ const WardrobePage: React.FC = () => {
                         <View
                           key={it.id}
                           className={styles.planItem}
-                          onLongPress={() => {
-                            toggleTomorrowItem(it.id);
-                            Taro.showToast({ title: `已将「${it.name}」移出明日穿搭`, icon: 'none' });
-                          }}
+                          onLongPress={() => removeItem(it)}
                         >
                           <Image className={styles.planPhoto} src={it.photos[0]} mode='aspectFill' />
                           <Text className={styles.planName} numberOfLines={1}>
@@ -1087,19 +1140,19 @@ const WardrobePage: React.FC = () => {
             </View>
           )}
 
-          {/* v1.18.0：自选套——首页长按衣物加入的衣物聚合为一套；v1.20.5：长按套内图片移出单件 */}
+          {/* v1.18.0：自选套装——首页长按衣物加入的衣物聚合为一套；v1.20.5：长按图片移出单件 */}
           {customSetItems.length > 0 && (
             <View className={styles.planSets}>
-              <Text className={styles.planSectionTitle}>我的自选套（首页长按衣物加入 · 长按图片移出）</Text>
+              <Text className={styles.planSectionTitle}>我的自选套装（首页长按衣物加入 · 长按图片移出）</Text>
               <View
                 className={styles.planSetCard}
                 onClick={() => {
                   customSetItems.forEach((it) => toggleTomorrowItem(it.id));
-                  Taro.showToast({ title: '已取消自选套', icon: 'none' });
+                  Taro.showToast({ title: '已取消自选套装', icon: 'none' });
                 }}
               >
                 <View className={styles.planSetHeader}>
-                  <Text className={styles.planSetTitle}>自选搭配 · {customSetItems.length} 件</Text>
+                  <Text className={styles.planSetTitle}>自选套装 · {customSetItems.length} 件</Text>
                   <Text className={styles.planSetCheck}>✓ 已选 · 点击取消</Text>
                 </View>
                 <View className={styles.planGrid}>
@@ -1123,12 +1176,15 @@ const WardrobePage: React.FC = () => {
             </View>
           )}
 
-          {/* v1.20.5：手动勾选区已移除——衣物选择统一在首页长按完成；v1.20.8：「完成」按钮移除，经顶部「‹ 返回」退出 */}
-          {customSetItems.length === 0 && cachedVMs.length === 0 && (
+          {/* v1.20.5：手动勾选区已移除——衣物选择统一在首页长按完成；v1.20.8：「完成」按钮移除，经顶部「‹ 返回」退出
+              v2.2.5：备选套装全部移出后显示「无备选套装」 */}
+          {customSetItems.length === 0 && visibleSets.length === 0 && (
             <View className={styles.planSets}>
-              <Text className={styles.planSectionTitle}>暂无已选衣物</Text>
+              <Text className={styles.planSectionTitle}>无备选套装</Text>
               <Text className={styles.planSectionTip}>
-                回到衣橱长按衣物即可加入明日穿搭；也可在上方推荐卡生成今日备选套
+                {cachedVMs.length > 0
+                  ? '今日备选套装已全部移出，点击「‹ 返回」后可在推荐卡重新生成搭配'
+                  : '回到衣橱长按衣物即可加入明日穿搭；也可在上方推荐卡生成今日备选套装'}
               </Text>
             </View>
           )}
