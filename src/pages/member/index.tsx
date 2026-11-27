@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text } from '@tarojs/components';
+import { View, Text, Textarea } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
 import {
@@ -9,11 +9,29 @@ import {
   weatherLevelLabel,
   MemberTier
 } from '@/services/entitlement';
-import { MEMBER_FN_NAME, CLOUD_READY, WX_PAY_ENABLED } from '@/config/cloud';
+import { MEMBER_FN_NAME, CLOUD_READY } from '@/config/cloud';
+import { FEATURES } from '@/config/features';
 import styles from './index.module.scss';
 
 /** v2.1.5：支付中订单暂存 key——支付完成后档位未即时生效时，重进本页自动查单补发货（自愈） */
 const LAST_PAY_ORDER_KEY = 'ldw_last_pay_order';
+
+/** v2.2.0：开发者联系电话（售后说明区展示，点击复制） */
+const DEV_CONTACT_PHONE = '17612733117';
+
+/** v2.2.0：售后卡订单条目（listOrders 返回；status 为服务端复核后的退款状态） */
+interface RefundOrderItem {
+  orderId: string;
+  tier: MemberTier;
+  upgrade?: boolean;
+  totalFee: number;
+  status: 'paid' | 'refunding' | 'refunded' | 'refund_failed';
+  paidAt: number;
+  refundFee?: number;
+  refundReason?: string;
+  refundAcceptedAt?: number;
+  refundedAt?: number;
+}
 
 /** 权益矩阵行（与 PRD 10.6 三档矩阵一致；v1.10.0 文案修正 + 新增明日推荐次数；v1.19.1 权益数值调整 + 出差推荐前置） */
 const BENEFIT_ROWS: { label: string; values: Record<MemberTier, string> }[] = [
@@ -178,7 +196,7 @@ const MemberPage: React.FC = () => {
    * v2.1.8：不再限于 free 档（VIP 用户购买 SVIP 未生效时同样自愈）；暂存单号被误清时由服务端
    * 自动定位最近一笔未完成订单；仅在查单确认已支付后再按订单档位门槛轮询生效 */
   useEffect(() => {
-    if (!CLOUD_READY || !WX_PAY_ENABLED) return;
+    if (!CLOUD_READY || !FEATURES.paymentEnabled) return;
     if (payingTier) return;
     let stored = '';
     try {
@@ -219,7 +237,7 @@ const MemberPage: React.FC = () => {
       return;
     }
     // v2.1.0：开关关闭 = MP 后台虚拟支付尚未配置完成（OfferID/AppKey/道具），不发起支付
-    if (!WX_PAY_ENABLED) {
+    if (!FEATURES.paymentEnabled) {
       Taro.showModal({
         title: '会员开通暂未开放',
         content:
@@ -337,6 +355,132 @@ const MemberPage: React.FC = () => {
     }
   };
 
+  // ---------- v2.2.0：售后与退款 ----------
+  const REFUND_STATUS_TEXT: Record<RefundOrderItem['status'], string> = {
+    paid: '生效中',
+    refunding: '退款处理中',
+    refunded: '已退款',
+    refund_failed: '退款失败'
+  };
+
+  const [refundOrders, setRefundOrders] = useState<RefundOrderItem[]>([]);
+  const [refundLoading, setRefundLoading] = useState(false);
+  const [refundReason, setRefundReason] = useState('');
+  const [refundErr, setRefundErr] = useState('');
+  const [refundSubmitting, setRefundSubmitting] = useState(false);
+
+  /** 金额展示：分 → 元 */
+  const fenToYuan = (fen: number): string => `¥${(Number(fen || 0) / 100).toFixed(2)}`;
+  const fmtDate = (ts?: number): string => {
+    if (!ts) return '-';
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  /** 加载本人订单（服务端 listOrders 会顺带向平台复核「退款中」订单的最新状态并回写） */
+  const loadRefundOrders = async () => {
+    if (!CLOUD_READY || !FEATURES.paymentEnabled) return;
+    setRefundLoading(true);
+    try {
+      const res = await Taro.cloud.callFunction({
+        name: MEMBER_FN_NAME,
+        data: { action: 'listOrders' }
+      });
+      const result = (res.result || {}) as {
+        code?: string;
+        orders?: (Omit<RefundOrderItem, 'status'> & { status?: string })[];
+      };
+      if (result.code === 'OK') {
+        setRefundOrders(
+          (result.orders || []).filter((o) => o.status !== 'created') as RefundOrderItem[]
+        );
+      }
+    } catch (e) {
+      console.warn('[member] 售后订单加载失败:', e);
+    }
+    setRefundLoading(false);
+  };
+
+  // 会员用户进页加载订单与退款状态（进度实时展示在售后卡）
+  useEffect(() => {
+    if (memberTier !== 'free') void loadRefundOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memberTier]);
+
+  /** 可退款订单：最近一笔已支付/退款失败的订单（更早订单请电话联系开发者处理） */
+  const refundableOrder = refundOrders.find((o) => o.status === 'paid' || o.status === 'refund_failed');
+
+  const copyPhone = () => {
+    Taro.setClipboardData({ data: DEV_CONTACT_PHONE }).catch(() => undefined);
+  };
+
+  /** 提交退款申请：原因必填校验 → 确认弹窗 → 云端发起退款（受理后档位还原、金额原路退回） */
+  const handleRefundSubmit = async () => {
+    const reason = refundReason.trim();
+    if (!reason) {
+      // 必填校验：为空时无法提交
+      setRefundErr('请填写退款原因（必填）');
+      return;
+    }
+    if (!refundableOrder || refundSubmitting) return;
+    setRefundErr('');
+    const confirm = await Taro.showModal({
+      title: '确认申请退款',
+      content:
+        `将对「${TIERS[refundableOrder.tier].label}${refundableOrder.upgrade ? '（升级）' : ''}」订单发起全额退款（${fenToYuan(refundableOrder.totalFee)}）。` +
+        `退款成功后会员等级将还原至购买前的状态，退款金额原路退回（预计 1–3 个工作日到账）。确认继续？`,
+      confirmText: '申请退款',
+      cancelText: '再想想'
+    });
+    if (!confirm.confirm) return;
+    setRefundSubmitting(true);
+    Taro.showLoading({ title: '正在提交退款申请…', mask: true });
+    try {
+      const res = await Taro.cloud.callFunction({
+        name: MEMBER_FN_NAME,
+        data: { action: 'refundOrder', orderId: refundableOrder.orderId, reason }
+      });
+      const result = (res.result || {}) as {
+        code?: string;
+        message?: string;
+        refundFee?: number;
+        restoredTier?: MemberTier;
+        refundState?: string;
+      };
+      Taro.hideLoading();
+      if (result.code === 'OK') {
+        if (result.restoredTier) setMemberTier(result.restoredTier);
+        setRefundReason('');
+        Taro.showModal({
+          title: result.refundState === 'refunded' ? '退款完成' : '退款申请已提交',
+          content:
+            `退款金额 ${fenToYuan(result.refundFee || refundableOrder.totalFee)} 将原路退回（预计 1–3 个工作日到账）。` +
+            (result.restoredTier ? `会员等级已还原至「${TIERS[result.restoredTier].label}」。` : '') +
+            '可在下方售后卡跟踪退款进度。',
+          showCancel: false,
+          confirmText: '知道了'
+        });
+        void loadRefundOrders();
+      } else {
+        Taro.showModal({
+          title: '退款申请未成功',
+          content: `${result.message || '处理失败，请稍后重试'}。如持续失败请联系开发者：${DEV_CONTACT_PHONE}`,
+          showCancel: false,
+          confirmText: '知道了'
+        });
+      }
+    } catch (e) {
+      Taro.hideLoading();
+      Taro.showModal({
+        title: '退款申请未成功',
+        content: `网络异常，请稍后重试；如持续失败请联系开发者：${DEV_CONTACT_PHONE}`,
+        showCancel: false,
+        confirmText: '知道了'
+      });
+    }
+    setRefundSubmitting(false);
+  };
+
   return (
     <View className={styles.page} style={themeStyle}>
       {/* 当前身份卡 */}
@@ -361,9 +505,12 @@ const MemberPage: React.FC = () => {
           const active = memberTier === t;
           // v1.10.0：SVIP 为最高档——开通后所有付费档按钮均不可用（VIP 档显示「已含于 SVIP」）
           const locked = memberTier === 'svip';
-          // v2.0.2：个人主体收款受限——支付未开放时按钮显示「暂未开放」（点击说明原因）
-          const payClosed = !WX_PAY_ENABLED;
+          // v2.0.2：支付未开放时按钮显示「暂未开放」（点击说明原因）；v2.2.0：开关迁移至 FEATURES.paymentEnabled
+          const payClosed = !FEATURES.paymentEnabled;
           const disabled = active || locked || payingTier !== '' || payClosed;
+          // v2.2.0：VIP 升级 SVIP 仅需补差价（升级价，权益直接覆盖、无需重复全额购买）
+          const upgradePrice =
+            t === 'svip' && memberTier === 'vip' && cfg.upgradePrice != null ? cfg.upgradePrice : null;
           const btnText =
             payClosed && !active
               ? '暂未开放'
@@ -373,7 +520,9 @@ const MemberPage: React.FC = () => {
                   ? '当前等级'
                   : locked
                     ? '已含于 SVIP'
-                    : '立即开通';
+                    : upgradePrice != null
+                      ? '升级 SVIP'
+                      : '立即开通';
           return (
             <View
               key={t}
@@ -391,9 +540,15 @@ const MemberPage: React.FC = () => {
                 {t === 'svip' && <Text className={`${styles.priceTag} ${styles.priceTagSvip}`}>全权益</Text>}
               </View>
               <View className={styles.priceLine}>
-                <Text className={`${styles.priceNum} ${t === 'svip' ? styles.priceNumSvip : ''}`}>¥{cfg.price}</Text>
+                <Text className={`${styles.priceNum} ${t === 'svip' ? styles.priceNumSvip : ''}`}>
+                  ¥{upgradePrice != null ? upgradePrice : cfg.price}
+                </Text>
                 <Text className={styles.priceUnit}>/ 永久有效</Text>
+                {upgradePrice != null && <Text className={styles.priceOrigin}>¥{cfg.price}</Text>}
               </View>
+              {upgradePrice != null && (
+                <Text className={styles.upgradeTag}>VIP 升级价 · 仅补差价，权益直接覆盖</Text>
+              )}
               <View
                 className={[
                   styles.buyBtn,
@@ -411,8 +566,8 @@ const MemberPage: React.FC = () => {
         })}
       </View>
       <Text className={styles.payTip}>
-        {WX_PAY_ENABLED
-          ? '微信虚拟支付 · 一次开通、永久有效；支付完成后档位自动生效，更换设备登录同一微信即可恢复权益（iOS 端由 Apple 渠道代收，费率略有差异）。'
+        {FEATURES.paymentEnabled
+          ? `微信虚拟支付 · 一次开通、永久有效；${memberTier === 'vip' ? `VIP 升级 SVIP 仅需补差价 ¥${TIERS.svip.upgradePrice}（权益直接覆盖，无需重复购买）；` : ''}支付完成后档位自动生效，更换设备登录同一微信即可恢复权益（iOS 端由 Apple 渠道代收，费率略有差异）。`
           : '会员开通暂未开放：虚拟支付开通配置中（小程序后台虚拟支付 + 道具上架 + 凭据配置完成后即开放）。'}
       </Text>
 
@@ -433,6 +588,77 @@ const MemberPage: React.FC = () => {
             <Text className={`${styles.td} ${styles.tdSvip}`}>{row.values.svip}</Text>
           </View>
         ))}
+      </View>
+
+      {/* v2.2.0：售后与退款——说明区预留开发者联系电话（点击复制）；退款原因必填，受理后档位自动还原 */}
+      <View className={styles.refundCard}>
+        <View className={styles.refundHead}>
+          <Text className={styles.refundTitle}>售后与退款</Text>
+          <Text className={styles.refundPhone} onClick={copyPhone}>
+            开发者电话 {DEV_CONTACT_PHONE}（点击复制）
+          </Text>
+        </View>
+        <Text className={styles.refundTip}>
+          支付问题或退款请先电话联系开发者确认；退款成功后会员等级自动还原至购买前状态，退款金额原路退回（预计 1–3 个工作日到账）。
+        </Text>
+        {CLOUD_READY && FEATURES.paymentEnabled && memberTier !== 'free' && (
+          <View className={styles.refundBody}>
+            {refundLoading ? (
+              <Text className={styles.refundLoading}>订单加载中…</Text>
+            ) : refundOrders.length === 0 ? (
+              <Text className={styles.refundLoading}>暂无订单记录</Text>
+            ) : (
+              refundOrders.map((o) => (
+                <View key={o.orderId} className={styles.refundRow}>
+                  <Text className={styles.refundRowMain}>
+                    {TIERS[o.tier].label}
+                    {o.upgrade ? '（升级）' : ''} · {fenToYuan(o.totalFee)} · {fmtDate(o.paidAt)}
+                  </Text>
+                  <Text
+                    className={[
+                      styles.refundTag,
+                      o.status === 'refund_failed' ? styles.refundTagErr : '',
+                      o.status === 'refunded' || o.status === 'refunding' ? styles.refundTagOk : ''
+                    ].join(' ')}
+                  >
+                    {REFUND_STATUS_TEXT[o.status]}
+                  </Text>
+                </View>
+              ))
+            )}
+            {refundableOrder && (
+              <View className={styles.refundForm}>
+                <Text className={styles.refundLabel}>
+                  退款订单：{TIERS[refundableOrder.tier].label}
+                  {refundableOrder.upgrade ? '（升级）' : ''} · {fenToYuan(refundableOrder.totalFee)}
+                  （更早订单请电话联系开发者）
+                </Text>
+                <Textarea
+                  className={styles.refundTextarea}
+                  value={refundReason}
+                  maxlength={200}
+                  placeholder='请填写退款原因（必填），如：误操作购买、与预期不符…'
+                  onInput={(e) => {
+                    setRefundReason(e.detail.value);
+                    if (refundErr) setRefundErr('');
+                  }}
+                />
+                {!!refundErr && <Text className={styles.refundErr}>{refundErr}</Text>}
+                <View
+                  className={[
+                    styles.refundSubmit,
+                    !refundReason.trim() || refundSubmitting ? styles.refundSubmitDisabled : ''
+                  ].join(' ')}
+                  onClick={handleRefundSubmit}
+                >
+                  <Text className={styles.refundSubmitText}>
+                    {refundSubmitting ? '提交中…' : '申请退款'}
+                  </Text>
+                </View>
+              </View>
+            )}
+          </View>
+        )}
       </View>
 
       <Text className={styles.footTip}>

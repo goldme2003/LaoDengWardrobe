@@ -20,7 +20,11 @@
  * v2.1.7：修复兜底查单三处缺陷（缺 access_token / status 数字枚举按字符串匹配 / wx_order_id 字段名），
  *      已支付未发货订单（平台 status=2）重进会员页即可自动补发货。
  * v2.1.8：queryOrder 支持缺省 orderId 自动定位最近一笔未完成订单（7 天内），响应携带订单档位
- *      tier 配合前端按目标档位轮询生效——修复「已开通 VIP 后购买 SVIP 被已有 VIP 误判为开通成功」竞态。 */
+ *      tier 配合前端按目标档位轮询生效——修复「已开通 VIP 后购买 SVIP 被已有 VIP 误判为开通成功」竞态。
+ * v2.2.0：1) VIP 升级 SVIP 补差价——VIP 用户购买 SVIP 时改用升级道具（SVIP_Upgrade_Tool，补差价），
+ *      权益直接覆盖、无需重复全额购买；2) 新增售后退款链路——refundOrder（官方 POST /xpay/refund_order
+ *      发起退款任务，受理后会员档位自动还原为该用户剩余已支付订单中的最高档位）与 listOrders
+ *      （订单列表 + 退款状态复核：query_order status 5=商户侧扣款完成（退款中）/ 7=退款失败 / 8=用户侧收款完成）。 */
 const cloud = require('wx-server-sdk');
 const crypto = require('crypto');
 const https = require('https');
@@ -34,11 +38,16 @@ const TIERS = {
   vip: { label: 'VIP', totalFee: 1 },
   svip: { label: 'SVIP', totalFee: 1 }
 };
+/** v2.2.0：VIP 升级 SVIP 补差价道具价格（分）。当前测试期与后台道具一致为 1 分（0.01 元）；
+ * 上线时后台将升级道具改为 ¥10（1000 分），代码经环境变量 VP_SVIP_UPGRADE_PRICE=1000 配置（或改此默认值） */
+const SVIP_UPGRADE_FEE = Number(process.env.VP_SVIP_UPGRADE_PRICE) || 1;
 /** 道具 ID（MP 后台虚拟支付 → 道具管理 实际发布的 ID；可经环境变量 VP_PRODUCT_* 覆盖）
- * v2.1.4：对齐需求方后台实际道具 ID——此前默认 vip_member/svip_member 与后台不符，导致拉起支付即失败 */
+ * v2.1.4：对齐需求方后台实际道具 ID——此前默认 vip_member/svip_member 与后台不符，导致拉起支付即失败
+ * v2.2.0：新增升级道具 SVIP_Upgrade_Tool（¥10 补差价，MP 后台需新增该道具并发布） */
 const PRODUCT_IDS = {
   vip: process.env.VP_PRODUCT_VIP || 'VIP_Tool',
-  svip: process.env.VP_PRODUCT_SVIP || 'SVIP_Tool'
+  svip: process.env.VP_PRODUCT_SVIP || 'SVIP_Tool',
+  svipUpgrade: process.env.VP_PRODUCT_SVIP_UPGRADE || 'SVIP_Upgrade_Tool'
 };
 const OFFER_ID = process.env.VP_OFFER_ID || '';
 const APP_KEY = process.env.VP_APP_KEY || '';
@@ -186,6 +195,93 @@ async function queryXpayOrder(openid, outTradeNo) {
   return { res, paid, status };
 }
 
+// ==================== v2.2.0：售后退款 ====================
+
+/** 退款档位还原：members.tier = 该用户剩余已支付订单（不含退款中/已退款/未支付）中的最高档位；
+ * 无剩余已支付订单 → free。自动覆盖「VIP 升级 SVIP 退款后回到 VIP」「全额购买退款后回到 free」等场景 */
+async function restoreMemberTier(openid) {
+  const RANK = { free: 0, vip: 1, svip: 2 };
+  let tier = 'free';
+  try {
+    const res = await db.collection('orders').where({ openid, status: 'paid' }).limit(100).get();
+    (res.data || []).forEach((o) => {
+      if (RANK[o.tier] > RANK[tier]) tier = o.tier;
+    });
+  } catch (e) {
+    console.error('[member] 退款档位还原（查订单）失败：', e.message);
+    return null;
+  }
+  const now = Date.now();
+  const mRes = await db.collection('members').where({ openid }).limit(1).get();
+  const member = mRes.data && mRes.data[0];
+  if (member) {
+    await db.collection('members').doc(member._id).update({ data: { tier, updatedAt: now } });
+  } else {
+    await db.collection('members').add({ data: { openid, tier, createdAt: now, updatedAt: now } });
+  }
+  console.info('[member] 退款还原档位 openid =', openid, 'tier =', tier);
+  return tier;
+}
+
+/** 「退款中」订单向平台复核最新状态（query_order status 枚举：5=商户侧扣款完成（退款在途）/
+ * 7=退款失败 / 8=用户侧收款完成（退款最终成功）），并回写订单状态 */
+async function refreshRefundStatus(order) {
+  try {
+    const { res } = await queryXpayOrder(order.openid, order.outTradeNo);
+    const st = res && res.order ? Number(res.order.status) : NaN;
+    const now = Date.now();
+    if (st === 8) {
+      await db.collection('orders').doc(order._id).update({
+        data: {
+          status: 'refunded',
+          refundedAt: now,
+          refundFee: Number((res.order && res.order.refund_fee) || 0) || order.totalFee,
+          updatedAt: now
+        }
+      });
+      return 'refunded';
+    }
+    if (st === 7) {
+      await db.collection('orders').doc(order._id).update({ data: { status: 'refund_failed', updatedAt: now } });
+      return 'refund_failed';
+    }
+    return 'refunding'; // 其余状态（含 5）视为退款任务进行中
+  } catch (e) {
+    console.warn('[member] 退款状态复核失败：', e.message);
+    return 'refunding';
+  }
+}
+
+/** 发起退款任务（官方 POST /xpay/refund_order?access_token=ACCESS_TOKEN&pay_sig=PAY_SIG，
+ * pay_sig = HMAC-SHA256(AppKey, '/xpay/refund_order&' + body)）。
+ * 注意：该接口仅「启动」退款任务，最终结果须经 query_order 复核（refreshRefundStatus）；
+ * left_fee 必须与查单返回一致，否则报 268490016 */
+async function refundXpayOrder(openid, outTradeNo, leftFee, reasonText) {
+  const accessToken = await getAccessToken();
+  // 退款单号：8–32 位、仅字母/数字/_/-（LDWR + 时间戳 + 3 位随机）
+  const refundOrderId = `LDWR${Date.now()}${Math.floor(Math.random() * 1000)
+    .toString()
+    .padStart(3, '0')}`.slice(0, 32);
+  const body = JSON.stringify({
+    openid,
+    order_id: outTradeNo,
+    refund_order_id: refundOrderId,
+    left_fee: leftFee,
+    refund_fee: leftFee, // 全额退款（0, left_fee]
+    biz_meta: String(reasonText || '').slice(0, 200), // 用户自述退款原因（官方 refund_reason 仅支持固定枚举）
+    refund_reason: '3', // 枚举：3-意愿问题，用户主动退款
+    req_from: '2', // 2-用户自己发起退款流程
+    env: 0
+  });
+  const paySig = hmacSha256(APP_KEY, '/xpay/refund_order&' + body);
+  const res = await httpJson(
+    `/xpay/refund_order?access_token=${encodeURIComponent(accessToken)}&pay_sig=${paySig}`,
+    { method: 'POST', body }
+  );
+  console.info('[member] refund_order 原始应答:', JSON.stringify(res).slice(0, 500));
+  return { res, refundOrderId };
+}
+
 exports.main = async (event = {}) => {
   const { OPENID } = cloud.getWXContext();
   const action = event.action || 'getMember';
@@ -246,7 +342,10 @@ exports.main = async (event = {}) => {
       return { code: 'SIGN_ERROR', message: '支付初始化失败，请重试' };
     }
     const cfg = TIERS[tier];
-    const productId = PRODUCT_IDS[tier];
+    // v2.2.0：VIP 升级 SVIP 补差价——改用升级道具（价格/道具 ID 均须与 MP 后台一致）
+    const isUpgrade = tier === 'svip' && current === 'vip';
+    const productId = isUpgrade ? PRODUCT_IDS.svipUpgrade : PRODUCT_IDS[tier];
+    const totalFee = isUpgrade ? SVIP_UPGRADE_FEE : cfg.totalFee;
     // 业务单号：8–32 位、唯一、不以下划线开头（官方要求）
     const outTradeNo = `LDW${Date.now()}${Math.floor(Math.random() * 1000)
       .toString()
@@ -257,7 +356,8 @@ exports.main = async (event = {}) => {
         data: {
           openid: OPENID,
           tier,
-          totalFee: cfg.totalFee,
+          totalFee,
+          upgrade: isUpgrade,
           payMode: 'once',
           payChannel: 'virtual',
           productId,
@@ -278,9 +378,9 @@ exports.main = async (event = {}) => {
       env: 0,
       currencyType: 'CNY',
       productId,
-      goodsPrice: cfg.totalFee,
+      goodsPrice: totalFee,
       outTradeNo,
-      attach: JSON.stringify({ tier, openid: OPENID })
+      attach: JSON.stringify({ tier, openid: OPENID, upgrade: isUpgrade })
     });
     try {
       const paySig = hmacSha256(APP_KEY, 'requestVirtualPayment&' + signData);
@@ -353,6 +453,157 @@ exports.main = async (event = {}) => {
     } catch (e) {
       console.error('[member] 查单失败：', e.message);
       return { code: 'QUERY_ERROR', message: '查单失败，请稍后重试' };
+    }
+  }
+
+  // ---------- v2.2.0：订单列表（售后卡展示 + 退款状态复核） ----------
+  if (action === 'listOrders') {
+    try {
+      const res = await db
+        .collection('orders')
+        .where({ openid: OPENID })
+        .orderBy('createdAt', 'desc')
+        .limit(10)
+        .get();
+      const out = [];
+      for (const o of res.data || []) {
+        let status = o.status;
+        if (status === 'refunding') {
+          // 退款中订单顺带向平台复核最新结果并回写（用户重进页面即可看到退款进度）
+          status = await refreshRefundStatus(o);
+        }
+        out.push({
+          orderId: o._id,
+          tier: o.tier,
+          upgrade: !!o.upgrade,
+          totalFee: o.totalFee,
+          status,
+          paidAt: o.paidAt || 0,
+          refundFee: o.refundFee || 0,
+          refundReason: o.refundReason || '',
+          refundAcceptedAt: o.refundAcceptedAt || 0,
+          refundedAt: o.refundedAt || 0
+        });
+      }
+      return { code: 'OK', orders: out };
+    } catch (e) {
+      console.error('[member] 订单列表查询失败：', e.message);
+      return { code: 'DB_ERROR', message: '订单查询失败' };
+    }
+  }
+
+  // ---------- v2.2.0：申请退款（原因必填；受理后档位自动还原，金额原路退回） ----------
+  if (action === 'refundOrder') {
+    const reason = String(event.reason || '').trim();
+    if (!reason) {
+      return { code: 'BAD_PARAM', message: '请填写退款原因' };
+    }
+    if (!OFFER_ID || !APP_KEY || !WX_APP_SECRET) {
+      return { code: 'NOT_CONFIGURED', message: '虚拟支付开通配置中' };
+    }
+    // 定位订单：orderId 优先（校验归属），缺省取最近一笔已支付订单
+    let order = null;
+    try {
+      if (event.orderId) {
+        const res = await db.collection('orders').doc(event.orderId).get();
+        order = res.data;
+        if (order && order.openid !== OPENID) order = null;
+      } else {
+        const res = await db
+          .collection('orders')
+          .where({ openid: OPENID, status: 'paid' })
+          .orderBy('createdAt', 'desc')
+          .limit(1)
+          .get();
+        order = (res.data && res.data[0]) || null;
+      }
+    } catch (e) {
+      return { code: 'BAD_PARAM', message: '订单不存在' };
+    }
+    if (!order) {
+      return { code: 'BAD_PARAM', message: '未找到可退款的订单' };
+    }
+    if (order.status === 'refunded') {
+      return { code: 'ALREADY_REFUNDED', message: '该订单已退款' };
+    }
+    if (order.status === 'refunding') {
+      const st = await refreshRefundStatus(order);
+      return st === 'refunded'
+        ? { code: 'OK', refundState: 'refunded', message: '退款已完成' }
+        : { code: 'REFUND_IN_PROGRESS', message: '退款处理中，请稍后查看结果' };
+    }
+    if (order.status !== 'paid' && order.status !== 'refund_failed') {
+      return { code: 'BAD_PARAM', message: '订单不可退款' };
+    }
+    // 查单：确认支付状态 + 取 left_fee（官方要求与查单一致）/ wx_order_id
+    let leftFee = 0;
+    let wxOrderId = '';
+    try {
+      const { paid, res } = await queryXpayOrder(order.openid, order.outTradeNo);
+      const platformOrder = res && res.order;
+      if (platformOrder) {
+        wxOrderId = platformOrder.wx_order_id || '';
+        leftFee = Number(platformOrder.left_fee);
+        const st = Number(platformOrder.status);
+        if (st === 8) {
+          // 平台侧退款已完成（此前已发起）：直接对账回写并还原档位
+          const now = Date.now();
+          const refundFee = Number(platformOrder.refund_fee) || order.totalFee;
+          await db.collection('orders').doc(order._id).update({
+            data: { status: 'refunded', refundedAt: now, refundFee, updatedAt: now }
+          });
+          const restoredTier = await restoreMemberTier(order.openid);
+          return { code: 'OK', refundState: 'refunded', refundFee, restoredTier };
+        }
+        if (st === 5) {
+          // 商户侧扣款完成（退款任务已在途）：标记退款中并还原档位
+          await db.collection('orders').doc(order._id).update({
+            data: { status: 'refunding', updatedAt: Date.now() }
+          });
+          const restoredTier = await restoreMemberTier(order.openid);
+          return { code: 'OK', refundState: 'refunding', restoredTier, message: '退款处理中' };
+        }
+        if (isNaN(leftFee) || leftFee <= 0) {
+          leftFee = Number(platformOrder.paid_fee) || order.totalFee;
+        }
+      }
+      if (!paid) {
+        return { code: 'NOT_PAID', message: '订单未支付完成，无法退款' };
+      }
+      if (isNaN(leftFee) || leftFee <= 0) leftFee = order.totalFee;
+    } catch (e) {
+      console.error('[member] 退款前查单失败：', e.message);
+      return { code: 'QUERY_ERROR', message: '退款初始化失败，请稍后重试' };
+    }
+    // 发起退款任务（errcode 0 受理；268490014 = 退款操作已在进行中，等同受理）
+    try {
+      const { res } = await refundXpayOrder(order.openid, order.outTradeNo, leftFee, reason);
+      if (res && (res.errcode === 0 || res.errcode === 268490014)) {
+        const now = Date.now();
+        await db.collection('orders').doc(order._id).update({
+          data: {
+            status: 'refunding',
+            refundOrderId: res.refund_order_id || '',
+            refundWxOrderId: res.refund_wx_order_id || '',
+            refundFee: leftFee,
+            refundReason: reason,
+            refundAcceptedAt: now,
+            updatedAt: now,
+            ...(wxOrderId ? { wxOrderId } : {})
+          }
+        });
+        const restoredTier = await restoreMemberTier(order.openid);
+        return { code: 'OK', refundState: 'refunding', refundFee: leftFee, restoredTier };
+      }
+      console.error('[member] refund_order 失败:', res && res.errcode, res && res.errmsg);
+      return {
+        code: 'REFUND_FAILED',
+        message: '退款发起失败：' + ((res && res.errmsg) || '平台异常'),
+        provider: { errcode: res && res.errcode, errmsg: res && res.errmsg }
+      };
+    } catch (e) {
+      console.error('[member] 退款请求异常：', e.message);
+      return { code: 'REFUND_FAILED', message: '退款请求异常，请稍后重试' };
     }
   }
 
