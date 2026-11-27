@@ -107,5 +107,47 @@ export const generateSeasonalImage = async ({
     return image;
   }
   console.warn('[Seasonal] 当季图生成不可用：', result.code, result.message);
-  throw new Error(result.code || 'GENERATE_FAILED');
+  // v2.2.4：错误对象同时携带业务码与云端详情（上游 HTTP 状态 / error.code / content_filter），
+  // 界面对已知码展示友好文案，未知原因直接展示详情便于定位（测试阶段）
+  const err = new Error(result.message || result.code || 'GENERATE_FAILED') as Error & { code?: string };
+  err.code = result.code || 'GENERATE_FAILED';
+  throw err;
+};
+
+/** 生成结果可预览的 URL（v2.2.4）：cloud:// fileID 换取临时 https 链接，本地路径原样返回 */
+export const resolveSlideUrl = async (src: string): Promise<string> => {
+  if (!src.startsWith('cloud://')) return src;
+  const res = await Taro.cloud.getTempFileURL({ fileList: [src] });
+  const file = res.fileList && res.fileList[0];
+  if (!file || !file.tempFileURL) throw new Error('TEMP_URL_FAILED');
+  return file.tempFileURL;
+};
+
+/** 保存大图到相册（v2.2.4）：cloud:// 先下载为临时文件，本地路径直接保存；
+ * 相册权限被拒时引导打开设置页，返回是否保存成功。 */
+export const saveSlideToAlbum = async (src: string): Promise<boolean> => {
+  let filePath = src;
+  if (src.startsWith('cloud://')) {
+    const dl = await Taro.cloud.downloadFile({ fileID: src });
+    filePath = dl.tempFilePath;
+  }
+  try {
+    await Taro.saveImageToPhotosAlbum({ filePath });
+    return true;
+  } catch (e) {
+    const msg = ((e as Error) && (e as Error).message) || '';
+    if (msg.indexOf('auth deny') >= 0 || msg.indexOf('authorize') >= 0 || msg.indexOf('permission') >= 0) {
+      Taro.showModal({
+        title: '需要相册权限',
+        content: '请在设置中允许「保存图片到相册」后重试',
+        confirmText: '去设置',
+        success: (r) => {
+          if (r.confirm) Taro.openSetting({});
+        }
+      });
+      return false;
+    }
+    if (msg.indexOf('cancel') >= 0) return false;
+    throw new Error('SAVE_FAILED');
+  }
 };

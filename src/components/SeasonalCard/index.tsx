@@ -3,7 +3,13 @@ import { View, Text, Image, Swiper, SwiperItem, Input } from '@tarojs/components
 import Taro from '@tarojs/taro';
 import type { Gender } from '@/types';
 import type { MemberTier } from '@/services/entitlement';
-import { loadCachedSeasonalImages, generateSeasonalImage, SeasonalImage } from '@/services/seasonalImages';
+import {
+  loadCachedSeasonalImages,
+  generateSeasonalImage,
+  resolveSlideUrl,
+  saveSlideToAlbum,
+  SeasonalImage
+} from '@/services/seasonalImages';
 import { FEATURES } from '@/config/features';
 import autumnM1 from '@/assets/seasonal/autumn-m-1.jpg';
 import autumnM2 from '@/assets/seasonal/autumn-m-2.jpg';
@@ -126,6 +132,8 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onSho
   const [slides, setSlides] = useState<SeasonalImage[]>([]);
   const [genLoading, setGenLoading] = useState(false);
   const [genErr, setGenErr] = useState('');
+  // v2.2.4：保存大图进行中（防重复点击）
+  const [saving, setSaving] = useState(false);
   // v1.22.0：分阶段生成提示（对齐明日穿搭文案，突出 AI 与专业穿搭身份）
   const [genHint, setGenHint] = useState('');
   const [adding, setAdding] = useState(false);
@@ -207,14 +215,49 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onSho
         });
         Taro.showToast({ title: '已生成', icon: 'success' });
       } catch (e) {
-        const code = (e as Error).message || 'GENERATE_FAILED';
-        setGenErr(GEN_ERROR_TEXT[code] || GEN_ERROR_TEXT.GENERATE_FAILED);
+        const err = e as Error & { code?: string };
+        const code = err.code || err.message || 'GENERATE_FAILED';
+        // 已知业务码展示友好文案；未知原因（上游错误详情）直接展示，便于定位生图失败原因
+        setGenErr(GEN_ERROR_TEXT[code] || `生成失败：${String(err.message || '请稍后重试').slice(0, 60)}`);
       } finally {
         setGenLoading(false);
         genLabelRef.current = '';
       }
     },
     [genLoading, exhausted, slides, gender, age, tier, onShow]
+  );
+
+  /** v2.2.4：点击图片看大图（cloud:// 先换临时链接），预览菜单支持双指缩放与原生保存 */
+  const handlePreview = useCallback(async (src: string) => {
+    try {
+      Taro.showLoading({ title: '打开中…', mask: true });
+      const url = await resolveSlideUrl(src);
+      Taro.hideLoading();
+      Taro.previewImage({ urls: [url] });
+    } catch (e) {
+      Taro.hideLoading();
+      Taro.showToast({ title: '预览失败，请重试', icon: 'none' });
+    }
+  }, []);
+
+  /** v2.2.4：保存大图到相册（cloud:// 先下载临时文件；权限被拒引导去设置） */
+  const handleSave = useCallback(
+    async (src: string) => {
+      if (saving) return;
+      setSaving(true);
+      Taro.showLoading({ title: '保存中…', mask: true });
+      try {
+        const ok = await saveSlideToAlbum(src);
+        Taro.hideLoading();
+        if (ok) Taro.showToast({ title: '已保存到相册', icon: 'success' });
+      } catch (e) {
+        Taro.hideLoading();
+        Taro.showToast({ title: '保存失败，请重试', icon: 'none' });
+      } finally {
+        setSaving(false);
+      }
+    },
+    [saving]
   );
 
   const confirmAdd = () => {
@@ -276,9 +319,18 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onSho
         <Swiper className={styles.swiper} indicatorDots={false}>
           {displaySlides.map((s, i) => (
             <SwiperItem key={`${s.label}-${i}`} className={styles.slide}>
-              <Image className={styles.photo} src={s.src} mode='aspectFill' />
+              <Image
+                className={styles.photo}
+                src={s.src}
+                mode='aspectFill'
+                onClick={() => handlePreview(s.src)}
+              />
               <View className={styles.caption}>
                 <Text className={styles.captionText}>{s.label}</Text>
+              </View>
+              {/* v2.2.4：保存大图到相册 */}
+              <View className={styles.saveBtn} onClick={() => handleSave(s.src)}>
+                <Text className={styles.saveBtnText}>保存</Text>
               </View>
             </SwiperItem>
           ))}
@@ -298,13 +350,22 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onSho
           >
             {displaySlides.map((s, i) => (
               <SwiperItem key={`${s.label}-${i}`} className={styles.slide}>
-                <Image className={styles.photo} src={s.src} mode='aspectFill' />
+                <Image
+                  className={styles.photo}
+                  src={s.src}
+                  mode='aspectFill'
+                  onClick={() => handlePreview(s.src)}
+                />
                 {/* AI 生成标识 / 示例标识（生成式内容显式区分） */}
                 <View className={styles.aiTag}>
                   <Text className={styles.aiTagText}>{s.ai ? 'AI 生成' : '示例'}</Text>
                 </View>
                 <View className={styles.caption}>
                   <Text className={styles.captionText}>{s.label}</Text>
+                </View>
+                {/* v2.2.4：保存大图到相册 */}
+                <View className={styles.saveBtn} onClick={() => handleSave(s.src)}>
+                  <Text className={styles.saveBtnText}>保存</Text>
                 </View>
               </SwiperItem>
             ))}

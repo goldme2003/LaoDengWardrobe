@@ -74,6 +74,25 @@
   color: #ffffff;
 }
 
+/* v2.2.4：保存大图到相册（与 caption 同款胶囊样式，右下角） */
+.saveBtn {
+  position: absolute;
+  right: $spacing-sm;
+  bottom: $spacing-md;
+  padding: 4rpx $spacing-sm;
+  border-radius: $radius-round;
+  background: rgba(0, 0, 0, 0.45);
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.saveBtnText {
+  font-size: $font-size-xs;
+  color: #ffffff;
+}
+
 /* v1.13.0：AI 生成标识（生成式内容显式标识）与加载骨架 */
 .aiTag {
   position: absolute;

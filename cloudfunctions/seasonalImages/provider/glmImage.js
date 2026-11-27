@@ -15,13 +15,13 @@ const IMAGE_PATH = '/api/paas/v4/images/generations';
 const MODEL = 'glm-image';
 /** GLM-IMAGE 支持的输出尺寸；当季卡为竖版展示，官方示例 1280x1280 兜底可用 */
 const IMAGE_SIZE = '1280x1280';
-/** 单张生图硬超时
- * v2.2.2：35s → 40s。v2.2.1 实测 GLM-IMAGE 同步生图常超 35s 未返回，被本地超时提前掐断。
- * v2.2.3：40s → 50s，与云函数实际超时（`cli cloud functions info` 查得 timeout=50，config.json
- * 的 60s 不随 CLI 部署生效）一致——生图最长可用满函数时长，即便超时也由本地定时器先返回
- * `GLM_IMAGE_TIMEOUT`，而不是被平台直接终止（平台终止时函数日志无业务错误信息）。
- * 注意：生图耗满 50s 时下载/转存会被平台裁掉，此时该次生成已计费但图片丢失。 */
-const GEN_TIMEOUT = 50000;
+/** 单张生图硬超时（与云函数实际超时一致）
+ * v2.2.2：35s → 40s（v2.2.1 实测 GLM-IMAGE 同步生图常超 35s 未返回，被本地超时提前掐断）。
+ * v2.2.3：40s → 50s（当时云端 timeout=50，config.json 的 60s 不随 CLI 部署生效）。
+ * v2.2.4：50s → 60s——需求方已在云开发控制台把该函数超时调到 60s，本地对齐，生图可用满函数时长；
+ * 即便上游 60s 未返回，也由本地定时器先返回 `GLM_IMAGE_TIMEOUT`（带诊断日志），而不是被平台直接终止。
+ * 注意：生图耗满 60s 时下载/转存会被平台裁掉，此时该次生成已计费但图片丢失。 */
+const GEN_TIMEOUT = 60000;
 const DOWNLOAD_TIMEOUT = 20000;
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 
@@ -82,6 +82,8 @@ function requestRaw(apiKey, body, timeout) {
           res.on('aborted', () => finish(new Error('GLM_IMAGE_ABORTED')));
           res.on('end', () => {
             if (res.statusCode !== 200) {
+              // v2.2.4：完整打印上游错误响应，云端日志可直接定位（余额/权限/参数等）
+              console.error(`[seasonalImages] GLM HTTP ${res.statusCode}：${buf.slice(0, 500)}`);
               finish(new Error(`GLM_IMAGE_HTTP_${res.statusCode}: ${buf.slice(0, 300)}`));
               return;
             }
@@ -146,6 +148,27 @@ function parseImageResponse(raw) {
   }
 }
 
+/** v2.2.4：识别「HTTP 200 但生成失败」的上游响应（对齐官方文档的两种失败形态）
+ * ① error 对象：{ error: { code, message } }（如余额不足、模型无权限、参数非法）；
+ * ② 内容安全拦截：content_filter 数组非空且 data 中无图片（如提示词命中风控）。
+ * 命中时抛出带上游错误码的异常，错误信息透传到函数返回值与云端日志。 */
+function assertNoUpstreamError(raw) {
+  let parsed = null;
+  try {
+    parsed = JSON.parse(String(raw || ''));
+  } catch (e) {
+    return null;
+  }
+  const err = parsed && parsed.error;
+  if (err && typeof err === 'object' && (err.code || err.message)) {
+    return `GLM_IMAGE_UPSTREAM_${err.code || 'UNKNOWN'}: ${String(err.message || '').slice(0, 200)}`;
+  }
+  if (Array.isArray(parsed && parsed.content_filter) && parsed.content_filter.length > 0) {
+    return 'GLM_IMAGE_CONTENT_FILTERED: 生成内容被上游安全策略拦截，请调整风格描述后重试';
+  }
+  return null;
+}
+
 /** 文生图：返回图片 URL（请求结构对齐智谱开放平台官方示例：model + prompt + size） */
 async function callGlmImage(prompt) {
   const apiKey = resolveKey();
@@ -158,6 +181,11 @@ async function callGlmImage(prompt) {
   const found = parseImageResponse(raw);
   const url = normalizeImageUrl(found);
   if (!url) {
+    const upstreamErr = assertNoUpstreamError(raw);
+    if (upstreamErr) {
+      console.error(`[seasonalImages] GLM 生成失败（HTTP 200）：${String(raw).slice(0, 500)}`);
+      throw new Error(upstreamErr);
+    }
     throw new Error('BAD_IMAGE_URL: ' + String(found || raw).slice(0, 120));
   }
   console.log(`[seasonalImages] ${MODEL} 生图成功，耗时 ${Date.now() - startedAt}ms`);

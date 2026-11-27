@@ -165,8 +165,9 @@ async function recordUsage(monthKey, count) {
 
 /** v1.14.0：版本标识（启动日志与 ping 均输出，用于确认云端部署的是否为最新代码）
  * v2.2.1 GLM模型版：生图模型切换为智谱 GLM-IMAGE（glm-image，provider/glmImage.js），原混元生图 provider 已移除
- * v2.2.2：修复 GLM 生图 35s 硬超时导致的 GLM_IMAGE_TIMEOUT；提示词补充具体年龄与穿着场景 */
-const VERSION = 'v2.2.2-glm';
+ * v2.2.2：修复 GLM 生图 35s 硬超时导致的 GLM_IMAGE_TIMEOUT；提示词补充具体年龄与穿着场景
+ * v2.2.4：上游错误透传（error 对象 / content_filter 拦截显式识别并返回给前端） */
+const VERSION = 'v2.2.4-glm';
 
 async function generateStyle({ dateKey, seasonKey, gender, age, ageGroup, styleKey, label, customText }) {
   const prompt = buildPrompt({ seasonKey, gender, age, ageGroup, styleKey, customText });

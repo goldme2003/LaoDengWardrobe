@@ -1,7 +1,7 @@
 import { CustomDimension, Gender, ThemeId, BodyProfile } from '@/types';
 
 /** 当前版本号（在「我的」页展示） */
-export const APP_VERSION = 'v2.2.3';
+export const APP_VERSION = 'v2.2.4';
 
 /** 当前版本代号（v2.2.1 起，在「关于」页随版本号展示） */
 export const APP_CODENAME = 'GLM模型版';
