@@ -222,6 +222,150 @@
 
 /* v2.0.0：测试档位切换区（devBox 系列）已随发布版移除 */
 
+/* v2.2.0：VIP 升级价展示（原价划线 + 升级价角标） */
+.priceOrigin {
+  margin-left: 10rpx;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+  text-decoration: line-through;
+}
+
+.upgradeTag {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 20rpx;
+  color: #b07d50;
+}
+
+/* v2.2.0：售后与退款卡（说明区含开发者联系电话） */
+.refundCard {
+  margin-bottom: $spacing-md;
+  padding: $spacing-md;
+  border-radius: $radius-lg;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.refundHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.refundTitle {
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+  color: $color-text-primary;
+}
+
+.refundPhone {
+  font-size: $font-size-xs;
+  color: #b07d50;
+}
+
+.refundTip {
+  display: block;
+  margin-top: 10rpx;
+  font-size: $font-size-xs;
+  line-height: 1.6;
+  color: $color-text-tertiary;
+}
+
+.refundBody {
+  margin-top: $spacing-sm;
+}
+
+.refundLoading {
+  display: block;
+  font-size: $font-size-xs;
+  color: $color-text-tertiary;
+}
+
+.refundRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12rpx 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.refundRowMain {
+  font-size: $font-size-xs;
+  color: $color-text-primary;
+}
+
+.refundTag {
+  flex-shrink: 0;
+  padding: 2rpx 14rpx;
+  border-radius: $radius-round;
+  background: rgba(176, 125, 80, 0.12);
+  font-size: 20rpx;
+  color: #b07d50;
+}
+
+.refundTagOk {
+  background: rgba(82, 196, 26, 0.12);
+  color: #52c41a;
+}
+
+.refundTagErr {
+  background: rgba(245, 63, 63, 0.1);
+  color: #f53f3f;
+}
+
+.refundForm {
+  margin-top: $spacing-sm;
+}
+
+.refundLabel {
+  display: block;
+  margin-bottom: 10rpx;
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+}
+
+.refundTextarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 120rpx;
+  padding: 16rpx;
+  border-radius: $radius-md;
+  background: #faf7f2;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  font-size: $font-size-sm;
+  color: $color-text-primary;
+}
+
+.refundErr {
+  display: block;
+  margin-top: 8rpx;
+  font-size: $font-size-xs;
+  color: #f53f3f;
+}
+
+.refundSubmit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 16rpx;
+  padding: 14rpx 0;
+  border-radius: $radius-round;
+  background: #b07d50;
+}
+
+.refundSubmitDisabled {
+  opacity: 0.45;
+}
+
+.refundSubmitText {
+  font-size: $font-size-sm;
+  color: #ffffff;
+}
+
 .footTip {
   display: block;
   font-size: $font-size-xs;

@@ -9,7 +9,9 @@
  *   6. 照片上传（衣物/日记/试穿照片，分批 5 张、路径去重、容量按档位约束、fileID 回填不打脏；
  *      v1.21.0 起试穿照片随同步上传——此前仅衣物/日记上传，快照内试穿照片为本地临时路径，
  *      换设备拉取、云端覆盖回写或微信清理临时文件后路径失效，导致试穿图片无法显示）；
- *   7. 快照冲突策略（v1.16.0，需求方确认）：如遇冲突，云端覆盖本地——同步范围自动以云端为准，不再三选一；
+ *   7. 快照冲突策略（v2.2.0）：冲突时弹窗由用户三选一——使用云端覆盖本机 / 本机覆盖云端 / 智能合并
+ *      （两端最新保留，实体新者胜 + 计数取 max）；「暂不处理」保留本机数据暂停上行，两侧快照
+ *      自动存为冲突副本（30 天，服务端写入）；此前 v1.16.0 为云端覆盖本地；
  *   8. 会员档位（v2.0.0）：服务端权威（members 订单校验，微信支付回调写入），login 返回后回写本地；
  *      客户端上报与 setTier 通道已随测试模式移除（档位不入快照）；
  *   9. 单端互踢（v1.19.0，需求方确认）：登录上报 deviceId，服务端登记唯一活跃设备；
@@ -42,7 +44,7 @@ export type SyncStatus =
   | 'pending' // 有变更待上行（防抖/重试中）
   | 'syncing' // 同步中
   | 'kicked' // v1.19.0：账号已在其他设备登录，本机暂停云同步（本地数据保留，可手动「立即同步」接管）
-  | 'error'; // 登录或同步失败（可重试；v1.16.0 起冲突自动以云端覆盖本地，不再有待处理冲突态）
+  | 'error'; // 登录或同步失败（可重试；v2.2.0 起冲突弹窗未处理时也置 error，本机数据保留）
 
 /** 云端快照数据结构（同步范围，见设计方案 4.4；与服务端 wardrobe_snapshots.data 一致） */
 export interface SnapshotData {
@@ -91,6 +93,33 @@ const setSyncState = (patch: Partial<SyncState>) => useSyncStore.setState(patch)
 
 /** v1.15.1：档位门控——云同步（含 push/pull/照片上传）为 VIP/SVIP 权益，所有同步动作前统一校验 */
 const canSync = (): boolean => tierOf(useWardrobeStore.getState().memberTier).cloudSync === 'cloud';
+
+/** v2.2.0：冲突处理选择（用户三选一：云端覆盖本机 / 本机覆盖云端 / 智能合并；取消 = 暂不处理） */
+type ConflictChoice = 'cloud' | 'local' | 'merge' | 'later';
+
+/** v2.2.0：存在未处理的冲突时置 true——自动同步（防抖/回前台）跳过 push，避免反复弹窗或静默覆盖；
+ * 「立即同步」（syncNow）会重置该标记并重新弹出选择 */
+let conflictPending = false;
+
+/** 冲突处理选择弹窗（ActionSheet 三选一；取消/异常视为「暂不处理」，不静默丢任何一侧数据） */
+const askConflictChoice = async (): Promise<ConflictChoice> => {
+  interface WxActionSheetOption {
+    itemList: string[];
+    itemColor?: string;
+    /** weapp 2.14.0+：顶部说明文字 */
+    alertText?: string;
+  }
+  try {
+    const res = await Taro.showActionSheet({
+      alertText: '检测到云端与本机数据版本冲突，请选择处理方式（两侧快照已自动存为冲突副本，保留 30 天）',
+      itemList: ['使用云端数据（覆盖本机）', '使用本机数据（覆盖云端）', '智能合并（保留两端最新）'],
+      itemColor: '#4a3524'
+    } as WxActionSheetOption);
+    return res.tapIndex === 0 ? 'cloud' : res.tapIndex === 1 ? 'local' : res.tapIndex === 2 ? 'merge' : 'later';
+  } catch (e) {
+    return 'later';
+  }
+};
 
 const PUSH_DEBOUNCE_MS = 3000;
 /** 指数退避重试上限（登录与同步共用，超限后停止自动重试，可手动触发） */
@@ -603,6 +632,12 @@ const applyRemoteOverwrite = (remote: SnapshotData | null, remoteVersion: number
 const pushSnapshot = async (force = false): Promise<boolean> => {
   const s = useWardrobeStore.getState();
   if (!s.syncMeta.dirty && !force) return true;
+  // v2.2.0：存在未处理的冲突时，自动同步（防抖/回前台触发）跳过上行——本机数据保留、不弹窗、不覆盖；
+  // 「立即同步」（syncNow 已重置 conflictPending）可重新弹出处理选择
+  if (conflictPending && !force) {
+    console.warn('[Sync] 存在未处理的数据冲突，跳过自动上行');
+    return false;
+  }
   const meta: SyncMeta = s.syncMeta;
   const data = buildSnapshotData(s);
   const res = await Taro.cloud.callFunction({
@@ -629,13 +664,46 @@ const pushSnapshot = async (force = false): Promise<boolean> => {
     return true;
   }
   if (result.code === 'CONFLICT') {
-    // v1.16.0：冲突策略改为「云端覆盖本地」（需求方确认）——自动采用云端版本，不再三选一
+    // v2.2.0：冲突弹窗三选一（用户自主决定）——云端覆盖本机 / 本机覆盖云端 / 智能合并；
+    // 「暂不处理」保留本机数据并暂停自动上行；两侧快照服务端已存为冲突副本（30 天）
     const remoteVersion = result.remoteVersion || 0;
     const remote = normalizeSnapshot(result.remoteData);
-    console.warn('[Sync] 上行冲突, 云端覆盖本地, remoteVersion =', remoteVersion);
+    console.warn('[Sync] 上行冲突, remoteVersion =', remoteVersion);
+    const choice = await askConflictChoice();
+    if (choice === 'later') {
+      conflictPending = true;
+      setSyncState({
+        status: 'error',
+        errorMsg: '存在待处理的数据冲突，本机数据已保留；可稍后点「立即同步」选择处理方式'
+      });
+      Taro.showToast({ title: '数据冲突待处理，本机数据已保留', icon: 'none', duration: 2500 });
+      return false;
+    }
+    conflictPending = false;
+    if (choice === 'local') {
+      // 本机覆盖云端：对齐下行游标后强制上行（服务端 force 接受，版本号取 max 单调递增）
+      useWardrobeStore.getState().patchSyncMeta({ lastSyncedVersion: remoteVersion });
+      const ok = await pushSnapshot(true);
+      if (ok) Taro.showToast({ title: '已使用本机数据覆盖云端', icon: 'none', duration: 2000 });
+      return ok;
+    }
+    if (choice === 'merge') {
+      // 智能合并：实体按 id 新者胜 + 计数/用量取 max + 集合并集（mergeSnapshot 规则），
+      // 合并结果原子写入并打脏，随后强制上行对齐云端
+      if (remote) {
+        const local = useWardrobeStore.getState();
+        const { patch } = mergeSnapshot(local, remote);
+        local.applySyncMerge(patch);
+      }
+      useWardrobeStore.getState().patchSyncMeta({ lastSyncedVersion: remoteVersion });
+      const ok = await pushSnapshot(true);
+      if (ok) Taro.showToast({ title: '已合并两端数据并上行', icon: 'none', duration: 2000 });
+      return ok;
+    }
+    // cloud（默认）：云端覆盖本机（同步范围内以云端为准，范围外数据保留）
     if (applyRemoteOverwrite(remote, remoteVersion)) {
       setSyncState({ status: 'ready', hasRemote: true, errorMsg: '' });
-      Taro.showToast({ title: '检测到数据冲突，已采用云端数据', icon: 'none', duration: 2000 });
+      Taro.showToast({ title: '已使用云端数据覆盖本机', icon: 'none', duration: 2000 });
       return true;
     }
     // 云端无有效快照（如刚清空云端）：无数据可覆盖，保留本地并强制上行对齐版本
@@ -778,9 +846,11 @@ export const initSync = (): void => {
   void loginAndSync();
 };
 
-/** 手动同步（mine 页「立即同步」；登录失败时先重试登录；v1.19.0 被顶下线时重新登录接管） */
+/** 手动同步（mine 页「立即同步」；登录失败时先重试登录；v1.19.0 被顶下线时重新登录接管；
+ * v2.2.0：重置冲突待处理标记——手动同步重新弹出冲突处理选择） */
 export const syncNow = async (): Promise<boolean> => {
   if (!CLOUD_READY) return false;
+  conflictPending = false;
   const st = useSyncStore.getState();
   if (!useWardrobeStore.getState().syncMeta.openid || st.status === 'kicked') {
     retryCount = 0;

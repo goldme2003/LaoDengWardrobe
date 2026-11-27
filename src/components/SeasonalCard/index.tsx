@@ -4,6 +4,7 @@ import Taro from '@tarojs/taro';
 import type { Gender } from '@/types';
 import type { MemberTier } from '@/services/entitlement';
 import { loadCachedSeasonalImages, generateSeasonalImage, SeasonalImage } from '@/services/seasonalImages';
+import { FEATURES } from '@/config/features';
 import autumnM1 from '@/assets/seasonal/autumn-m-1.jpg';
 import autumnM2 from '@/assets/seasonal/autumn-m-2.jpg';
 import autumnM3 from '@/assets/seasonal/autumn-m-3.jpg';
@@ -132,9 +133,12 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onSho
   const [addErr, setAddErr] = useState('');
   const genLabelRef = useRef('');
   const registeredRef = useRef('');
+  // v2.2.0：功能开关——当季推荐图整体关闭时仅展示标题与提示（不读缓存、不计数、不生图）
+  const featureOff = !FEATURES.seasonalImagesEnabled;
 
   // 初始读取今日已生成图组（本地缓存命中直接展示并登记张数，不发起云端请求——成本受控）
   useEffect(() => {
+    if (featureOff) return;
     const cached = loadCachedSeasonalImages({ gender, age });
     setSlides(cached);
     const regKey = `${gender || 'other'}_${ageGroup}`;
@@ -142,7 +146,7 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onSho
       registeredRef.current = regKey;
       onShow(cached.length);
     }
-  }, [gender, age, ageGroup, onShow]);
+  }, [gender, age, ageGroup, onShow, featureOff]);
 
   // v1.22.0：生成中分阶段提示（对齐明日穿搭：连接 AI 造型师 → 结合画像生成 → 兜底提示）
   useEffect(() => {
@@ -230,6 +234,20 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onSho
     () => (tier === 'svip' ? STYLE_OPTIONS : STYLE_OPTIONS.filter((s) => !s.premium)),
     [tier]
   );
+
+  // v2.2.0：功能开关关闭——仅保留标题与提示，隐藏图组/风格条/生图入口
+  if (featureOff) {
+    return (
+      <View className={styles.card}>
+        <View className={styles.head}>
+          <View className={styles.titleRow}>
+            <Text className={styles.title}>当季推荐 · {season.label}</Text>
+          </View>
+          <Text className={styles.sub}>当季推荐图功能暂未开放，敬请期待</Text>
+        </View>
+      </View>
+    );
+  }
 
   // 普通版展示本地示例（1 张）；VIP/SVIP 展示今日已生成图组（AI 生成标识）；
   // v1.22.0：AI 尚未生成时不留空——按季节/性别/年龄以本地示例图组兜底
