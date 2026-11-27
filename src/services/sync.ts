@@ -62,6 +62,8 @@ export interface SnapshotData {
   /** v1.19.0：会员用量计数（当季图组/出差/批量导入/时尚推荐 + 每日推荐套数），跨端取 max 合并 */
   memberUsage: MemberUsage;
   currentWardrobeId: string;
+  /** v2.2.7：删除墓碑（实体 id → 删除时间戳）。合并时据此跳过已删除实体，避免删除被并集复活 */
+  deletedMarks?: Record<string, number>;
 }
 
 interface SyncState {
@@ -181,7 +183,12 @@ const normalizeSnapshot = (raw: Partial<SnapshotData> | null | undefined): Snaps
         ? (raw.memberUsage as MemberUsage)
         : undefined
     ),
-    currentWardrobeId: typeof raw.currentWardrobeId === 'string' ? raw.currentWardrobeId : ''
+    currentWardrobeId: typeof raw.currentWardrobeId === 'string' ? raw.currentWardrobeId : '',
+    // v2.2.7：旧快照无删除墓碑字段
+    deletedMarks:
+      raw.deletedMarks && typeof raw.deletedMarks === 'object'
+        ? (raw.deletedMarks as Record<string, number>)
+        : {}
   };
 };
 
@@ -245,7 +252,11 @@ export const buildSnapshotData = (s: LdwData, wardrobeIds?: string[]): SnapshotD
     counters,
     // v1.19.0：会员用量计数随快照上云（全局数据，不按衣橱裁剪； rolledUsage 保证窗口新鲜）
     memberUsage: rolledUsage(s.memberUsage),
-    currentWardrobeId
+    currentWardrobeId,
+    // v2.2.7：删除墓碑随快照上行（只保留 30 天内的标记）
+    deletedMarks: Object.fromEntries(
+      Object.entries(s.deletedMarks || {}).filter(([, ts]) => ts >= Date.now() - 30 * 24 * 3600 * 1000)
+    )
   };
 };
 
@@ -262,6 +273,15 @@ export const mergeSnapshot = (
   local: LdwData,
   remote: SnapshotData
 ): { patch: Partial<LdwData>; stats: { wardrobes: number; items: number; diary: number; tryout: number } } => {
+  // v2.2.7：删除墓碑合并（同 id 取较晚删除时间）——用于判定「已被删除」的实体，
+  // 修复本机删除衣物/日记/备选后，pull 合并按并集把云端旧副本加回来（删除无效）的问题
+  const mergedMarks: Record<string, number> = { ...(local.deletedMarks || {}) };
+  Object.entries(remote.deletedMarks || {}).forEach(([id, ts]) => {
+    if (typeof ts === 'number') mergedMarks[id] = Math.max(mergedMarks[id] || 0, ts);
+  });
+  /** 实体是否已被删除：墓碑时间不早于实体最后修改时间（另一端在删除后重新编辑则视为新数据保留） */
+  const isDead = (id: string, time: number): boolean => (mergedMarks[id] || 0) >= time;
+
   // 同名衣橱去重（v1.16.0：不再「双方均有数据则并存」——那是重复衣橱反复出现的根源）
   const localEntityCount = (wid: string): number =>
     local.items.filter((it) => it.wardrobeId === wid).length +
@@ -299,11 +319,12 @@ export const mergeSnapshot = (
       return keep ? { ...e, wardrobeId: keep } : e;
     });
 
-  const wardrobes = local.wardrobes.filter((w) => !adoptMap.has(w.id));
+  const wardrobes = local.wardrobes.filter((w) => !adoptMap.has(w.id) && !isDead(w.id, entityTime(w)));
   const wardrobeMap = new Map(wardrobes.map((w) => [w.id, w]));
   let wardrobeWins = 0;
   remote.wardrobes.forEach((rw) => {
     if (skipRemoteIds.has(rw.id)) return;
+    if (isDead(rw.id, entityTime(rw))) return;
     const lw = wardrobeMap.get(rw.id);
     if (!lw) {
       wardrobes.push(rw);
@@ -318,10 +339,11 @@ export const mergeSnapshot = (
     }
   });
 
-  const items = remapWid([...local.items]);
+  const items = remapWid([...local.items]).filter((it) => !isDead(it.id, entityTime(it)));
   const itemMap = new Map(items.map((it) => [it.id, it]));
   let itemWins = 0;
   remote.items.forEach((ri) => {
+    if (isDead(ri.id, entityTime(ri))) return;
     const li = itemMap.get(ri.id);
     if (!li) {
       items.push(ri);
@@ -335,10 +357,11 @@ export const mergeSnapshot = (
     }
   });
 
-  const diary = remapWid([...local.diaryEntries]);
+  const diary = remapWid([...local.diaryEntries]).filter((d) => !isDead(d.id, entityTime(d)));
   const diaryMap = new Map(diary.map((d) => [d.id, d]));
   let diaryWins = 0;
   remote.diaryEntries.forEach((rd) => {
+    if (isDead(rd.id, entityTime(rd))) return;
     const ld = diaryMap.get(rd.id);
     if (!ld) {
       diary.push(rd);
@@ -352,10 +375,11 @@ export const mergeSnapshot = (
     }
   });
 
-  const tryout = remapWid([...local.tryoutItems]);
+  const tryout = remapWid([...local.tryoutItems]).filter((t) => !isDead(t.id, entityTime(t)));
   const tryoutMap = new Map(tryout.map((t) => [t.id, t]));
   let tryoutWins = 0;
   remote.tryoutItems.forEach((rt) => {
+    if (isDead(rt.id, entityTime(rt))) return;
     const lt = tryoutMap.get(rt.id);
     if (!lt) {
       tryout.push(rt);
@@ -442,6 +466,8 @@ export const mergeSnapshot = (
       // v1.19.0：用量计数跨端取 max（含每日推荐套数）
       memberUsage: mergeMemberUsage(rolledUsage(local.memberUsage), remote.memberUsage),
       currentWardrobeId,
+      // v2.2.7：墓碑并集随合并结果一同落地，下次上行同步到云端
+      deletedMarks: mergedMarks,
       ...patchSync
     },
     stats: {
@@ -598,11 +624,17 @@ const applyRemoteOverwrite = (remote: SnapshotData | null, remoteVersion: number
     counters[k] = v; // 同步范围内以云端为准
   });
   const remoteCurrent = remote.currentWardrobeId;
+  // v2.2.7：墓碑保留并集（云端覆盖本机后仍需记住本机已删除的实体，避免下次合并复活）
+  const marks: Record<string, number> = { ...(s.deletedMarks || {}) };
+  Object.entries(remote.deletedMarks || {}).forEach(([id, ts]) => {
+    if (typeof ts === 'number') marks[id] = Math.max(marks[id] || 0, ts);
+  });
   s.applySyncMerge({
     wardrobes: [...s.wardrobes.filter((w) => !ids.has(w.id)), ...remote.wardrobes],
     items: [...s.items.filter((it) => !ids.has(it.wardrobeId)), ...remote.items],
     diaryEntries: [...s.diaryEntries.filter((d) => !ids.has(d.wardrobeId)), ...remote.diaryEntries],
     tryoutItems: [...s.tryoutItems.filter((t) => !ids.has(t.wardrobeId)), ...remote.tryoutItems],
+    deletedMarks: marks,
     customOptions: unionOptions(s.customOptions || [], remote.customOptions),
     customScenes: Array.from(new Set([...(s.customScenes || []), ...remote.customScenes])),
     favoriteBrands: Array.from(new Set([...(s.favoriteBrands || []), ...remote.favoriteBrands])),
@@ -857,6 +889,33 @@ export const syncNow = async (): Promise<boolean> => {
     await loginAndSync(); // 重新登录即接管活跃设备（顶掉另一端）
   }
   if (useSyncStore.getState().status === 'kicked') return false; // 登录失败仍处 kicked
+  // v2.2.7：云端数据已被清空且本机未打脏时，手动同步给出上传策略选择——
+  // 此前清空后点「立即同步」既不弹冲突策略也不上行（pushSnapshot 因 dirty=false 直接返回），表现为毫无反应
+  const local = useWardrobeStore.getState();
+  const meta = local.syncMeta;
+  const hasLocalData =
+    local.items.length > 0 ||
+    local.diaryEntries.length > 0 ||
+    local.tryoutItems.length > 0 ||
+    local.wardrobes.length > 1;
+  if (!useSyncStore.getState().hasRemote && !meta.dirty && hasLocalData) {
+    const upload = await new Promise<boolean>((resolve) => {
+      Taro.showModal({
+        title: '云端暂无数据',
+        content: '云端存储数据已被清空或尚未上传。是否将本机数据上传到云端？',
+        confirmText: '上传本机数据',
+        cancelText: '暂不上传',
+        success: (r) => resolve(!!r.confirm),
+        fail: () => resolve(false)
+      });
+    });
+    if (!upload) {
+      Taro.showToast({ title: '已取消上传，云端保持为空', icon: 'none' });
+      return true;
+    }
+    // 打脏后走正常上行（baseVersion=0 与服务端一致，直接接受）
+    useWardrobeStore.getState().patchSyncMeta({ dirty: true });
+  }
   return syncOnce();
 };
 

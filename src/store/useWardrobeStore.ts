@@ -81,6 +81,9 @@ export interface LdwData {
   syncWardrobeIds: string[] | null;
   /** v1.15.0（R-5）：云同步开关（登录后默认关闭，用户在「我的 → 云同步」开启，状态持久化在本地） */
   cloudSyncEnabled: boolean;
+  /** v2.2.7：删除墓碑（实体 id → 删除时间戳），随云同步上行——
+   * 修复「本机删除衣物/日记/备选后，云同步 pull 合并按并集把已删除数据又加回来」的问题 */
+  deletedMarks: Record<string, number>;
 }
 
 const initialData = (): LdwData => {
@@ -113,7 +116,8 @@ const initialData = (): LdwData => {
     customScenes: [],
     syncMeta: { openid: '', dataVersion: 0, lastSyncedVersion: 0, dirty: false, lastSyncedAt: 0 },
     syncWardrobeIds: null,
-    cloudSyncEnabled: false
+    cloudSyncEnabled: false,
+    deletedMarks: {}
   };
 };
 
@@ -172,6 +176,12 @@ const loadData = (): LdwData => {
           : { openid: '', dataVersion: 0, lastSyncedVersion: 0, dirty: false, lastSyncedAt: 0 };
       stored.syncWardrobeIds = Array.isArray(stored.syncWardrobeIds) ? stored.syncWardrobeIds : null;
       stored.cloudSyncEnabled = stored.cloudSyncEnabled === true;
+      // v2.2.7：删除墓碑（旧数据无此字段）；只保留 30 天内的标记，避免无限增长
+      const marks = stored.deletedMarks && typeof stored.deletedMarks === 'object' ? stored.deletedMarks : {};
+      const markFloor = Date.now() - 30 * 24 * 3600 * 1000;
+      stored.deletedMarks = Object.fromEntries(
+        Object.entries(marks).filter(([, ts]) => typeof ts === 'number' && ts >= markFloor)
+      );
       console.info('[Store] 读取本地数据成功, 衣橱数 =', stored.wardrobes.length, '衣物数 =', stored.items.length);
       return stored;
     }
@@ -307,8 +317,21 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       syncMeta: s.syncMeta,
       syncWardrobeIds: s.syncWardrobeIds,
       cloudSyncEnabled: s.cloudSyncEnabled,
+      // v2.2.7：删除墓碑需持久化，否则重启后丢失、下次合并仍会复活已删除实体
+      deletedMarks: s.deletedMarks,
       wardrobeFilterPreset: null
     });
+  };
+
+  /** v2.2.7：记录删除墓碑（id → 删除时间）。墓碑随云同步上行，
+   * 合并时据此跳过「云端仍存在、但本机已删除」的实体，避免删除被 pull 并集复活 */
+  const markDeleted = (ids: string | string[]): Record<string, number> => {
+    const now = Date.now();
+    const marks = { ...get().deletedMarks };
+    (Array.isArray(ids) ? ids : [ids]).forEach((id) => {
+      if (id) marks[id] = now;
+    });
+    return marks;
   };
 
   /** v1.15.0（R-5）：commit 统一入口。
@@ -430,7 +453,23 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
       delete tomorrowOutfits[id];
       const currentWardrobeId = s.currentWardrobeId === id ? wardrobes[0].id : s.currentWardrobeId;
       console.info('[Store] 删除衣橱, id =', id, '剩余衣橱 =', wardrobes.length);
-      commit({ wardrobes, items, tryoutItems, diaryEntries, counters, bodyProfiles, tomorrowOutfits, currentWardrobeId });
+      // v2.2.7：衣橱及其下全部实体写墓碑，避免云同步合并复活
+      commit({
+        wardrobes,
+        items,
+        tryoutItems,
+        diaryEntries,
+        counters,
+        bodyProfiles,
+        tomorrowOutfits,
+        currentWardrobeId,
+        deletedMarks: markDeleted([
+          id,
+          ...s.items.filter((it) => it.wardrobeId === id).map((it) => it.id),
+          ...s.tryoutItems.filter((t) => t.wardrobeId === id).map((t) => t.id),
+          ...s.diaryEntries.filter((d) => d.wardrobeId === id).map((d) => d.id)
+        ])
+      });
     },
 
     addItem: (input) => {
@@ -525,7 +564,8 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
 
     deleteItem: (id) => {
       console.info('[Store] 删除衣物, id =', id);
-      commit({ items: get().items.filter((it) => it.id !== id) });
+      // v2.2.7：写删除墓碑，防止下次云同步 pull 合并把已删除衣物加回来（表现为「删除没有效果」）
+      commit({ items: get().items.filter((it) => it.id !== id), deletedMarks: markDeleted(id) });
     },
 
     addCustomOption: (dimension, value) => {
@@ -636,7 +676,10 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
 
     deleteTryout: (id) => {
       console.info('[Store] 删除备选, id =', id);
-      commit({ tryoutItems: get().tryoutItems.filter((t) => t.id !== id) });
+      commit({
+        tryoutItems: get().tryoutItems.filter((t) => t.id !== id),
+        deletedMarks: markDeleted(id)
+      });
     },
 
     addDiaryEntry: (date, photos) => {
@@ -655,7 +698,10 @@ export const useWardrobeStore = create<WardrobeStore>((set, get) => {
 
     deleteDiaryEntry: (id) => {
       console.info('[Store] 删除着装日记, id =', id);
-      commit({ diaryEntries: get().diaryEntries.filter((d) => d.id !== id) });
+      commit({
+        diaryEntries: get().diaryEntries.filter((d) => d.id !== id),
+        deletedMarks: markDeleted(id)
+      });
     },
 
     toggleTomorrowItem: (itemId) => {
