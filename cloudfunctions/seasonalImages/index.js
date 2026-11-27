@@ -46,6 +46,18 @@ const STYLE_LIB = {
   detail: { label: '配饰细节', desc: '重点呈现配饰搭配：包袋、墨镜、腰带、首饰与鞋履的呼应关系' }
 };
 
+/** v2.2.2：各风格的穿着场景（与 outfitRecommend 的场景口径一致，提示词内明确点明场景，避免模型泛泛而谈） */
+const STYLE_SCENES = {
+  daily: '日常出行与朋友见面',
+  commute: '上下班通勤与办公场合',
+  street: '街头休闲与城市漫步',
+  sport: '运动健身与户外活动',
+  smart: '商务会面与半正式场合',
+  weekend: '周末逛街与短途出游',
+  couture: '晚宴、观展等正式场合',
+  detail: '日常与通勤场合'
+};
+
 /** SVIP 专属高级风格（VIP 请求时返回 TIER_NOT_ALLOWED） */
 const PREMIUM_STYLES = ['couture', 'detail'];
 
@@ -85,20 +97,28 @@ function ageGroupOf(age) {
   return { key: 'senior', text: '熟龄' };
 }
 
-/** 生图提示词：默认风格用风格库描述，自定义风格用原文拼接 */
-function buildPrompt({ seasonKey, gender, ageGroup, styleKey, customText }) {
+/** 生图提示词：默认风格用风格库描述，自定义风格用原文拼接
+ * v2.2.2：对齐 outfitRecommend 混元提示词口径——写明具体年龄（年龄段）与穿着场景 */
+function buildPrompt({ seasonKey, gender, age, ageGroup, styleKey, customText }) {
   const season = SEASONS[seasonKey];
   const genderText = gender === 'female' ? '女性' : gender === 'male' ? '男性' : '中性';
   const styleDesc = customText
     ? `以「${customText}」为主题的当季流行造型，风格特征贴合文字描述，整体配色与版型协调统一`
     : STYLE_LIB[styleKey].desc;
-  return `专业时尚摄影，竖版全身构图。${ageGroup.text}${genderText}模特，${season.label}当季流行穿搭：${styleDesc}。
+  const sceneText = customText
+    ? `以「${customText}」风格出现的场合，贴合该风格惯常的穿着情境`
+    : STYLE_SCENES[styleKey];
+  return `专业时尚摄影，竖版全身构图。${age}岁${genderText}模特（${ageGroup.text}，五官、发型、妆容与气质贴合该年龄），${season.label}当季流行穿搭：${styleDesc}。
+穿着场景：${sceneText}。
 当季流行元素参考：${season.pop}。
 写实街拍风格，自然光，背景简洁，服装面料与版型细节清晰，画面中不出现文字、水印、品牌 logo，不出现真实名人。`;
 }
 
+/** 提示词版本（v2.2.2）：参与缓存记录 id，提示词调整后当天旧图不再命中 */
+const PROMPT_VERSION = 'p2';
+
 function docIdOf(dateKey, seasonKey, gender, ageGroupKey, styleKey) {
-  return `${dateKey}_${seasonKey}_${gender}_${ageGroupKey}_${styleKey}`;
+  return `${dateKey}_${seasonKey}_${gender}_${ageGroupKey}_${styleKey}_${PROMPT_VERSION}`;
 }
 
 async function getDoc(id) {
@@ -144,11 +164,12 @@ async function recordUsage(monthKey, count) {
 }
 
 /** v1.14.0：版本标识（启动日志与 ping 均输出，用于确认云端部署的是否为最新代码）
- * v2.2.1 GLM模型版：生图模型切换为智谱 GLM-IMAGE（glm-image，provider/glmImage.js），原混元生图 provider 已移除 */
-const VERSION = 'v2.2.1-glm';
+ * v2.2.1 GLM模型版：生图模型切换为智谱 GLM-IMAGE（glm-image，provider/glmImage.js），原混元生图 provider 已移除
+ * v2.2.2：修复 GLM 生图 35s 硬超时导致的 GLM_IMAGE_TIMEOUT；提示词补充具体年龄与穿着场景 */
+const VERSION = 'v2.2.2-glm';
 
-async function generateStyle({ dateKey, seasonKey, gender, ageGroup, styleKey, label, customText }) {
-  const prompt = buildPrompt({ seasonKey, gender, ageGroup, styleKey, customText });
+async function generateStyle({ dateKey, seasonKey, gender, age, ageGroup, styleKey, label, customText }) {
+  const prompt = buildPrompt({ seasonKey, gender, age, ageGroup, styleKey, customText });
   // GLM-IMAGE 为同步接口，无需 session 一致性调度参数
   const url = await callGlmImage(prompt);
   // v1.13.2：生图已计费（单张 10s+），下载失败重试 1 次，避免偶发网络错误浪费已生成的结果
@@ -265,6 +286,7 @@ exports.main = async (event = {}) => {
       dateKey,
       seasonKey,
       gender,
+      age,
       ageGroup,
       styleKey,
       label,

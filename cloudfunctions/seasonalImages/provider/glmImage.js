@@ -15,8 +15,12 @@ const IMAGE_PATH = '/api/paas/v4/images/generations';
 const MODEL = 'glm-image';
 /** GLM-IMAGE 支持的输出尺寸；当季卡为竖版展示，官方示例 1280x1280 兜底可用 */
 const IMAGE_SIZE = '1280x1280';
-/** 单张生图硬超时（云函数总超时 60s） */
-const GEN_TIMEOUT = 35000;
+/** 单张生图硬超时
+ * v2.2.2：35s → 40s。v2.2.1 实测 GLM-IMAGE 同步生图常超 35s 未返回，被本地超时提前掐断。
+ * 注意：云端函数实际超时为 50s（`cli cloud functions info` 查得，config.json 的 60s 不随 CLI 部署生效），
+ * 故留约 10s 给下载与转存云存储；若在云开发控制台把函数超时调到 60s，可相应放宽到 46s。
+ * 客户端超时不会取消上游生成，图片仍可能计费。 */
+const GEN_TIMEOUT = 40000;
 const DOWNLOAD_TIMEOUT = 20000;
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 
@@ -41,12 +45,18 @@ function requestRaw(apiKey, body, timeout) {
     const data = JSON.stringify(body);
     let settled = false;
     let timer = null;
+    let gotHeaders = false;
     const finish = (err, value) => {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
       if (err) reject(err);
       else resolve(value);
+    };
+    const onTimeout = () => {
+      req.destroy();
+      console.warn(`[seasonalImages] GLM 生图超时：${timeout}ms 内未返回，已收到响应头=${gotHeaders}`);
+      finish(new Error('GLM_IMAGE_TIMEOUT'));
     };
     let req;
     try {
@@ -64,6 +74,7 @@ function requestRaw(apiKey, body, timeout) {
           timeout
         },
         (res) => {
+          gotHeaders = true;
           let buf = '';
           res.on('data', (c) => (buf += c));
           res.on('error', (e) => finish(new Error('GLM_IMAGE_RESP_ERROR: ' + e.message)));
@@ -81,15 +92,9 @@ function requestRaw(apiKey, body, timeout) {
       finish(e);
       return;
     }
-    timer = setTimeout(() => {
-      req.destroy();
-      finish(new Error('GLM_IMAGE_TIMEOUT'));
-    }, timeout);
+    timer = setTimeout(onTimeout, timeout);
     req.on('error', (e) => finish(e));
-    req.on('timeout', () => {
-      req.destroy();
-      finish(new Error('GLM_IMAGE_TIMEOUT'));
-    });
+    req.on('timeout', onTimeout);
     req.write(data);
     req.end();
   });
