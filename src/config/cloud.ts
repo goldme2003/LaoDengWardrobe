@@ -15,9 +15,8 @@ export const WEATHER_FN_NAME = 'weatherProxy';
 export const EMPTY_GUIDE_FN_NAME = 'emptyGuide';
 /** v1.5.0：明日穿搭推荐（混元按场景选搭 + 兜底） */
 export const OUTFIT_RECOMMEND_FN_NAME = 'outfitRecommend';
-/** v1.9.0（F-19）：会员中心（getMember / createOrder 微信支付统一下单；支付回调 payCallback，v2.0.0 正式接入） */
+/** v1.9.0（F-19）：会员中心（getMember / createOrder，支付未开通前仅登记订单） */
 export const MEMBER_FN_NAME = 'member';
-/** v2.2.0：虚拟支付开放开关已迁移至 src/config/features.ts（FEATURES.paymentEnabled）统一管理 */
 /** v1.13.0：当季推荐图组（混元生图 + 云存储缓存，按季节/性别/年龄段/会员档位差异化） */
 export const SEASONAL_FN_NAME = 'seasonalImages';
 /** v1.15.0（R-5 M1）：云同步（微信静默登录 / 快照上下行 / 冲突副本 / 删除云端数据 / 照片容量计量） */

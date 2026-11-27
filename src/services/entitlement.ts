@@ -14,9 +14,6 @@ export interface TierConfig {
   label: string;
   /** 一次性买断价（元）；null = 免费 */
   price: number | null;
-  /** v2.2.0：VIP 升级价（元）——当前档位用户升级到本档仅需补的差价（权益直接覆盖，无需重复购买原价）；
-   * null = 该档位无升级通道（VIP 无更低档升级价，free 不可升级） */
-  upgradePrice: number | null;
   /** 衣橱数量上限（v1.19.1：VIP 3 个 / SVIP 8 个） */
   wardrobes: number;
   /** 服装批量导入/批量添加（次/月），0 = 无，null = 无限次（v1.19.1：SVIP 无限次；v1.11.0 已上线：单次批量任务 = 1 次，写 memberUsage.batchImportUsed） */
@@ -44,7 +41,6 @@ export const TIERS: Record<MemberTier, TierConfig> = {
     id: 'free',
     label: '普通版',
     price: null,
-    upgradePrice: null,
     wardrobes: 1,
     batchImportPerMonth: 0,
     seasonalPerDay: 0,
@@ -60,7 +56,6 @@ export const TIERS: Record<MemberTier, TierConfig> = {
     id: 'vip',
     label: 'VIP',
     price: 19.9,
-    upgradePrice: null, // VIP 无更低档升级通道
     wardrobes: 3,
     batchImportPerMonth: 5,
     seasonalPerDay: 1,
@@ -76,8 +71,6 @@ export const TIERS: Record<MemberTier, TierConfig> = {
     id: 'svip',
     label: 'SVIP',
     price: 29.9,
-    // v2.2.0：VIP 升级 SVIP 仅需补差价 ¥10（云端 member 云函数同步支持升级道具下单，见 v2.2.0 开发日志）
-    upgradePrice: 10,
     wardrobes: 8,
     batchImportPerMonth: null, // v1.19.1：SVIP 批量导入无限次
     seasonalPerDay: 2,

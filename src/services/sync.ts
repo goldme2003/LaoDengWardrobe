@@ -12,8 +12,9 @@
  *   7. 快照冲突策略（v2.2.0）：冲突时弹窗由用户三选一——使用云端覆盖本机 / 本机覆盖云端 / 智能合并
  *      （两端最新保留，实体新者胜 + 计数取 max）；「暂不处理」保留本机数据暂停上行，两侧快照
  *      自动存为冲突副本（30 天，服务端写入）；此前 v1.16.0 为云端覆盖本地；
- *   8. 会员档位（v2.0.0）：服务端权威（members 订单校验，微信支付回调写入），login 返回后回写本地；
- *      客户端上报与 setTier 通道已随测试模式移除（档位不入快照）；
+ *   8. 会员档位：v2.0.0 为服务端权威（members 订单，支付回调写入）并在 login 后回写本地；
+ *      v2.2.1（GLM模型版·测试态）改为本地自由选择，login 不再以服务端档位覆盖本地（见 applyLoginResult），
+ *      档位仍不入快照、客户端不上报；
  *   9. 单端互踢（v1.19.0，需求方确认）：登录上报 deviceId，服务端登记唯一活跃设备；
  *      pull/push/photoStat 被判非活跃设备时返回 KICKED → 本机进入 kicked 态，暂停云端读写（本地数据保留），
  *      「立即同步」重新登录后接管（顶掉另一设备）。
@@ -474,24 +475,23 @@ const applyLoginResult = (res: {
 }) => {
   const store = useWardrobeStore.getState();
   store.patchSyncMeta({ openid: res.openid });
+  // v2.2.1（GLM模型版·测试态）：会员档位由本地自由选择——登录不再以服务端订单档位覆盖本地，
+  // 同步额度（可同步衣橱数 / 照片容量）随本地档位生效，便于测试各档位的云同步表现
+  const localTier = tierOf(store.memberTier);
+  const maxWardrobes = localTier.maxSyncWardrobes ?? 999;
   setSyncState({
     openid: res.openid,
-    tier: res.tier,
-    maxWardrobes: res.maxWardrobes,
-    photoQuotaMB: res.photoQuotaMB,
+    tier: store.memberTier,
+    maxWardrobes,
+    photoQuotaMB: localTier.photoQuotaMB,
     photoBytes: res.photoBytes,
     hasRemote: res.hasRemote,
     errorMsg: ''
   });
-  // 会员档位以服务端为准（设计方案 5.1 第 3 条；v2.0.0 起档位唯一权威为 members 订单，客户端不可上报）
-  // v1.17.0：setSyncState 先行，避免下方 setMemberTier 触发订阅时对刚写入的档位重复上行
-  if (res.tier !== store.memberTier) {
-    store.setMemberTier(res.tier);
-  }
   // 同步衣橱选择初始化（null = 未设置）
   const cur = useWardrobeStore.getState();
   if (!cur.syncWardrobeIds) {
-    cur.setSyncWardrobeIds(initSyncWardrobeIds(cur, res.maxWardrobes));
+    cur.setSyncWardrobeIds(initSyncWardrobeIds(cur, maxWardrobes));
   }
 };
 
@@ -812,8 +812,8 @@ export const schedulePush = (): void => {
 };
 
 /** 监听 store 写操作（脏标记 → 防抖上行）；幂等，模块首次使用时注册。
- * v2.0.0：档位上行通道（setTier）已随测试模式移除——档位以云端 members（支付回调写入）为唯一权威，
- * 仅在 login / 会员页支付开通后回写本地，客户端不再上报。 */
+ * v2.0.0：档位上行通道（setTier）已随测试模式移除——客户端不上报档位（档位不入快照）；
+ * v2.2.1（GLM模型版·测试态）：档位由会员页本地自由切换，login 不再回写服务端档位。 */
 const registerWatcher = (): void => {
   if (watcherRegistered) return;
   watcherRegistered = true;

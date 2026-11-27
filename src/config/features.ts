@@ -3,15 +3,15 @@
  * 与云函数环境变量无关——此处为前端打包期开关，控制对应功能的入口与展示。 */
 export const FEATURES = {
   /**
-   * 虚拟支付总开关（v2.0.0 起自 cloud.ts WX_PAY_ENABLED 迁移至此统一管理）。
-   * true = 会员页「立即开通/升级」可用；false = 按钮显示「暂未开放」并弹窗说明。
-   * 前提：MP 后台已开通虚拟支付、道具已上架（VIP_Tool / SVIP_Tool / SVIP_Upgrade_Tool），
-   * 云函数凭据（VP_OFFER_ID / VP_APP_KEY / WX_APP_SECRET）配置完成。
+   * 支付功能总开关——v2.2.1（GLM模型版）已关闭。
+   * 关闭期间客户端不含任何支付/退款调用入口（下单、拉起支付、档位轮询、查单自愈、售后退款均已移除），
+   * 会员档位恢复为测试态本地自由切换；如需重新开放支付，需从 untested 分支恢复支付流程后再置回 true。
    */
-  paymentEnabled: true,
+  paymentEnabled: false,
   /**
-   * 当季推荐图开关（AI 生成 + 本地示例图兜底）。
+   * 当季推荐图开关（GLM 模型生成 + 本地示例图兜底）。
    * false = 首页当季推荐卡仅展示标题与「暂未开放」提示，隐藏图组/风格条/生图入口与额度计数。
+   * 生图模型在云函数 seasonalImages 中配置（智谱 GLM-IMAGE，密钥 GLM_API_KEY）。
    */
   seasonalImagesEnabled: true
 } as const;

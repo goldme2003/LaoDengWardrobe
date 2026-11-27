@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text } from '@tarojs/components';
 import { useWardrobeStore } from '@/store/useWardrobeStore';
-import { APP_VERSION, themeVarsOf } from '@/data/presets';
+import { APP_CODENAME, APP_VERSION, themeVarsOf } from '@/data/presets';
 // v1.20.1：改用本页独立样式模块（跨页 import mine 页 scss 会触发 wxss 编译错误）
 import styles from './index.module.scss';
 
@@ -19,7 +19,9 @@ const AboutPage: React.FC = () => {
         <Text className={styles.sectionTitle}>关于</Text>
         <View className={styles.aboutRow}>
           <Text className={styles.aboutLabel}>版本</Text>
-          <Text className={styles.aboutValue}>{APP_VERSION}</Text>
+          <Text className={styles.aboutValue}>
+            {APP_VERSION}（{APP_CODENAME}）
+          </Text>
         </View>
         <View className={styles.aboutRow}>
           <Text className={styles.aboutLabel}>数据存储</Text>

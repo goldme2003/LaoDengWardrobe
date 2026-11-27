@@ -3,9 +3,8 @@ import { CLOUD_READY, MEMBER_FN_NAME } from '@/config/cloud';
 import { MemberTier } from '@/services/entitlement';
 
 /** v1.9.0（F-19）：会员云函数调用封装
- * getMember：查询云端会员档位（未登录/无记录返回 free）；
- * createOrder：登记开通订单。当前微信支付商户号未开通，云端直接返回
- * PAY_UNAVAILABLE，客户端提示「支付暂未开通」；支付能力上线后按订单继续流程。 */
+ * getMember：查询云端会员档位（未登录/无记录返回 free）。
+ * v2.2.1（GLM模型版）：支付功能已关闭，createOrder 支付入口已移除。 */
 
 export interface CloudMemberResult {
   code: string;
@@ -14,7 +13,7 @@ export interface CloudMemberResult {
 }
 
 export const callMember = async (
-  action: 'getMember' | 'createOrder',
+  action: 'getMember',
   tier?: MemberTier
 ): Promise<CloudMemberResult | null> => {
   if (!CLOUD_READY) return null;

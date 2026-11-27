@@ -1,4 +1,4 @@
-/** 当季推荐图组云函数（v1.14.0）
+/** 当季推荐图组云函数（v1.14.0；v2.2.1 GLM模型版：生图模型为智谱 GLM-IMAGE，替换原腾讯混元 Hy-Image-3.5-Preview）
  * 入参：{ action: 'ping' | 'generate', tier?: 'free'|'vip'|'svip', gender?: 'male'|'female'|'other', age?: number,
  *        style?: string, custom?: string }
  * 出参：{ code: 'OK'|'BAD_PARAM'|'TIER_NOT_ALLOWED'|'BUDGET_EXCEEDED'|'GENERATE_FAILED',
@@ -144,8 +144,8 @@ async function recordUsage(monthKey, count) {
 }
 
 /** v1.14.0：版本标识（启动日志与 ping 均输出，用于确认云端部署的是否为最新代码）
- * GLM 分支：生图模型由混元 Hy-Image-3.5-Preview 切换为智谱 GLM-IMAGE（glm-image） */
-const VERSION = 'v2.0.0-glm';
+ * v2.2.1 GLM模型版：生图模型切换为智谱 GLM-IMAGE（glm-image，provider/glmImage.js），原混元生图 provider 已移除 */
+const VERSION = 'v2.2.1-glm';
 
 async function generateStyle({ dateKey, seasonKey, gender, ageGroup, styleKey, label, customText }) {
   const prompt = buildPrompt({ seasonKey, gender, ageGroup, styleKey, customText });

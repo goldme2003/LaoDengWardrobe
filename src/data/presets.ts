@@ -3,6 +3,9 @@ import { CustomDimension, Gender, ThemeId, BodyProfile } from '@/types';
 /** 当前版本号（在「我的」页展示） */
 export const APP_VERSION = 'v2.2.1';
 
+/** 当前版本代号（v2.2.1 起，在「关于」页随版本号展示） */
+export const APP_CODENAME = 'GLM模型版';
+
 /** 性别选项（v0.5） */
 export const GENDER_OPTIONS: { value: Gender; label: string }[] = [
   { value: 'male', label: '男' },
