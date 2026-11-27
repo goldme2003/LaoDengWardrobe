@@ -17,10 +17,11 @@ const MODEL = 'glm-image';
 const IMAGE_SIZE = '1280x1280';
 /** 单张生图硬超时
  * v2.2.2：35s → 40s。v2.2.1 实测 GLM-IMAGE 同步生图常超 35s 未返回，被本地超时提前掐断。
- * 注意：云端函数实际超时为 50s（`cli cloud functions info` 查得，config.json 的 60s 不随 CLI 部署生效），
- * 故留约 10s 给下载与转存云存储；若在云开发控制台把函数超时调到 60s，可相应放宽到 46s。
- * 客户端超时不会取消上游生成，图片仍可能计费。 */
-const GEN_TIMEOUT = 40000;
+ * v2.2.3：40s → 50s，与云函数实际超时（`cli cloud functions info` 查得 timeout=50，config.json
+ * 的 60s 不随 CLI 部署生效）一致——生图最长可用满函数时长，即便超时也由本地定时器先返回
+ * `GLM_IMAGE_TIMEOUT`，而不是被平台直接终止（平台终止时函数日志无业务错误信息）。
+ * 注意：生图耗满 50s 时下载/转存会被平台裁掉，此时该次生成已计费但图片丢失。 */
+const GEN_TIMEOUT = 50000;
 const DOWNLOAD_TIMEOUT = 20000;
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 
