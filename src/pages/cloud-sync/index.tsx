@@ -101,7 +101,7 @@ const CloudSyncPage: React.FC = () => {
   const handleDeleteCloud = () => {
     Taro.showModal({
       title: '清空云存储数据',
-      content: '将删除云端保存的衣橱/衣物/日记等同步数据（30 天宽限期内登录可恢复），本机数据不受影响。确定清空？',
+      content: '将删除云端保存的衣橱/衣物/日记等同步数据，本机数据不受影响；清空后云端保持为空，如需重新上传请点「立即同步」。确定清空？',
       confirmText: '清空',
       confirmColor: '#c0392b',
       success: async (res) => {

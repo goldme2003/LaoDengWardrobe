@@ -1051,22 +1051,29 @@ export const deleteCloudData = async (): Promise<boolean> => {
     return false;
   }
   try {
+    // v2.2.6：先取消排队中的防抖上行，避免删除请求刚返回时旧的 push 又把数据写回云端
+    if (pushTimer) {
+      clearTimeout(pushTimer);
+      pushTimer = null;
+    }
     const res = await Taro.cloud.callFunction({
       name: USER_SYNC_FN_NAME,
       data: { action: 'deleteCloud' }
     });
     const result = res.result as { code: string; message?: string };
     if (result.code !== 'OK') throw new Error(result.message || '删除失败');
-    // 本地数据保留；对齐同步游标（服务端版本已重置为 0），以当前本地数据重新上行
+    // 本地数据保留；同步游标归零。
+    // v2.2.6 修复「清空后自动恢复」：此前这里把 dirty 置 true 并立即调用 syncNow()，
+    // syncOnce → pushSnapshot（dirty 即上行）会把本机数据整体重建回云端，清空形同无效；
+    // 回前台 / 登录后自动同步同样会因 dirty=true 再次重建。改为 keep clean（dirty=false），
+    // 云端保持空态，只有用户主动「立即同步」或后续数据变更才会重新上行。
     useWardrobeStore.getState().patchSyncMeta({
       lastSyncedVersion: 0,
-      dirty: true,
+      dirty: false,
       lastSyncedAt: 0
     });
     setSyncState({ hasRemote: false, photoBytes: 0, status: 'ready', errorMsg: '' });
-    console.info('[Sync] 云端数据已删除（本地数据保留）');
-    // v1.16.0：删除成功后立即以本地干净数据重建云端（修复残留脏数据导致重复衣橱/衣物的问题）
-    void syncNow();
+    console.info('[Sync] 云端数据已删除（本地数据保留，云端不再自动重建）');
     return true;
   } catch (e: any) {
     console.warn('[Sync] 删除云端数据失败:', e?.message || e);
