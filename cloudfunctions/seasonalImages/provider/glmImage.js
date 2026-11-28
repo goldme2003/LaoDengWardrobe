@@ -13,8 +13,10 @@ const path = require('path');
 const HOST = 'open.bigmodel.cn';
 const IMAGE_PATH = '/api/paas/v4/images/generations';
 const MODEL = 'glm-image';
-/** GLM-IMAGE 支持的输出尺寸；当季卡为竖版展示，官方示例 1280x1280 兜底可用 */
-const IMAGE_SIZE = '1280x1280';
+/** GLM-IMAGE 支持的输出尺寸（官方约束：宽高 512–2048px 且为 32 的倍数；推荐档含 1280x1280）
+ * v2.2.8：1280x1280 → 768x1024——生图耗时与像素量正相关，正方形 164 万像素改为 3:4 竖版 79 万
+ * 像素（约减半），缩短生图等待；当季卡为竖版全身构图展示（aspectFill 裁切），3:4 更贴合提示词。 */
+const IMAGE_SIZE = '768x1024';
 /** 单张生图硬超时（与云函数实际超时一致）
  * v2.2.2：35s → 40s（v2.2.1 实测 GLM-IMAGE 同步生图常超 35s 未返回，被本地超时提前掐断）。
  * v2.2.3：40s → 50s（当时云端 timeout=50，config.json 的 60s 不随 CLI 部署生效）。
