@@ -28,27 +28,29 @@ const COST_PER_IMAGE = Number(process.env.SEASONAL_COST_PER_IMAGE || 0.2);
 
 /** 季节：流行元素词库（每年可在此更新当季趋势）
  * v2.2.9：新增 palette 当季流行色板并移除「大地色系 / 深色系」等致灰致黄词——
- * 修复生成图整体偏黄发灰的问题（提示词中显式给出多色搭配指令）。 */
+ * 修复生成图整体偏黄发灰的问题（提示词中显式给出多色搭配指令）。
+ * v2.2.10：色板扩容至 10 色（覆盖多色相家族）；每次生成随机抽 1 主色 + 2 点缀色 + 背景 + 光线，
+ * 修复「全部生成酒红」——模型倾向抓住色板首个/唯一强调色，改为每次随机采样保证多样性。 */
 const SEASONS = {
   spring: {
     label: '春季',
     pop: '轻薄风衣、针织开衫、碎花元素、直筒裤、小白鞋',
-    palette: '嫩芽绿、樱花粉、天空蓝、鹅黄、薰衣草紫'
+    palette: ['嫩芽绿', '樱花粉', '天空蓝', '鹅黄', '薰衣草紫', '薄荷绿', '珊瑚粉', '米白', '浅杏色', '丁香紫']
   },
   summer: {
     label: '夏季',
     pop: '棉麻与冰丝面料、短袖衬衫、阔腿短裤、渔夫帽、凉鞋',
-    palette: '珊瑚橙、湖水蓝、柠檬黄、薄荷绿、贝壳白'
+    palette: ['珊瑚橙', '湖水蓝', '柠檬黄', '薄荷绿', '贝壳白', '西瓜红', '天青蓝', '芒果橙', '浅卡其', '淡紫']
   },
   autumn: {
     label: '秋季',
     pop: '羊毛混纺、廓形西装、针织衫、短靴、斜挎包',
-    palette: '酒红、橄榄绿、焦糖棕、雾霾蓝、燕麦米白'
+    palette: ['酒红', '橄榄绿', '雾霾蓝', '焦糖棕', '燕麦米白', '姜黄', '干枯玫瑰粉', '深紫罗兰', '孔雀蓝', '驼色']
   },
   winter: {
     label: '冬季',
     pop: '羽绒与羊绒质感、大衣叠穿、围巾、手套、切尔西靴',
-    palette: '勃艮第酒红、墨绿、藏蓝、焦糖色、奶油白、金属色点缀'
+    palette: ['勃艮第酒红', '墨绿', '藏蓝', '焦糖色', '奶油白', '雾霾蓝', '灰粉色', '深紫', '燕麦灰', '银灰蓝']
   }
 };
 
@@ -65,17 +67,30 @@ const STYLE_LIB = {
 };
 
 /** v2.2.2：各风格的穿着场景（与 outfitRecommend 的场景口径一致，提示词内明确点明场景，避免模型泛泛而谈）
- * v2.2.9：场景补充具体拍摄背景，丰富画面多样性（同一季节不同风格呈现不同环境） */
+ * v2.2.10：每个风格扩充 3 个候选拍摄背景，生成时随机抽取其一，丰富画面多样性 */
 const STYLE_SCENES = {
-  daily: '日常出行与朋友见面，背景为阳光明亮的城市街角或林荫步道',
-  commute: '上下班通勤与办公场合，背景为玻璃幕墙写字楼前的街道',
-  street: '街头休闲与城市漫步，背景为街铺橱窗、涂鸦墙或斑马线路口',
-  sport: '运动健身与户外活动，背景为滨江跑道、公园草坪或体育公园',
-  smart: '商务会面与半正式场合，背景为酒店大堂前或艺术画廊门口',
-  weekend: '周末逛街与短途出游，背景为咖啡馆外摆街区、市集或花店门前',
-  couture: '晚宴、观展等正式场合，背景为剧院门廊、宴会厅或美术馆展厅',
-  detail: '日常与通勤场合，背景为简洁的浅色墙面与都市街景'
+  daily: ['日常出行与朋友见面', '城市街角', '林荫步道', '河畔公园小径'],
+  commute: ['上下班通勤与办公场合', '玻璃幕墙写字楼前的街道', '地铁站出口的商务街区', '现代办公楼前的广场'],
+  street: ['街头休闲与城市漫步', '涂鸦墙前的街头', '街铺橱窗旁的步道', '斑马线路口'],
+  sport: ['运动健身与户外活动', '滨江跑道', '公园草坪', '体育公园球场旁'],
+  smart: ['商务会面与半正式场合', '酒店大堂门前', '艺术画廊门口', '歌剧院门廊台阶'],
+  weekend: ['周末逛街与短途出游', '咖啡馆外摆街区', '周末市集', '花店门前'],
+  couture: ['晚宴、观展等正式场合', '剧院门廊', '美术馆展厅', '宴会厅长廊'],
+  detail: ['日常与通勤场合', '浅色极简墙面', '都市天桥', '玻璃橱窗前']
 };
+
+/** v2.2.10：光线候选池（每次随机抽取，均为明亮系，避免暗沉/暖黄光导致画面发黄发灰） */
+const LIGHTS = ['明亮通透的自然光', '晴天柔和的日光', '清晨清透的光线', '明亮的室内布光'];
+
+/** v2.2.10：随机抽样工具——Fisher-Yates 洗牌后取前 n 项（不重复） */
+function pickRandom(list, n) {
+  const arr = [...list];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr.slice(0, n);
+}
 
 /** SVIP 专属高级风格（VIP 请求时返回 TIER_NOT_ALLOWED） */
 const PREMIUM_STYLES = ['couture', 'detail'];
@@ -118,25 +133,32 @@ function ageGroupOf(age) {
 
 /** 生图提示词：默认风格用风格库描述，自定义风格用原文拼接
  * v2.2.2：对齐 outfitRecommend 混元提示词口径——写明具体年龄（年龄段）与穿着场景
- * v2.2.9：新增当季流行色板与色彩层次指令，修复生成图整体偏黄发灰 */
+ * v2.2.9：新增当季流行色板与色彩层次指令，修复生成图整体偏黄发灰
+ * v2.2.10：提示词改为开放式推荐句式，且主色/点缀色/背景/光线均在生成时随机抽取，
+ *          同风格多次生成（跨天缓存失效后）呈现不同配色与场景 */
 function buildPrompt({ seasonKey, gender, age, ageGroup, styleKey, customText }) {
   const season = SEASONS[seasonKey];
   const genderText = gender === 'female' ? '女性' : gender === 'male' ? '男性' : '中性';
-  const styleDesc = customText
-    ? `以「${customText}」为主题的当季流行造型，风格特征贴合文字描述，整体配色与版型协调统一`
-    : STYLE_LIB[styleKey].desc;
-  const sceneText = customText
-    ? `以「${customText}」风格出现的场合，贴合该风格惯常的穿着情境，背景为明亮的城市街景或户外场景`
-    : STYLE_SCENES[styleKey];
-  return `专业时尚摄影，竖版全身构图。${age}岁${genderText}模特（${ageGroup.text}，五官、发型、妆容与气质贴合该年龄），${season.label}当季流行穿搭：${styleDesc}。
-穿着场景：${sceneText}。
+  const [sceneText, background] = customText
+    ? [`以「${customText}」风格出现的场合，贴合该风格惯常的穿着情境`, '明亮的城市街景或户外场景']
+    : pickRandom(STYLE_SCENES[styleKey], 2);
+  const [mainColor, accentA, accentB] = pickRandom(season.palette, 3);
+  const light = pickRandom(LIGHTS, 1)[0];
+  return `专业时尚摄影，竖版全身构图。为${age}岁${genderText}（${ageGroup.text}，五官、发型、妆容与气质贴合该年龄）推荐一套${season.label}${sceneText}的时尚穿搭：${styleDescOf(styleKey, customText)}。
+拍摄背景：${background}。
 当季流行元素参考：${season.pop}。
-整体配色：以${season.palette}等当季流行色做多色搭配，主色与点缀色层次分明，画面色彩明快丰富、鲜而不艳，避免整体偏黄、发灰或单一色调。
-写实街拍风格，明亮通透的自然光，背景干净有层次，服装面料与版型细节清晰，画面中不出现文字、水印、品牌 logo，不出现真实名人。`;
+整体配色：以${mainColor}为主色，${accentA}与${accentB}为点缀色做搭配，色彩明快丰富、鲜而不艳，主次分明，避免整体偏黄、发灰或单一色调。
+写实街拍风格，${light}，背景干净有层次，服装面料与版型细节清晰，画面中不出现文字、水印、品牌 logo，不出现真实名人。`;
 }
 
-/** 提示词版本：参与缓存记录 id，提示词调整后当天旧图不再命中（v2.2.9 p2 → p3） */
-const PROMPT_VERSION = 'p3';
+/** 风格描述段：自定义风格用原文，默认风格用风格库 desc（拆出以保证 buildPrompt 简洁） */
+function styleDescOf(styleKey, customText) {
+  if (customText) return `以「${customText}」为主题的当季流行造型，风格特征贴合文字描述，整体配色与版型协调统一`;
+  return STYLE_LIB[styleKey].desc;
+}
+
+/** 提示词版本：参与缓存记录 id，提示词调整后当天旧图不再命中（v2.2.10 p3 → p4） */
+const PROMPT_VERSION = 'p4';
 
 function docIdOf(dateKey, seasonKey, gender, ageGroupKey, styleKey) {
   return `${dateKey}_${seasonKey}_${gender}_${ageGroupKey}_${styleKey}_${PROMPT_VERSION}`;
@@ -189,8 +211,9 @@ async function recordUsage(monthKey, count) {
  * v2.2.2：修复 GLM 生图 35s 硬超时导致的 GLM_IMAGE_TIMEOUT；提示词补充具体年龄与穿着场景
  * v2.2.4：上游错误透传（error 对象 / content_filter 拦截显式识别并返回给前端）
  * v2.2.8：生图尺寸 1280x1280 → 768x1024（竖版 3:4，像素量约减半以缩短生图等待）
- * v2.2.9：修复生成图偏黄发灰——移除「大地色系 / 深色系」词，新增每季流行色板与多色搭配指令；场景补充具体背景 */
-const VERSION = 'v2.2.9-glm';
+ * v2.2.9：修复生成图偏黄发灰——移除「大地色系 / 深色系」词，新增每季流行色板与多色搭配指令；场景补充具体背景
+ * v2.2.10：色板扩容至 10 色/季；主色、点缀色、背景、光线改为生成时随机抽取，修复全部生成酒红的单一色问题 */
+const VERSION = 'v2.2.10-glm';
 
 async function generateStyle({ dateKey, seasonKey, gender, age, ageGroup, styleKey, label, customText }) {
   const prompt = buildPrompt({ seasonKey, gender, age, ageGroup, styleKey, customText });
