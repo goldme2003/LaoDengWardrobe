@@ -34,6 +34,8 @@ interface Props {
   tier: MemberTier;
   /** v1.9.0（F-19）：今日可生成张数（会员权益，0 = 普通版不生图） */
   quota: number;
+  /** v2.2.11：城市（可选，云端获取「明天」天气用于生图提示词） */
+  city?: string;
   /** v1.14.0：今日已生成张数（点击生成 1 张记 1 次） */
   viewed: number;
   /** 登记今日已生成张数（store 取 max，额度随天滚动重置） */
@@ -120,7 +122,7 @@ interface Slide {
  * 交互对齐明日穿搭推荐（默认风格 + 自定义输入，已生成风格右上角绿点标识）。
  * 每日同组合云端缓存全用户共享（不重复计费）；本地按天缓存已生成图组；
  * 普通版不生图（展示 1 张本地示例并引导开通 VIP）；当日额度用尽后保留已生成图组、点击风格提示明天再来。 */
-const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onShow }) => {
+const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, city, viewed, onShow }) => {
   const now = new Date();
   const season = seasonOf(now.getMonth() + 1);
   const ageGroup = ageGroupOf(age);
@@ -208,7 +210,7 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onSho
       setGenLoading(true);
       setGenErr('');
       try {
-        const image = await generateSeasonalImage({ gender, age, tier, style: opt.style, custom: opt.custom });
+        const image = await generateSeasonalImage({ gender, age, tier, city, style: opt.style, custom: opt.custom });
         setSlides((prev) => {
           onShow(prev.length + 1);
           return [...prev, image];
@@ -224,7 +226,7 @@ const SeasonalCard: React.FC<Props> = ({ gender, age, tier, quota, viewed, onSho
         genLabelRef.current = '';
       }
     },
-    [genLoading, exhausted, slides, gender, age, tier, onShow]
+    [genLoading, exhausted, slides, gender, age, tier, city, onShow]
   );
 
   /** v2.2.4：点击图片看大图（cloud:// 先换临时链接），预览菜单支持双指缩放与原生保存 */

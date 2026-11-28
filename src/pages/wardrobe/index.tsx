@@ -1028,6 +1028,7 @@ const WardrobePage: React.FC = () => {
           age={currentWardrobe?.age ?? null}
           tier={memberTier}
           quota={tierCfg.seasonalPerDay}
+          city={activeCity}
           viewed={memberUsage.seasonalViewed}
           onShow={recordSeasonalView}
         />

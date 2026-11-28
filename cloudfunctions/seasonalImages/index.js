@@ -26,44 +26,25 @@ const USAGE_COLLECTION = 'seasonal_usage';
 const MONTHLY_BUDGET = Number(process.env.SEASONAL_BUDGET_YUAN || 30);
 const COST_PER_IMAGE = Number(process.env.SEASONAL_COST_PER_IMAGE || 0.2);
 
-/** 季节：流行元素词库（每年可在此更新当季趋势）
- * v2.2.9：新增 palette 当季流行色板并移除「大地色系 / 深色系」等致灰致黄词——
- * 修复生成图整体偏黄发灰的问题（提示词中显式给出多色搭配指令）。
- * v2.2.10：色板扩容至 10 色（覆盖多色相家族）；每次生成随机抽 1 主色 + 2 点缀色 + 背景 + 光线，
- * 修复「全部生成酒红」——模型倾向抓住色板首个/唯一强调色，改为每次随机采样保证多样性。 */
+/** 季节：仅保留季节标签（v2.2.11：移除固定搭配词库 pop 与固定色板 palette——
+ * 搭配不再由提示词限定，改为在提示词中重点体现「明天天气 + 温度 + 季节」，由生图大模型自行搭配） */
 const SEASONS = {
-  spring: {
-    label: '春季',
-    pop: '轻薄风衣、针织开衫、碎花元素、直筒裤、小白鞋',
-    palette: ['嫩芽绿', '樱花粉', '天空蓝', '鹅黄', '薰衣草紫', '薄荷绿', '珊瑚粉', '米白', '浅杏色', '丁香紫']
-  },
-  summer: {
-    label: '夏季',
-    pop: '棉麻与冰丝面料、短袖衬衫、阔腿短裤、渔夫帽、凉鞋',
-    palette: ['珊瑚橙', '湖水蓝', '柠檬黄', '薄荷绿', '贝壳白', '西瓜红', '天青蓝', '芒果橙', '浅卡其', '淡紫']
-  },
-  autumn: {
-    label: '秋季',
-    pop: '羊毛混纺、廓形西装、针织衫、短靴、斜挎包',
-    palette: ['酒红', '橄榄绿', '雾霾蓝', '焦糖棕', '燕麦米白', '姜黄', '干枯玫瑰粉', '深紫罗兰', '孔雀蓝', '驼色']
-  },
-  winter: {
-    label: '冬季',
-    pop: '羽绒与羊绒质感、大衣叠穿、围巾、手套、切尔西靴',
-    palette: ['勃艮第酒红', '墨绿', '藏蓝', '焦糖色', '奶油白', '雾霾蓝', '灰粉色', '深紫', '燕麦灰', '银灰蓝']
-  }
+  spring: { label: '春季' },
+  summer: { label: '夏季' },
+  autumn: { label: '秋季' },
+  winter: { label: '冬季' }
 };
 
-/** 风格库（v1.14.0 扩充为点击选择风格池：默认风格 VIP/SVIP 可选，高级风格 SVIP 专属） */
+/** v2.2.11：风格描述改为气质向（移除具体单品枚举，避免固定搭配），单品选择完全交给生图模型 */
 const STYLE_LIB = {
-  daily: { label: '日常百搭', desc: '基础款干净清爽的日常休闲穿搭，版型合身舒适' },
-  commute: { label: '通勤简约', desc: '通勤造型，利落剪裁与克制的配色，衬衫、西裤与风衣的层次搭配' },
-  street: { label: '街头休闲', desc: '街头休闲造型，廓形外套与宽松裤型，复古球鞋' },
-  sport: { label: '运动活力', desc: '运动活力造型，速干面料与机能细节，轻盈有型的运动鞋履' },
-  smart: { label: '轻正式', desc: '轻正式造型，垂坠面料与精致细节，简约皮质鞋履' },
-  weekend: { label: '周末出行', desc: '周末出行造型，轻松随性的叠穿与舒适鞋履，适合逛街与短途出游' },
-  couture: { label: '高定质感', desc: '高级定制质感造型，考究面料与剪裁，配色高级但鲜明有层次，配饰点缀' },
-  detail: { label: '配饰细节', desc: '重点呈现配饰搭配：包袋、墨镜、腰带、首饰与鞋履的呼应关系' }
+  daily: { label: '日常百搭', desc: '轻松自在、干净清爽的日常风格' },
+  commute: { label: '通勤简约', desc: '简约利落、克制体面的通勤风格' },
+  street: { label: '街头休闲', desc: '随性有型的街头风格' },
+  sport: { label: '运动活力', desc: '轻盈元气的运动风格' },
+  smart: { label: '轻正式', desc: '精致克制的轻正式风格' },
+  weekend: { label: '周末出行', desc: '松弛舒适的周末出行风格' },
+  couture: { label: '高定质感', desc: '高级考究、鲜明有层次的高定风格' },
+  detail: { label: '配饰细节', desc: '重点呈现包袋、墨镜、腰带、首饰与鞋履呼应关系的风格' }
 };
 
 /** v2.2.2：各风格的穿着场景（与 outfitRecommend 的场景口径一致，提示词内明确点明场景，避免模型泛泛而谈）
@@ -79,8 +60,44 @@ const STYLE_SCENES = {
   detail: ['日常与通勤场合', '浅色极简墙面', '都市天桥', '玻璃橱窗前']
 };
 
-/** v2.2.10：光线候选池（每次随机抽取，均为明亮系，避免暗沉/暖黄光导致画面发黄发灰） */
-const LIGHTS = ['明亮通透的自然光', '晴天柔和的日光', '清晨清透的光线', '明亮的室内布光'];
+/** v2.2.11：天气 → 画面光线/氛围映射（取代原固定 LIGHTS 光线池，画面天气与明天实际天气一致） */
+function weatherLightOf(cond) {
+  const c = String(cond || '');
+  if (/雪/.test(c)) return '雪天明亮洁净的雪景光线，地面与建筑有积雪氛围';
+  if (/雨/.test(c)) return '雨天湿润路面的清透光线，路面带水光反差';
+  if (/雾|霾|沙|尘/.test(c)) return '雾天朦胧柔和的光线，远景若隐若现';
+  if (/晴/.test(c)) return '阳光明媚的晴天光线，影子清晰';
+  if (/阴/.test(c)) return '阴天柔和均匀的光线';
+  if (/云/.test(c)) return '多云天气柔和明亮的光线';
+  return '明亮通透的自然光';
+}
+
+/** v2.2.11：气温区间 → 体感描述（辅助生图模型把握薄厚） */
+function tempDescOf(low, high) {
+  if (high >= 30) return '炎热，着装轻薄透气';
+  if (high >= 24) return '温暖偏热，着装轻便';
+  if (low <= 0) return '寒冷，需保暖外套';
+  if (low <= 8) return '偏冷，需厚外套';
+  if (low <= 14) return '微凉，适合层次穿搭';
+  return '温和舒适，着装灵活';
+}
+
+/** v2.2.11：经 weatherProxy 获取「明天」天气（cond + low/high），失败返回 null 不阻断生图
+ * weatherProxy 内部含华风爱科 → 和风 → 中国天气网降级链路与 30 分钟缓存。 */
+async function fetchTomorrowWeather(city) {
+  if (!city) return null;
+  try {
+    const res = await cloud.callFunction({ name: 'weatherProxy', data: { action: 'weather', city } });
+    const result = (res && res.result) || {};
+    if (result.code !== 'OK' || !result.data) return null;
+    const tomorrow = result.data.days && result.data.days[0];
+    if (!tomorrow) return null;
+    return { city, cond: tomorrow.cond, low: tomorrow.low, high: tomorrow.high };
+  } catch (e) {
+    console.warn('[seasonalImages] 获取明天天气失败（按无天气降级）：', e.message);
+    return null;
+  }
+}
 
 /** v2.2.10：随机抽样工具——Fisher-Yates 洗牌后取前 n 项（不重复） */
 function pickRandom(list, n) {
@@ -131,34 +148,35 @@ function ageGroupOf(age) {
   return { key: 'senior', text: '熟龄' };
 }
 
-/** 生图提示词：默认风格用风格库描述，自定义风格用原文拼接
- * v2.2.2：对齐 outfitRecommend 混元提示词口径——写明具体年龄（年龄段）与穿着场景
- * v2.2.9：新增当季流行色板与色彩层次指令，修复生成图整体偏黄发灰
- * v2.2.10：提示词改为开放式推荐句式，且主色/点缀色/背景/光线均在生成时随机抽取，
- *          同风格多次生成（跨天缓存失效后）呈现不同配色与场景 */
-function buildPrompt({ seasonKey, gender, age, ageGroup, styleKey, customText }) {
-  const season = SEASONS[seasonKey];
+/** 生图提示词：v2.2.11 重构——不限定固定搭配，重点体现「明天天气 + 温度 + 季节 + 场景」，
+ * 服装单品、面料与配色由生图大模型根据天气自行决定；场景背景仍随机抽取保证多样性 */
+function buildPrompt({ seasonKey, gender, age, ageGroup, styleKey, customText, weather }) {
+  const seasonLabel = SEASONS[seasonKey].label;
   const genderText = gender === 'female' ? '女性' : gender === 'male' ? '男性' : '中性';
-  const [sceneText, background] = customText
-    ? [`以「${customText}」风格出现的场合，贴合该风格惯常的穿着情境`, '明亮的城市街景或户外场景']
-    : pickRandom(STYLE_SCENES[styleKey], 2);
-  const [mainColor, accentA, accentB] = pickRandom(season.palette, 3);
-  const light = pickRandom(LIGHTS, 1)[0];
-  return `专业时尚摄影，竖版全身构图。为${age}岁${genderText}（${ageGroup.text}，五官、发型、妆容与气质贴合该年龄）推荐一套${season.label}${sceneText}的时尚穿搭：${styleDescOf(styleKey, customText)}。
-拍摄背景：${background}。
-当季流行元素参考：${season.pop}。
-整体配色：以${mainColor}为主色，${accentA}与${accentB}为点缀色做搭配，色彩明快丰富、鲜而不艳，主次分明，避免整体偏黄、发灰或单一色调。
+  const scenes = STYLE_SCENES[styleKey] || ['日常场合', '明亮的城市街景'];
+  const sceneText = customText
+    ? `以「${customText}」风格出现的场合，贴合该风格惯常的穿着情境`
+    : scenes[0];
+  const background = customText ? '明亮的城市街景或户外场景' : pickRandom(scenes.slice(1), 1)[0];
+  const weatherText = weather
+    ? `${weather.city ? `${weather.city}，` : ''}${weather.cond}，气温${weather.low}~${weather.high}℃（${tempDescOf(weather.low, weather.high)}）`
+    : `按${seasonLabel}典型天气自行把握`;
+  const light = weatherLightOf(weather && weather.cond);
+  return `专业时尚摄影，竖版全身构图。为${age}岁${genderText}（${ageGroup.text}，五官、发型、妆容与气质贴合该年龄）推荐一套适合明天天气的${seasonLabel}${sceneText}的时尚穿搭：${styleDescOf(styleKey, customText)}。
+明天天气：${weatherText}。
+请根据上述季节、温度与天气自行搭配服装单品、面料与配色（如低温选保暖外套、雨天可出现撑伞细节），体现${seasonLabel}当季流行趋势；整体配色明快丰富、鲜而不艳，避免整体偏黄、发灰或单一色调。
+拍摄背景：${background}，画面天气氛围与明天实际天气保持一致。
 写实街拍风格，${light}，背景干净有层次，服装面料与版型细节清晰，画面中不出现文字、水印、品牌 logo，不出现真实名人。`;
 }
 
 /** 风格描述段：自定义风格用原文，默认风格用风格库 desc（拆出以保证 buildPrompt 简洁） */
 function styleDescOf(styleKey, customText) {
-  if (customText) return `以「${customText}」为主题的当季流行造型，风格特征贴合文字描述，整体配色与版型协调统一`;
+  if (customText) return `以「${customText}」为主题的当季流行造型，风格特征贴合文字描述`;
   return STYLE_LIB[styleKey].desc;
 }
 
-/** 提示词版本：参与缓存记录 id，提示词调整后当天旧图不再命中（v2.2.10 p3 → p4） */
-const PROMPT_VERSION = 'p4';
+/** 提示词版本：参与缓存记录 id，提示词调整后当天旧图不再命中（v2.2.11 p4 → p5） */
+const PROMPT_VERSION = 'p5';
 
 function docIdOf(dateKey, seasonKey, gender, ageGroupKey, styleKey) {
   return `${dateKey}_${seasonKey}_${gender}_${ageGroupKey}_${styleKey}_${PROMPT_VERSION}`;
@@ -212,11 +230,13 @@ async function recordUsage(monthKey, count) {
  * v2.2.4：上游错误透传（error 对象 / content_filter 拦截显式识别并返回给前端）
  * v2.2.8：生图尺寸 1280x1280 → 768x1024（竖版 3:4，像素量约减半以缩短生图等待）
  * v2.2.9：修复生成图偏黄发灰——移除「大地色系 / 深色系」词，新增每季流行色板与多色搭配指令；场景补充具体背景
- * v2.2.10：色板扩容至 10 色/季；主色、点缀色、背景、光线改为生成时随机抽取，修复全部生成酒红的单一色问题 */
-const VERSION = 'v2.2.10-glm';
+ * v2.2.10：色板扩容至 10 色/季；主色、点缀色、背景、光线改为生成时随机抽取，修复全部生成酒红的单一色问题
+ * v2.2.11：接入天气——经 weatherProxy 获取「明天」天气（cond + 气温区间），提示词移除固定搭配词库（pop/palette）
+ *          与固定光线池，重点体现季节 + 温度 + 天气，服装搭配完全交给生图大模型；入参新增可选 city */
+const VERSION = 'v2.2.11-glm';
 
-async function generateStyle({ dateKey, seasonKey, gender, age, ageGroup, styleKey, label, customText }) {
-  const prompt = buildPrompt({ seasonKey, gender, age, ageGroup, styleKey, customText });
+async function generateStyle({ dateKey, seasonKey, gender, age, ageGroup, styleKey, label, customText, weather }) {
+  const prompt = buildPrompt({ seasonKey, gender, age, ageGroup, styleKey, customText, weather });
   // GLM-IMAGE 为同步接口，无需 session 一致性调度参数
   const url = await callGlmImage(prompt);
   // v1.13.2：生图已计费（单张 10s+），下载失败重试 1 次，避免偶发网络错误浪费已生成的结果
@@ -241,6 +261,7 @@ async function generateStyle({ dateKey, seasonKey, gender, age, ageGroup, styleK
     style: styleKey,
     label,
     custom: !!customText,
+    weather: weather || null,
     prompt,
     updatedAt: Date.now()
   };
@@ -284,6 +305,8 @@ exports.main = async (event = {}) => {
 
   // v1.14.0：按需生成——单次调用只生成一个风格（默认风格 key 或自定义风格文本，custom 优先）
   const customText = typeof event.custom === 'string' ? event.custom.trim().slice(0, 12) : '';
+  // v2.2.11：城市（可选，用于获取明天天气；与 weatherProxy 的 city 口径一致，去尾部「市」）
+  const city = typeof event.city === 'string' ? event.city.trim().slice(0, 20).replace(/市$/, '') : '';
   const styleKey = customText ? customStyleKey(customText) : String(event.style || '');
   const label = customText || (STYLE_LIB[styleKey] ? STYLE_LIB[styleKey].label : '');
 
@@ -327,8 +350,10 @@ exports.main = async (event = {}) => {
     };
   }
 
-  // 3. 生成单张并转存云存储
+  // 3. 获取「明天」天气（可选 city，失败按无天气降级不阻断），再生成单张并转存云存储
   try {
+    const weather = await fetchTomorrowWeather(city);
+    if (weather) console.log(`[seasonalImages] 明天天气：${weather.city} ${weather.cond} ${weather.low}~${weather.high}℃`);
     const image = await generateStyle({
       dateKey,
       seasonKey,
@@ -337,7 +362,8 @@ exports.main = async (event = {}) => {
       ageGroup,
       styleKey,
       label,
-      customText: customText || undefined
+      customText: customText || undefined,
+      weather
     });
     await recordUsage(monthKeyOf(d), 1);
     return {

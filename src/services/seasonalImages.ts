@@ -44,6 +44,8 @@ interface Params {
   gender?: Gender;
   age?: number | null;
   tier: MemberTier;
+  /** v2.2.11：城市（可选，云端用于获取「明天」天气并体现在生图提示词中） */
+  city?: string;
 }
 
 /** 本地缓存 key：按天 + 季节 + 性别 + 年龄段（不含档位——当天内升档后已生成图组保留展示） */
@@ -83,6 +85,7 @@ export const generateSeasonalImage = async ({
   gender,
   age,
   tier,
+  city,
   style,
   custom
 }: Params & { style?: string; custom?: string }): Promise<SeasonalImage> => {
@@ -91,7 +94,7 @@ export const generateSeasonalImage = async ({
   try {
     const res = await Taro.cloud.callFunction({
       name: SEASONAL_FN_NAME,
-      data: { action: 'generate', tier, gender, age: age ?? undefined, style, custom }
+      data: { action: 'generate', tier, gender, age: age ?? undefined, city: city || undefined, style, custom }
     });
     result = (res.result || {}) as { code?: string; images?: SeasonalImage[]; message?: string };
   } catch (e) {
