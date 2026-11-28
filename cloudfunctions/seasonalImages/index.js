@@ -26,12 +26,30 @@ const USAGE_COLLECTION = 'seasonal_usage';
 const MONTHLY_BUDGET = Number(process.env.SEASONAL_BUDGET_YUAN || 30);
 const COST_PER_IMAGE = Number(process.env.SEASONAL_COST_PER_IMAGE || 0.2);
 
-/** 季节：流行元素词库（每年可在此更新当季趋势） */
+/** 季节：流行元素词库（每年可在此更新当季趋势）
+ * v2.2.9：新增 palette 当季流行色板并移除「大地色系 / 深色系」等致灰致黄词——
+ * 修复生成图整体偏黄发灰的问题（提示词中显式给出多色搭配指令）。 */
 const SEASONS = {
-  spring: { label: '春季', pop: '浅色系、轻薄风衣、针织开衫、碎花元素、直筒裤、小白鞋' },
-  summer: { label: '夏季', pop: '棉麻与冰丝面料、短袖衬衫、阔腿短裤、渔夫帽、凉鞋' },
-  autumn: { label: '秋季', pop: '大地色系、羊毛混纺、廓形西装、针织衫、短靴、斜挎包' },
-  winter: { label: '冬季', pop: '羽绒与羊绒质感、大衣叠穿、深色系、围巾、手套、切尔西靴' }
+  spring: {
+    label: '春季',
+    pop: '轻薄风衣、针织开衫、碎花元素、直筒裤、小白鞋',
+    palette: '嫩芽绿、樱花粉、天空蓝、鹅黄、薰衣草紫'
+  },
+  summer: {
+    label: '夏季',
+    pop: '棉麻与冰丝面料、短袖衬衫、阔腿短裤、渔夫帽、凉鞋',
+    palette: '珊瑚橙、湖水蓝、柠檬黄、薄荷绿、贝壳白'
+  },
+  autumn: {
+    label: '秋季',
+    pop: '羊毛混纺、廓形西装、针织衫、短靴、斜挎包',
+    palette: '酒红、橄榄绿、焦糖棕、雾霾蓝、燕麦米白'
+  },
+  winter: {
+    label: '冬季',
+    pop: '羽绒与羊绒质感、大衣叠穿、围巾、手套、切尔西靴',
+    palette: '勃艮第酒红、墨绿、藏蓝、焦糖色、奶油白、金属色点缀'
+  }
 };
 
 /** 风格库（v1.14.0 扩充为点击选择风格池：默认风格 VIP/SVIP 可选，高级风格 SVIP 专属） */
@@ -42,20 +60,21 @@ const STYLE_LIB = {
   sport: { label: '运动活力', desc: '运动活力造型，速干面料与机能细节，轻盈有型的运动鞋履' },
   smart: { label: '轻正式', desc: '轻正式造型，垂坠面料与精致细节，简约皮质鞋履' },
   weekend: { label: '周末出行', desc: '周末出行造型，轻松随性的叠穿与舒适鞋履，适合逛街与短途出游' },
-  couture: { label: '高定质感', desc: '高级定制质感造型，考究面料与剪裁，低饱和高级配色，配饰点缀' },
+  couture: { label: '高定质感', desc: '高级定制质感造型，考究面料与剪裁，配色高级但鲜明有层次，配饰点缀' },
   detail: { label: '配饰细节', desc: '重点呈现配饰搭配：包袋、墨镜、腰带、首饰与鞋履的呼应关系' }
 };
 
-/** v2.2.2：各风格的穿着场景（与 outfitRecommend 的场景口径一致，提示词内明确点明场景，避免模型泛泛而谈） */
+/** v2.2.2：各风格的穿着场景（与 outfitRecommend 的场景口径一致，提示词内明确点明场景，避免模型泛泛而谈）
+ * v2.2.9：场景补充具体拍摄背景，丰富画面多样性（同一季节不同风格呈现不同环境） */
 const STYLE_SCENES = {
-  daily: '日常出行与朋友见面',
-  commute: '上下班通勤与办公场合',
-  street: '街头休闲与城市漫步',
-  sport: '运动健身与户外活动',
-  smart: '商务会面与半正式场合',
-  weekend: '周末逛街与短途出游',
-  couture: '晚宴、观展等正式场合',
-  detail: '日常与通勤场合'
+  daily: '日常出行与朋友见面，背景为阳光明亮的城市街角或林荫步道',
+  commute: '上下班通勤与办公场合，背景为玻璃幕墙写字楼前的街道',
+  street: '街头休闲与城市漫步，背景为街铺橱窗、涂鸦墙或斑马线路口',
+  sport: '运动健身与户外活动，背景为滨江跑道、公园草坪或体育公园',
+  smart: '商务会面与半正式场合，背景为酒店大堂前或艺术画廊门口',
+  weekend: '周末逛街与短途出游，背景为咖啡馆外摆街区、市集或花店门前',
+  couture: '晚宴、观展等正式场合，背景为剧院门廊、宴会厅或美术馆展厅',
+  detail: '日常与通勤场合，背景为简洁的浅色墙面与都市街景'
 };
 
 /** SVIP 专属高级风格（VIP 请求时返回 TIER_NOT_ALLOWED） */
@@ -98,7 +117,8 @@ function ageGroupOf(age) {
 }
 
 /** 生图提示词：默认风格用风格库描述，自定义风格用原文拼接
- * v2.2.2：对齐 outfitRecommend 混元提示词口径——写明具体年龄（年龄段）与穿着场景 */
+ * v2.2.2：对齐 outfitRecommend 混元提示词口径——写明具体年龄（年龄段）与穿着场景
+ * v2.2.9：新增当季流行色板与色彩层次指令，修复生成图整体偏黄发灰 */
 function buildPrompt({ seasonKey, gender, age, ageGroup, styleKey, customText }) {
   const season = SEASONS[seasonKey];
   const genderText = gender === 'female' ? '女性' : gender === 'male' ? '男性' : '中性';
@@ -106,16 +126,17 @@ function buildPrompt({ seasonKey, gender, age, ageGroup, styleKey, customText })
     ? `以「${customText}」为主题的当季流行造型，风格特征贴合文字描述，整体配色与版型协调统一`
     : STYLE_LIB[styleKey].desc;
   const sceneText = customText
-    ? `以「${customText}」风格出现的场合，贴合该风格惯常的穿着情境`
+    ? `以「${customText}」风格出现的场合，贴合该风格惯常的穿着情境，背景为明亮的城市街景或户外场景`
     : STYLE_SCENES[styleKey];
   return `专业时尚摄影，竖版全身构图。${age}岁${genderText}模特（${ageGroup.text}，五官、发型、妆容与气质贴合该年龄），${season.label}当季流行穿搭：${styleDesc}。
 穿着场景：${sceneText}。
 当季流行元素参考：${season.pop}。
-写实街拍风格，自然光，背景简洁，服装面料与版型细节清晰，画面中不出现文字、水印、品牌 logo，不出现真实名人。`;
+整体配色：以${season.palette}等当季流行色做多色搭配，主色与点缀色层次分明，画面色彩明快丰富、鲜而不艳，避免整体偏黄、发灰或单一色调。
+写实街拍风格，明亮通透的自然光，背景干净有层次，服装面料与版型细节清晰，画面中不出现文字、水印、品牌 logo，不出现真实名人。`;
 }
 
-/** 提示词版本（v2.2.2）：参与缓存记录 id，提示词调整后当天旧图不再命中 */
-const PROMPT_VERSION = 'p2';
+/** 提示词版本：参与缓存记录 id，提示词调整后当天旧图不再命中（v2.2.9 p2 → p3） */
+const PROMPT_VERSION = 'p3';
 
 function docIdOf(dateKey, seasonKey, gender, ageGroupKey, styleKey) {
   return `${dateKey}_${seasonKey}_${gender}_${ageGroupKey}_${styleKey}_${PROMPT_VERSION}`;
@@ -167,8 +188,9 @@ async function recordUsage(monthKey, count) {
  * v2.2.1 GLM模型版：生图模型切换为智谱 GLM-IMAGE（glm-image，provider/glmImage.js），原混元生图 provider 已移除
  * v2.2.2：修复 GLM 生图 35s 硬超时导致的 GLM_IMAGE_TIMEOUT；提示词补充具体年龄与穿着场景
  * v2.2.4：上游错误透传（error 对象 / content_filter 拦截显式识别并返回给前端）
- * v2.2.8：生图尺寸 1280x1280 → 768x1024（竖版 3:4，像素量约减半以缩短生图等待） */
-const VERSION = 'v2.2.8-glm';
+ * v2.2.8：生图尺寸 1280x1280 → 768x1024（竖版 3:4，像素量约减半以缩短生图等待）
+ * v2.2.9：修复生成图偏黄发灰——移除「大地色系 / 深色系」词，新增每季流行色板与多色搭配指令；场景补充具体背景 */
+const VERSION = 'v2.2.9-glm';
 
 async function generateStyle({ dateKey, seasonKey, gender, age, ageGroup, styleKey, label, customText }) {
   const prompt = buildPrompt({ seasonKey, gender, age, ageGroup, styleKey, customText });
